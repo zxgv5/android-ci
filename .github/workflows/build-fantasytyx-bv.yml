@@ -7,123 +7,67 @@ on:
         description: '要构建的分支'
         required: false
         default: 'develop'
-      tag:
-        description: '要构建的标签（如果有）'
-        required: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Setup workspace
-      run: |
-        echo "工作流开始时间: $(date)"
-        echo "构建仓库: xqqv5/fantasy-bv"
-        echo "构建分支: ${{ github.event.inputs.branch || 'develop' }}"
-        
-    - name: Checkout source code from xqqv5/fantasy-bv
+    - name: Checkout source code from xqqv5/fantasy-bv develop branch
       uses: actions/checkout@main
       with:
         repository: xqqv5/fantasy-bv
         ref: ${{ github.event.inputs.branch || 'develop' }}
         token: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-        path: ./fantasy-bv
-        fetch-depth: 0
         
-    - name: Set up JDK 21 (Latest LTS)
-      uses: actions/setup-java@main
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: 'gradle'
-        
-    - name: Setup Android SDK (修正版)
+    - name: Verify checkout and project structure
       run: |
-        echo "设置Android SDK环境..."
-        
-        # 设置Android SDK根目录
-        ANDROID_HOME="/usr/local/lib/android/sdk"
-        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-        
-        # 确保目录存在
-        sudo mkdir -p $ANDROID_HOME
-        sudo chmod -R 777 $ANDROID_HOME
-        
-        # 下载命令行工具
-        echo "下载Android命令行工具..."
-        cd /tmp
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
-        
-        # 解压到正确位置
-        mkdir -p $ANDROID_HOME/cmdline-tools
-        unzip -q cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
-        mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-        
-        # 清理
-        rm -f cmdline-tools.zip
-        
-        # 添加到PATH
-        echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
-        echo "$ANDROID_HOME/emulator" >> $GITHUB_PATH
-        
-        echo "Android SDK命令行工具安装完成"
-        
-    - name: Accept licenses and install packages
-      run: |
-        # 接受Android SDK许可证
-        yes | sdkmanager --licenses
-        
-        # 安装必要的SDK组件（分别安装，避免格式问题）
-        sdkmanager "platform-tools"
-        sdkmanager "platforms;android-34"
-        sdkmanager "build-tools;34.0.0"
-        
-    - name: Configure Android environment
-      run: |
-        echo "配置Android环境..."
-        
-        # 创建必要的目录和文件
-        mkdir -p ~/.android
-        touch ~/.android/repositories.cfg
-        
-        # 验证Android SDK安装
-        echo "Android SDK版本:"
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --version
-        
-        echo "Android SDK路径: $ANDROID_SDK_ROOT"
-        echo "平台工具版本:"
-        $ANDROID_SDK_ROOT/platform-tools/adb version
-        
-        echo "环境配置完成"
-        
-    - name: Verify project structure
-      run: |
-        echo "项目目录结构:"
-        cd fantasy-bv && ls -la
+        echo "当前工作目录: $(pwd)"
+        echo "目录内容:"
+        ls -la
         
         echo "检查Gradle包装器:"
-        if [ -f fantasy-bv/gradlew ]; then
+        if [ -f "gradlew" ]; then
           echo "✅ Gradle包装器存在"
-          ls -la fantasy-bv/gradlew*
+          ls -la gradlew*
         else
           echo "❌ Gradle包装器不存在"
+          echo "搜索整个目录..."
+          find . -name "gradlew" -o -name "gradlew.bat" | head -10
           exit 1
         fi
         
         echo "检查项目配置:"
-        if [ -f fantasy-bv/settings.gradle.kts ] || [ -f fantasy-bv/settings.gradle ]; then
+        if [ -f "settings.gradle.kts" ] || [ -f "settings.gradle" ]; then
           echo "✅ Gradle设置文件存在"
         else
           echo "❌ Gradle设置文件不存在"
           exit 1
         fi
         
+    - name: Set up JDK 21
+      uses: actions/setup-java@main
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'gradle'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@main
+      
+    - name: Accept Android SDK licenses and install packages
+      run: |
+        # 接受Android SDK许可证
+        yes | sdkmanager --licenses
+        
+        # 安装必要的SDK组件
+        sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        
+        echo "Android SDK安装完成"
+        
     - name: Make gradlew executable
       run: |
-        chmod +x fantasy-bv/gradlew
+        chmod +x gradlew
         echo "Gradle包装器权限设置完成"
         
     - name: Generate keystore file for signing
@@ -134,11 +78,8 @@ jobs:
       run: |
         echo "生成keystore文件..."
         
-        # 进入项目目录
-        cd fantasy-bv
-        
         # 检查是否已有keystore文件
-        if [ -f keystore.jks ]; then
+        if [ -f "keystore.jks" ]; then
           echo "⚠️  keystore.jks已存在，跳过生成"
         else
           echo "正在生成新的keystore.jks文件..."
@@ -175,9 +116,6 @@ jobs:
       run: |
         echo "创建signing.properties文件..."
         
-        # 进入项目目录
-        cd fantasy-bv
-        
         # 创建signing.properties文件
         cat > signing.properties << EOF
         # 自动生成的签名配置
@@ -198,8 +136,8 @@ jobs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-          fantasy-bv/.gradle
-        key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv/gradle/wrapper/gradle-wrapper.properties', 'fantasy-bv/build.gradle*', 'fantasy-bv/settings.gradle*', 'fantasy-bv/app/build.gradle*') }}
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'build.gradle*', 'settings.gradle*', 'app/build.gradle*') }}
         restore-keys: |
           ${{ runner.os }}-gradle-
           
@@ -207,10 +145,7 @@ jobs:
       run: |
         echo "开始构建Release APK..."
         
-        # 进入项目目录
-        cd fantasy-bv
-        
-        # 设置Java内存选项（可选，如果需要）
+        # 设置Java内存选项（可选）
         export GRADLE_OPTS="-Xmx4g -Xms1g -XX:MaxMetaspaceSize=1g"
         
         # 清理并构建
@@ -220,8 +155,12 @@ jobs:
         
         # 显示构建结果
         echo "构建输出文件:"
-        find . -name "*.apk" -type f | xargs ls -lh
-        find . -name "*.aab" -type f | xargs ls -lh
+        if [ -d "app/build/outputs/apk/release" ]; then
+          ls -la app/build/outputs/apk/release/
+        else
+          echo "未找到app/build/outputs/apk/release目录，尝试查找其他位置..."
+          find . -name "*.apk" -type f | xargs ls -lh
+        fi
         
     - name: Collect build artifacts
       run: |
@@ -231,17 +170,17 @@ jobs:
         mkdir -p artifacts
         
         # 复制APK文件
-        if ls fantasy-bv/app/build/outputs/apk/release/*.apk 1> /dev/null 2>&1; then
-          cp fantasy-bv/app/build/outputs/apk/release/*.apk artifacts/
+        if ls app/build/outputs/apk/release/*.apk 1> /dev/null 2>&1; then
+          cp app/build/outputs/apk/release/*.apk artifacts/
           echo "APK文件已复制到artifacts目录"
         else
           echo "未找到APK文件，尝试在其他位置查找..."
-          find fantasy-bv -name "*.apk" -type f -exec cp {} artifacts/ \;
+          find . -name "*.apk" -type f -exec cp {} artifacts/ \;
         fi
         
         # 复制AAB文件（如果有）
-        if ls fantasy-bv/app/build/outputs/bundle/release/*.aab 1> /dev/null 2>&1; then
-          cp fantasy-bv/app/build/outputs/bundle/release/*.aab artifacts/
+        if ls app/build/outputs/bundle/release/*.aab 1> /dev/null 2>&1; then
+          cp app/build/outputs/bundle/release/*.aab artifacts/
           echo "AAB文件已复制到artifacts目录"
         fi
         
@@ -255,7 +194,7 @@ jobs:
         echo "分支: ${{ github.event.inputs.branch || 'develop' }}" >> artifacts/build-info.txt
         echo "构建时间: $(date)" >> artifacts/build-info.txt
         echo "工作流运行ID: ${{ github.run_id }}" >> artifacts/build-info.txt
-        echo "提交哈希: $(cd fantasy-bv && git rev-parse HEAD)" >> artifacts/build-info.txt
+        echo "提交哈希: $(git rev-parse HEAD)" >> artifacts/build-info.txt
         
     - name: Upload APK artifacts
       uses: actions/upload-artifact@main
