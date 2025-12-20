@@ -1,0 +1,7 @@
+# 临时文件
+*.apk
+*.jks
+signing.properties
+
+# 源代码缓存
+source-code/
