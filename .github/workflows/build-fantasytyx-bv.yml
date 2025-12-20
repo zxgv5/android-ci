@@ -1,4 +1,4 @@
-name: Build Fantasytyx BV
+name: build-fantasytyx-bv
 
 on:
   workflow_dispatch:
