@@ -1,27 +1,7 @@
 name: build-fantasytyx-bv
 
 on:
-  workflow_dispatch:
-    inputs:
-      buildType:
-        description: 'Build type'
-        required: true
-        default: 'release'
-        type: choice
-        options:
-        - release
-        - debug
-      cleanBuild:
-        description: 'Clean build'
-        required: true
-        default: 'true'
-        type: boolean
-
-env:
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-  ANDROID_COMPILE_SDK: "34"
-  ANDROID_BUILD_TOOLS: "34.0.0"
-  ANDROID_MIN_SDK: "21"
+  workflow_dispatch:  # 允许手动触发构建
 
 jobs:
   build:
@@ -30,106 +10,53 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@main
-      with:
-        fetch-depth: 0
-        
+      
     - name: Set up JDK
       uses: actions/setup-java@main
       with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: 'gradle'
+        java-version: '21'  # 使用最新的LTS版本，您也可以改为 'latest'
+        distribution: 'temurin'  # Eclipse Temurin JDK
         
-    - name: Setup Android SDK
+    - name: Set up Android SDK
       uses: android-actions/setup-android@main
       
-    - name: Cache Gradle dependencies
-      uses: actions/cache@main
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-          
-    - name: Setup Android licenses
+    - name: Accept Android SDK licenses
       run: |
-        mkdir -p ~/.android
-        touch ~/.android/repositories.cfg
-        
-        # 接受所有Android SDK许可
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-        
-        # 安装所需的构建工具
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-$ANDROID_COMPILE_SDK" "build-tools;$ANDROID_BUILD_TOOLS"
+        yes | sdkmanager --licenses || true
+        sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
         
     - name: Make gradlew executable
       run: chmod +x ./gradlew
       
-    - name: Validate Gradle wrapper
-      uses: gradle/wrapper-validation-action@main
-      
-    - name: Generate keystore (if secrets exist)
-      if: ${{ secrets.KEYSTORE_PASSWORD != '' && secrets.KEY_ALIAS != '' }}
+    - name: Generate keystore file
       run: |
-        echo "Generating keystore..."
+        # 使用GitHub Secrets中的变量生成keystore
         keytool -genkey -v \
           -keystore keystore.jks \
-          -alias "${{ secrets.KEY_ALIAS }}" \
+          -alias ${{ secrets.KEY_ALIAS }} \
           -keyalg RSA \
           -keysize 2048 \
           -validity 10000 \
-          -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-          -keypass "${{ secrets.KEY_ALIAS_PASSWORD }}" \
-          -dname "CN=Android, OU=Android, O=Unknown, L=Unknown, S=Unknown, C=Unknown" \
-          -noprompt
+          -storepass ${{ secrets.KEYSTORE_PASSWORD }} \
+          -keypass ${{ secrets.KEY_ALIAS_PASSWORD }} \
+          -dname "CN=Unknown, OU=Unknown, O=Unknown, L=Unknown, ST=Unknown, C=Unknown"
           
-    - name: Create signing.properties (if secrets exist)
-      if: ${{ secrets.KEYSTORE_PASSWORD != '' && secrets.KEY_ALIAS != '' }}
+    - name: Create signing.properties file
       run: |
-        echo "Creating signing.properties..."
         cat > signing.properties << EOF
         keystore.path=./keystore.jks
         keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
         keystore.alias=${{ secrets.KEY_ALIAS }}
         keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
         EOF
-        echo "signing.properties created"
-        # 验证文件内容（不显示密码）
-        echo "File content (with passwords masked):"
-        sed 's/=.*/=***/g' signing.properties
         
-    - name: Build with Gradle
+    - name: Build Release APK
       run: |
-        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-          if [ "${{ github.event.inputs.cleanBuild }}" == "true" ]; then
-            ./gradlew clean
-          fi
-          ./gradlew assemble${{ github.event.inputs.buildType }}
-        else
-          ./gradlew clean assembleRelease
-        fi
-        
-    - name: List APK files
-      run: |
-        find . -name "*.apk" -type f | xargs ls -lh
+        ./gradlew clean assembleRelease
+        ls -la app/build/outputs/apk/release/
         
     - name: Upload APK artifact
       uses: actions/upload-artifact@main
       with:
-        name: fantasytyx-bv-${{ github.run_number }}
-        path: |
-          **/build/outputs/apk/release/*.apk
-          **/build/outputs/apk/debug/*.apk
-        if-no-files-found: error
-        retention-days: 30
-        
-    - name: Create GitHub Release (on tag)
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@master
-      with:
-        files: |
-          **/build/outputs/apk/release/*.apk
-          **/build/outputs/bundle/release/*.aab
-        generate_release_notes: true
+        name: fantasytyx-bv-apk
+        path: app/build/outputs/apk/release/*.apk
