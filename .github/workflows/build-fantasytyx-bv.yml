@@ -1,7 +1,6 @@
 name: build-fantasytyx-bv
 
 on:
-  push:
   workflow_dispatch:
     inputs:
       buildType:
