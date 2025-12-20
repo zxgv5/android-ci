@@ -1,4 +1,4 @@
-name: build-fantasytyx-bv
+name: Build Fantasytyx BV
 
 on:
   workflow_dispatch:
@@ -10,7 +10,6 @@ on:
       tag:
         description: '要构建的标签（如果有）'
         required: false
-		default: 'fantasy-bv-latest'
 
 jobs:
   build:
@@ -39,63 +38,66 @@ jobs:
         distribution: 'temurin'
         cache: 'gradle'
         
-    - name: Setup Android SDK environment
-      uses: android-actions/setup-android@main
-      
-    - name: Install specific Android SDK components
+    - name: Setup Android SDK (修正版)
       run: |
-        echo "安装Android SDK组件..."
+        echo "设置Android SDK环境..."
         
-        # 设置环境变量
-        export ANDROID_HOME="/usr/local/lib/android/sdk"
-        export ANDROID_SDK_ROOT="$ANDROID_HOME"
+        # 设置Android SDK根目录
+        ANDROID_HOME="/usr/local/lib/android/sdk"
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
         
-        # 清理可能存在的冲突目录
-        rm -rf "$ANDROID_HOME/cmdline-tools/latest-2" 2>/dev/null || true
+        # 确保目录存在
+        sudo mkdir -p $ANDROID_HOME
+        sudo chmod -R 777 $ANDROID_HOME
         
-        # 接受所有许可证
+        # 下载命令行工具
+        echo "下载Android命令行工具..."
+        cd /tmp
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
+        
+        # 解压到正确位置
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        unzip -q cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
+        mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+        
+        # 清理
+        rm -f cmdline-tools.zip
+        
+        # 添加到PATH
+        echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+        echo "$ANDROID_HOME/emulator" >> $GITHUB_PATH
+        
+        echo "Android SDK命令行工具安装完成"
+        
+    - name: Accept licenses and install packages
+      run: |
+        # 接受Android SDK许可证
         yes | sdkmanager --licenses
         
-        # 更新sdkmanager自身
-        sdkmanager --update
-        
-        # 安装平台工具
-        echo "安装 platform-tools..."
+        # 安装必要的SDK组件（分别安装，避免格式问题）
         sdkmanager "platform-tools"
-        
-        # 安装Android 34平台
-        echo "安装 platforms;android-34..."
         sdkmanager "platforms;android-34"
-        
-        # 安装构建工具
-        echo "安装 build-tools;34.0.0..."
         sdkmanager "build-tools;34.0.0"
-        
-        # 安装命令行工具（如果需要）
-        echo "安装 cmdline-tools;latest..."
-        sdkmanager "cmdline-tools;latest"
-        
-        # 列出已安装的组件
-        echo "已安装的Android SDK组件:"
-        sdkmanager --list_installed
         
     - name: Configure Android environment
       run: |
         echo "配置Android环境..."
         
-        # 确保环境变量正确设置
-        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-        
-        # 创建必要的目录
+        # 创建必要的目录和文件
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
         
-        # 验证安装
-        echo "Android SDK安装验证:"
-        ls -la $ANDROID_SDK_ROOT/cmdline-tools/
-        echo "平台工具:"
+        # 验证Android SDK安装
+        echo "Android SDK版本:"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --version
+        
+        echo "Android SDK路径: $ANDROID_SDK_ROOT"
+        echo "平台工具版本:"
         $ANDROID_SDK_ROOT/platform-tools/adb version
+        
+        echo "环境配置完成"
         
     - name: Verify project structure
       run: |
@@ -104,18 +106,18 @@ jobs:
         
         echo "检查Gradle包装器:"
         if [ -f fantasy-bv/gradlew ]; then
-          echo "Gradle包装器存在"
+          echo "✅ Gradle包装器存在"
           ls -la fantasy-bv/gradlew*
         else
-          echo "Gradle包装器不存在"
+          echo "❌ Gradle包装器不存在"
           exit 1
         fi
         
         echo "检查项目配置:"
         if [ -f fantasy-bv/settings.gradle.kts ] || [ -f fantasy-bv/settings.gradle ]; then
-          echo "Gradle设置文件存在"
+          echo "✅ Gradle设置文件存在"
         else
-          echo "Gradle设置文件不存在"
+          echo "❌ Gradle设置文件不存在"
           exit 1
         fi
         
@@ -137,7 +139,7 @@ jobs:
         
         # 检查是否已有keystore文件
         if [ -f keystore.jks ]; then
-          echo "keystore.jks已存在，跳过生成"
+          echo "⚠️  keystore.jks已存在，跳过生成"
         else
           echo "正在生成新的keystore.jks文件..."
           
@@ -161,7 +163,7 @@ jobs:
             -dname "CN=Fantasytyx, OU=Android, O=Fantasytyx, L=Unknown, ST=Unknown, C=CN" \
             -noprompt
           
-          echo "keystore.jks生成成功"
+          echo "✅ keystore.jks生成成功"
           ls -la keystore.jks
         fi
         
@@ -186,7 +188,7 @@ jobs:
         keystore.alias_pwd=$KEY_ALIAS_PASSWORD
         EOF
         
-        echo "signing.properties创建成功"
+        echo "✅ signing.properties创建成功"
         echo "文件内容（密码已隐藏）:"
         sed 's/=.*/=***/g' signing.properties
         
@@ -214,7 +216,7 @@ jobs:
         # 清理并构建
         ./gradlew clean assembleRelease --no-daemon --stacktrace
         
-        echo "构建完成"
+        echo "✅ 构建完成"
         
         # 显示构建结果
         echo "构建输出文件:"
@@ -262,3 +264,30 @@ jobs:
         path: artifacts/*
         retention-days: 30
         if-no-files-found: error
+        
+    - name: Create GitHub Release (如果指定了标签)
+      if: github.event.inputs.tag != ''
+      uses: softprops/action-gh-release@master
+      with:
+        tag_name: ${{ github.event.inputs.tag }}
+        name: Fantasytyx BV ${{ github.event.inputs.tag }}
+        body: |
+          自动构建版本: ${{ github.event.inputs.tag }}
+          构建时间: $(date)
+          源仓库: xqqv5/fantasy-bv
+          分支: ${{ github.event.inputs.branch || 'develop' }}
+          
+          构建包含:
+          - APK安装包
+          - 构建信息
+        draft: false
+        prerelease: false
+        files: artifacts/*
+        
+    - name: Notify build completion
+      if: success()
+      run: |
+        echo "🎉 Fantasytyx BV 构建成功完成!"
+        echo "构建产物已上传到GitHub Artifacts"
+        echo "工作流运行ID: ${{ github.run_id }}"
+        echo "查看Artifacts: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
