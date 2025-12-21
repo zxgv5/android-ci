@@ -76,17 +76,6 @@ jobs:
           -dname "CN=Android Developer, OU=Android, O=Company, L=City, ST=State, C=US" \
           -storetype JKS
         
-        # 或者方法2：使用旧语法（如果上面失败）
-        # keytool -genkey -v \
-        #   -keystore keystore.jks \
-        #   -alias "${{ secrets.KEYSTORE_ALIAS }}" \
-        #   -keyalg RSA \
-        #   -keysize 4096 \
-        #   -validity 10000 \
-        #   -storepass "${{ secrets.KEYSTORE_PASSWORD }}" \
-        #   -keypass "${{ secrets.KEY_PASSWORD }}" \
-        #   -dname "CN=Android Developer, OU=Android, O=Company, L=City, ST=State, C=US"
-        
         # 创建signing.properties文件
         cat > signing.properties << EOF
               keystore.path=./keystore.jks
@@ -98,46 +87,68 @@ jobs:
         echo "Created files:"
         ls -la keystore.jks signing.properties
 
-- name: Fix versionCode in build.gradle.kts
-  run: |
-    cd bv-source
-    
-    echo "=== Fixing versionCode issue ==="
-    
-    if [ -f "app/build.gradle.kts" ]; then
-      echo "Found app/build.gradle.kts, checking versionCode..."
-      
-      # 备份原文件
-      cp app/build.gradle.kts app/build.gradle.kts.backup
-      
-      # 使用Python进行更精确的替换
-      python3 << 'EOF'
-      import re
+    - name: DEBUG - Find source of versionCode -4
+      run: |
+        cd bv-source
+        
+        echo "=== 深入搜索versionCode -4的来源 ==="
+        
+        # 1. 搜索所有包含versionCode的文件
+        echo "=== 搜索所有包含versionCode的文件 ==="
+        find . -type f \( -name "*.kt" -o -name "*.kts" -o -name "*.gradle" -o -name "*.properties" -o -name "*.xml" \) \
+          -not -path "./build/*" -not -path "./.gradle/*" -not -path "./.idea/*" \
+          -exec grep -l "versionCode\|-4" {} \; 2>/dev/null | while read file; do
+          echo "=== 文件: $file ==="
+          grep -n "versionCode\|-4" "$file" 2>/dev/null || true
+        done
+        
+        # 2. 特别搜索buildSrc目录
+        echo "=== 搜索buildSrc目录 ==="
+        find buildSrc -type f \( -name "*.kt" -o -name "*.kts" \) 2>/dev/null | while read file; do
+          echo "=== buildSrc文件: $file ==="
+          grep -n "versionCode\|AppConfiguration" "$file" 2>/dev/null || true
+        done
+        
+        # 3. 搜索Companion对象中的版本号
+        echo "=== 搜索可能包含-4的常量定义 ==="
+        grep -r "\-4" . --include="*.kt" --include="*.kts" --include="*.java" 2>/dev/null | grep -v ".gradle" | head -20 || true
 
-      with open('app/build.gradle.kts', 'r') as f:
-          content = f.read()
-
-      # 替换所有可能出现versionCode的地方
-      patterns = [
-          r'versionCode\s*=\s*AppConfiguration\.versionCode',
-          r'versionCode\s*=\s*-?\d+'
-      ]
-
-      for pattern in patterns:
-          content = re.sub(pattern, 'versionCode = 1', content)
-
-      with open('app/build.gradle.kts', 'w') as f:
-          f.write(new_content)
-
-      print("Fixed versionCode in app/build.gradle.kts")
-      EOF
-      
-      echo "Modified app/build.gradle.kts:"
-      grep -n "versionCode" app/build.gradle.kts
-    else
-      echo "app/build.gradle.kts not found!"
-      exit 1
-    fi
+    - name: HARD FIX - 强制覆盖所有可能的versionCode
+      run: |
+        cd bv-source
+        
+        echo "=== 强制覆盖所有versionCode设置 ==="
+        
+        # 方法1: 修改所有gradle文件中的versionCode
+        find . -name "*.gradle.kts" -o -name "*.gradle" | grep -v "/build/" | while read file; do
+          echo "处理文件: $file"
+          # 备份
+          cp "$file" "${file}.bak" 2>/dev/null || true
+          
+          # 替换所有versionCode = 任意值 为 versionCode = 1001
+          sed -i 's/versionCode\s*=\s*-?[0-9]\+/versionCode = 1001/g' "$file" 2>/dev/null || true
+          sed -i 's/versionCode\s*=\s*AppConfiguration\.versionCode/versionCode = 1001/g' "$file" 2>/dev/null || true
+          sed -i 's/versionCode\s*=\s*[a-zA-Z._]*versionCode/versionCode = 1001/g' "$file" 2>/dev/null || true
+        done
+        
+        # 方法2: 修改所有Kotlin文件
+        find . -name "*.kt" | grep -v "/build/" | while read file; do
+          echo "检查Kotlin文件: $file"
+          if grep -q "versionCode\|VersionCode" "$file"; then
+            echo "在Kotlin文件中找到versionCode: $file"
+            # 备份
+            cp "$file" "${file}.bak" 2>/dev/null || true
+            
+            # 替换-4为1001
+            sed -i 's/\-4/1001/g' "$file" 2>/dev/null || true
+            
+            # 替换versionCode定义
+            sed -i 's/versionCode\s*=\s*-?[0-9]\+/versionCode = 1001/g' "$file" 2>/dev/null || true
+          fi
+        done
+        
+        echo "=== 显示修改结果 ==="
+        grep -r "versionCode" . --include="*.kt" --include="*.kts" --include="*.gradle" 2>/dev/null | grep -v "/build/" | grep -v ".gradle/" | head -30 || true
 
     - name: Grant execute permission for gradlew
       run: |
