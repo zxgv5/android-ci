@@ -59,20 +59,51 @@ jobs:
         sdkmanager "build-tools;$ANDROID_BUILD_TOOLS"
         sdkmanager "cmdline-tools;latest"
         
-    - name: Find and fix AppConfiguration
+    - name: Fix AppConfiguration versionCode
       run: |
         cd bv-source
         
-        echo "=== Searching for AppConfiguration class ==="
+        # 查找AppConfiguration.kt的具体位置
+        APP_CONFIG_FILE=$(find buildSrc -name "AppConfiguration.kt" -type f 2>/dev/null | head -1)
         
-        # 在buildSrc中查找AppConfiguration
-        find buildSrc -name "*.kt" -o -name "*.kts" | xargs grep -l "AppConfiguration" 2>/dev/null || true
+        if [ -z "$APP_CONFIG_FILE" ]; then
+          echo "AppConfiguration.kt not found in buildSrc, searching elsewhere..."
+          APP_CONFIG_FILE=$(find . -name "AppConfiguration.kt" -type f 2>/dev/null | grep -v ".gradle" | head -1)
+        fi
         
-        # 查找所有Kotlin文件中的AppConfiguration
-        find . -name "*.kt" -type f -exec grep -l "object AppConfiguration\|class AppConfiguration\|AppConfiguration\." {} \; | head -20
-        
-        echo "=== Checking buildSrc directory structure ==="
-        find buildSrc -type f -name "*.kt" | head -20
+        if [ -n "$APP_CONFIG_FILE" ]; then
+          echo "Found AppConfiguration at: $APP_CONFIG_FILE"
+          
+          # 备份原文件
+          cp "$APP_CONFIG_FILE" "${APP_CONFIG_FILE}.bak"
+          
+          # 查看文件内容
+          echo "=== Original content ==="
+          cat "$APP_CONFIG_FILE"
+          
+          # 修复versionCode（将-4改为1）
+          # 使用sed更精确地匹配versionCode
+          sed -i 's/versionCode\s*=\s*-4/versionCode = 1/' "$APP_CONFIG_FILE"
+          sed -i 's/versionCode\s*=\s*-\d\+/versionCode = 1/' "$APP_CONFIG_FILE" 2>/dev/null || true
+          
+          echo "=== Modified content ==="
+          cat "$APP_CONFIG_FILE" | grep -n "versionCode\|object AppConfiguration" || true
+          
+        else
+          echo "AppConfiguration.kt not found, trying to find in build.gradle files..."
+          
+          # 尝试在gradle.properties中查找
+          if [ -f "gradle.properties" ]; then
+            echo "=== Checking gradle.properties ==="
+            grep -n "versionCode\|AppConfiguration" gradle.properties || true
+          fi
+          
+          # 尝试在settings.gradle.kts中查找
+          if [ -f "settings.gradle.kts" ]; then
+            echo "=== Checking settings.gradle.kts ==="
+            grep -n "AppConfiguration" settings.gradle.kts || true
+          fi
+        fi
         
     - name: Create keystore and signing properties
       run: |
