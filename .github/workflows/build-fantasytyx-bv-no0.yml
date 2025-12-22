@@ -1,16 +1,11 @@
 name: build-fantasytyx-bv-no0
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
-
+  workflow_dispatch:
 jobs:
   build-release:
     name: Build Release Apk
     runs-on: macos-latest
-    if: github.repository == 'aaa1115910/bv'
 
     steps:
       - name: Checkout source code with submodules
