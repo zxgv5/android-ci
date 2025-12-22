@@ -27,37 +27,49 @@ jobs:
       - name: Write google-services.json
         env:
           DATA: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: echo $DATA > app/google-services.json
+        # 修复：路径应该相对于 bv-source 目录
+        run: |
+          mkdir -p bv-source/app
+          echo $DATA > bv-source/app/google-services.json
+
+      - name: Change to source directory
+        run: cd bv-source
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+        # 修复：路径应该相对于 bv-source 目录
+        run: chmod +x bv-source/gradlew
 
       - name: Add signing properties
         env:
           SIGNING_PROPERTIES: ${{ secrets.SIGNING_PROPERTIES }}
+        # 修复：路径应该相对于 bv-source 目录
         run: |
-          echo ${{ secrets.SIGNING_PROPERTIES }} > encoded_signing_properties
-          base64 -Dd -i encoded_signing_properties > signing.properties
+          echo ${{ secrets.SIGNING_PROPERTIES }} > bv-source/encoded_signing_properties
+          base64 -Dd -i bv-source/encoded_signing_properties > bv-source/signing.properties
 
       - name: Add jks file
+        # 修复：路径应该相对于 bv-source 目录
         run: |
-          echo ${{ secrets.SIGN_KEY }} > ./encoded_key
-          base64 -Dd -i encoded_key > key.jks
+          echo ${{ secrets.SIGN_KEY }} > bv-source/encoded_key
+          base64 -Dd -i bv-source/encoded_key > bv-source/key.jks
 
       - name: Build apk
-        run: ./gradlew assembleDefaultRelease assembleDefaultDebug
+        # 修复：在 bv-source 目录中执行构建
+        run: cd bv-source && ./gradlew assembleDefaultRelease assembleDefaultDebug
 
       - name: Read release apk output metadata
         id: apk-meta-release
         uses: juliangruber/read-file-action@v1
         with:
-          path: app/build/outputs/apk/default/release/output-metadata.json
+          # 修复：路径应该相对于 bv-source 目录
+          path: bv-source/app/build/outputs/apk/default/release/output-metadata.json
 
       - name: Read debug apk output metadata
         id: apk-meta-release-debug
         uses: juliangruber/read-file-action@v1
         with:
-          path: app/build/outputs/apk/default/debug/output-metadata.json
+          # 修复：路径应该相对于 bv-source 目录
+          path: bv-source/app/build/outputs/apk/default/debug/output-metadata.json
 
       - name: Parse apk infos
         id: apk-infos
@@ -69,7 +81,9 @@ jobs:
 
       - name: Get changelog
         id: changelog
+        # 修复：进入 bv-source 目录执行 git 命令
         run: |
+          cd bv-source
           {
             echo "changelog<<EOF"
             echo "$(git log --pretty=format:"- %s (%h)" ${{ github.event.before }}..${{ github.sha }})"
@@ -82,7 +96,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Release debug build artifact
-          path: app/build/outputs/apk/default/debug/BV_${{ env.release_debug_info_version_code }}_${{ env.release_debug_info_version_name }}_default_universal.apk
+          # 修复：路径应该相对于 bv-source 目录
+          path: bv-source/app/build/outputs/apk/default/debug/BV_${{ env.release_debug_info_version_code }}_${{ env.release_debug_info_version_name }}_default_universal.apk
 
       # upload artifacts release
 
@@ -90,18 +105,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Release build mappings
-          path: app/build/outputs/mapping/defaultRelease
+          # 修复：路径应该相对于 bv-source 目录
+          path: bv-source/app/build/outputs/mapping/defaultRelease
 
       - name: Archive release build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Release build artifact
-          path: app/build/outputs/apk/default/release/BV_${{ env.release_info_version_code }}_${{ env.release_info_version_name }}_default_universal.apk
+          # 修复：路径应该相对于 bv-source 目录
+          path: bv-source/app/build/outputs/apk/default/release/BV_${{ env.release_info_version_code }}_${{ env.release_info_version_name }}_default_universal.apk
 
       # zip mapping because softprops/action-gh-release can't upload folder
 
       - name: Zip mapping
-        run: zip -rj mapping.zip app/build/outputs/mapping/defaultRelease
+        # 修复：路径应该相对于 bv-source 目录
+        run: cd bv-source && zip -rj mapping.zip app/build/outputs/mapping/defaultRelease
 
       # upload to github release
 
@@ -109,9 +127,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            app/build/outputs/apk/default/debug/BV_${{ env.release_debug_info_version_code }}_${{ env.release_debug_info_version_name }}_default_universal.apk
-            app/build/outputs/apk/default/release/BV_${{ env.release_info_version_code }}_${{ env.release_info_version_name }}_default_universal.apk
-            mapping.zip
+            bv-source/app/build/outputs/apk/default/debug/BV_${{ env.release_debug_info_version_code }}_${{ env.release_debug_info_version_name }}_default_universal.apk
+            bv-source/app/build/outputs/apk/default/release/BV_${{ env.release_info_version_code }}_${{ env.release_info_version_name }}_default_universal.apk
+            bv-source/mapping.zip
           tag_name: ${{ github.ref_name }}
           name: ${{ env.release_info_version_name }}
           prerelease: false
