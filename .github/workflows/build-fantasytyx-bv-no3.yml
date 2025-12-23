@@ -11,192 +11,186 @@ env:
   JDK_VERSION: '17'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  NDK_VERSION: '25.2.9519653'
-  CMAKE_VERSION: '3.22.1'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 阶段 1: 准备代码与环境
-      - name: Checkout source code with ALL submodules
+      # 阶段 1: 并行克隆两个仓库
+      - name: Checkout MAIN source repo (fantasy-bv)
         uses: actions/checkout@v4
         with:
           repository: xqqv5/fantasy-bv
           ref: develop
-          path: bv-source
-          submodules: 'recursive'
+          path: fantasy-bv-source
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Gradle to accelerate build
+      - name: Checkout PRE-BUILT libs repo (bv-libs)
+        uses: actions/checkout@v4
+        with:
+          repository: aaa1115910/bv-libs
+          # 关键：根据实际分支修改，可能是 main, master 或其他
+          ref: main
+          path: bv-libs-source
+
+      # 阶段 2: 从Monorepo精确合并每个库（核心改进）
+      - name: Merge Libraries from Monorepo Structure
+        run: |
+          echo "=== 从 bv-libs Monorepo 复制各子库 ==="
+          cd fantasy-bv-source
+          
+          # 确保主项目的 libs 目录存在
+          mkdir -p libs
+          
+          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
+          declare -A LIB_PATHS
+          LIB_PATHS=(
+            ["av1Decoder"]="av1Decoder"
+            ["ffmpegDecoder"]="ffmpegDecoder"
+            ["libVLC"]="libVLC"
+            ["media3Container"]="media3Container"
+          )
+          
+          for LIB_NAME in "${!LIB_PATHS[@]}"; do
+            SRC_PATH="../bv-libs-source/${LIB_PATHS[$LIB_NAME]}"
+            DEST_PATH="libs/$LIB_NAME"
+            
+            echo "处理库: $LIB_NAME"
+            echo "  源路径: $SRC_PATH"
+            
+            if [ -d "$SRC_PATH" ]; then
+              # 删除目标目录，确保干净复制
+              rm -rf "$DEST_PATH"
+              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
+              cp -r "$SRC_PATH" "$DEST_PATH"
+              echo "  ✅ 已复制到: $DEST_PATH"
+              # 显示复制后的关键文件
+              if [ -f "$DEST_PATH"/*.aar ]; then
+                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
+              fi
+            else
+              echo "  ❌ 错误：源路径不存在！"
+              echo "  当前bv-libs-source目录内容:"
+              ls -la "../bv-libs-source/" || true
+              exit 1
+            fi
+            echo ""
+          done
+          
+          echo "=== 合并完成，最终 libs/ 目录结构 ==="
+          ls -la libs/
+
+      # 阶段 3: 设置构建环境
+      - name: Cache Gradle
         uses: actions/cache@v3
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-            bv-source/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties', '**/*.gradle*', '**/gradle.properties') }}
+            fantasy-bv-source/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Set up JDK ${{ env.JDK_VERSION }}
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
-      - name: Install Android SDK, NDK and CMake (FIXED VERSION)
+      - name: Setup Android SDK (Minimal)
         uses: android-actions/setup-android@v3
         with:
           api-level: ${{ env.ANDROID_COMPILE_SDK }}
           build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
-          ndk: ${{ env.NDK_VERSION }} # 固定NDK版本，避免兼容性问题
-          cmake: ${{ env.CMAKE_VERSION }} # 固定CMake版本
+          # 由于是预编译库，NDK和CMake可能不是必需的，但保留以防万一
+          # ndk: '25.2.9519653'  # 如果后续编译akdanmaku需要NDK，请取消注释
 
-      - name: Install essential native build tools
+      # 阶段 4: 应用项目特定配置
+      - name: Fix App Version Calculation
+        working-directory: ./fantasy-bv-source
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            ninja-build \
-            build-essential \
-            nasm \
-            yasm \
-            pkg-config \
-            autoconf \
-            automake \
-            libtool
+          config_file="buildSrc/src/main/kotlin/AppConfiguration.kt"
+          if [ -f "$config_file" ]; then
+            echo "正在修改版本号计算规则 (git commit计数 + 1)..."
+            sed -i.bak 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' "$config_file"
+            echo "修改后 versionCode 定义:"
+            grep -A2 -B2 "versionCode.*by lazy" "$config_file"
+          else
+            echo "警告: 未找到 $config_file，跳过版本修改。"
+          fi
 
-      # 阶段 2: 强制初始化与验证所有子模块
-      - name: Force initialize and update ALL submodules
+      # 阶段 5: 验证与准备构建
+      - name: Validate Final Project Structure
+        working-directory: ./fantasy-bv-source
         run: |
-          cd bv-source
-          echo "=== 强制递归初始化并更新所有子模块 ==="
-          # 清除可能的旧状态，确保拉取最新
-          git submodule deinit --force --all
-          git submodule update --init --recursive --force --depth=1
-          
-          echo "=== 验证关键子模块目录是否存在 ==="
-          # 检查你提到的所有关键库目录
-          for lib in libs/av1Decoder libs/ffmpegDecoder libs/libVLC libs/media3Container; do
-            if [ -d "$lib" ]; then
-              echo "✅ $lib 存在"
-              ls -la "$lib/" | head -5
-            else
-              echo "❌ 错误: $lib 不存在！"
-              exit 1 # 关键目录缺失，立即失败
+          echo "=== 最终项目完整性验证 ==="
+          echo ""
+          echo "1. 验证预编译库:"
+          for lib_dir in libs/*; do
+            if [ -d "$lib_dir" ]; then
+              lib_name=$(basename "$lib_dir")
+              aar_count=$(find "$lib_dir" -name "*.aar" -type f | wc -l)
+              kts_count=$(find "$lib_dir" -name "*.kts" -type f | wc -l)
+              echo "  $lib_name: $aar_count个AAR文件, $kts_count个KTS文件"
             fi
           done
-          
-          echo "=== 验证akdanmaku模块 ==="
-          if [ -d "akdanmaku" ]; then
-            echo "✅ akdanmaku 存在"
+          echo ""
+          echo "2. 验证源码模块:"
+          if [ -f "akdanmaku/build.gradle.kts" ] || [ -f "akdanmaku/build.gradle" ]; then
+            echo "  ✅ akdanmaku - 找到构建文件"
           else
-            echo "❌ 错误: akdanmaku 不存在！"
+            echo "  ❌ akdanmaku - 缺少构建文件！"
             exit 1
           fi
 
-      - name: Grant execute permission for gradlew
+      - name: Prepare Gradle Environment
+        working-directory: ./fantasy-bv-source
         run: |
-          cd bv-source
           chmod +x gradlew
-          ./gradlew --version # 验证Gradle环境
+          echo "Gradle 版本信息:"
+          ./gradlew --version
 
-      # 阶段 3: 按顺序独立构建每一个前置原生库 (失败则立即停止)
-      - name: Build Core Native Library - av1Decoder
+      # 阶段 6: 顺序构建（先编译akdanmaku，再构建主应用）
+      - name: Build Danmaku Module (akdanmaku)
+        working-directory: ./fantasy-bv-source
         run: |
-          cd bv-source
-          echo "=== 开始构建 av1Decoder (基础依赖) ==="
-          ./gradlew :libs:av1Decoder:assembleRelease --no-daemon --stacktrace --info
-          # 验证产物是否生成
-          if find libs/av1Decoder -name "*.so" -o -name "*.aar" | grep -q '.'; then
-            echo "✅ av1Decoder 构建成功，产物已生成。"
-          else
-            echo "❌ 错误: av1Decoder 未找到输出产物！"
-            exit 1
-          fi
+          echo "=== 开始编译弹幕库 (akdanmaku) ==="
+          ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
+          echo "=== akdanmaku 编译完成 ==="
 
-      - name: Build Core Native Library - ffmpegDecoder
+      - name: Build Main Application
+        working-directory: ./fantasy-bv-source
         run: |
-          cd bv-source
-          echo "=== 开始构建 ffmpegDecoder (核心解码器) ==="
-          ./gradlew :libs:ffmpegDecoder:assembleRelease --no-daemon --stacktrace --info
-          if find libs/ffmpegDecoder -name "*.so" -o -name "*.aar" | grep -q '.'; then
-            echo "✅ ffmpegDecoder 构建成功，产物已生成。"
-          else
-            echo "❌ 错误: ffmpegDecoder 未找到输出产物！"
-            exit 1
-          fi
-
-      - name: Build Core Native Library - libVLC
-        run: |
-          cd bv-source
-          echo "=== 开始构建 libVLC ==="
-          ./gradlew :libs:libVLC:assembleRelease --no-daemon --stacktrace --info
-          if find libs/libVLC -name "*.so" -o -name "*.aar" | grep -q '.'; then
-            echo "✅ libVLC 构建成功，产物已生成。"
-          else
-            echo "❌ 错误: libVLC 未找到输出产物！"
-            exit 1
-          fi
-
-      - name: Build Core Native Library - media3Container
-        run: |
-          cd bv-source
-          echo "=== 开始构建 media3Container ==="
-          ./gradlew :libs:media3Container:assembleRelease --no-daemon --stacktrace --info
-          if find libs/media3Container -name "*.so" -o -name "*.aar" | grep -q '.'; then
-            echo "✅ media3Container 构建成功，产物已生成。"
-          else
-            echo "❌ 错误: media3Container 未找到输出产物！"
-            exit 1
-          fi
-
-      # 阶段 4: 构建弹幕库 (纯Kotlin/Java，依赖原生库)
-      - name: Build Danmaku Library - akdanmaku
-        run: |
-          cd bv-source
-          echo "=== 开始构建弹幕库 akdanmaku ==="
-          ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace --info
-          if find akdanmaku -name "*.aar" | grep -q '.'; then
-            echo "✅ akdanmaku 构建成功，产物已生成。"
-          else
-            echo "❌ 错误: akdanmaku 未找到输出产物！"
-            exit 1
-          fi
-
-      # 阶段 5: 构建主应用 (此时所有依赖已就绪)
-      - name: Build Main Application (Depends on all libraries)
-        run: |
-          cd bv-source
-          echo "=== 开始构建主应用，所有前置依赖已就绪 ==="
-          # 此命令会自动解析所有 `project()` 依赖并按需编译
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace --info
+          echo "=== 开始构建主应用 (所有依赖已就位) ==="
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
           
-          echo "=== 最终APK产物列表 ==="
-          find . -path "*/outputs/apk/*release/*.apk" -type f | while read apk; do
-            echo "📍 找到: $apk"
-            ls -lh "$apk"
-          done
+          echo ""
+          echo "=== 🎉 构建完成！查找APK产物 ==="
+          find . -name "*.apk" -type f | grep -i release | while read apk; do
+            echo "  📦 $(ls -lh "$apk")"
+          done || echo "未找到APK文件，请检查构建日志。"
 
-      # 阶段 6: 收集与上传产物
+      # 阶段 7: 收集与上传结果
       - name: Upload APK Artifacts
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: bv-release-apks
+          name: release-apks
           path: |
-            bv-source/**/outputs/apk/**/*.apk
-            bv-source/**/outputs/aar/**/*.aar
+            fantasy-bv-source/app/build/outputs/apk/**/*release*.apk
+            fantasy-bv-source/akdanmaku/build/outputs/aar/**/*release*.aar
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload Build Logs (for debugging if any step fails)
+      - name: Upload Build Logs for Debugging
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: build-reports-and-libs
           path: |
-            bv-source/**/build/reports/
-            ${{ runner.temp }}/log_*.txt
+            fantasy-bv-source/**/build/reports/
+            # 上传复制后的libs目录结构以供验证
+            fantasy-bv-source/libs/
           retention-days: 7
