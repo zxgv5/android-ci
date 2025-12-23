@@ -1,174 +1,230 @@
 name: build-fantasytyx-bv-no0
-
+ 
 on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
   workflow_dispatch:
+ 
+env:
+  JDK_VERSION: '21'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+ 
 jobs:
-  build-release:
-    name: Build Release Apk
-    runs-on: macos-latest
-
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code with submodules
+      # 阶段 1: 并行克隆两个仓库
+      - name: Checkout MAIN source repo (fantasy-bv)
         uses: actions/checkout@main
         with:
-          repository: xqqv5/fantasy-bv
+          repository: zxgv5/fantasy-bv
           ref: develop
-          path: bv-source
-          submodules: 'recursive'
+          path: fantasy-bv-source
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
+ 
+      - name: Checkout PRE-BUILT libs repo (bv-libs)
+        uses: actions/checkout@main
         with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      # 修复：先进入 bv-source 目录
-      - name: Setup working directory
-        run: cd bv-source
-
-      # 修复：确保 app 目录存在并写入 google-services.json
-      - name: Write google-services.json
-        env:
-          DATA: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          repository: zxgv5/bv-libs
+          # 关键：根据实际分支修改，可能是 main, master 或其他
+          ref: main
+          path: bv-libs-source
+ 
+      # 阶段 2: 从Monorepo精确合并每个库（核心改进）
+      - name: Merge Libraries from Monorepo Structure
         run: |
-          mkdir -p bv-source/app
-          echo "$DATA" > bv-source/app/google-services.json
-          echo "Google services file created at:"
-          ls -la bv-source/app/
-
-      # 修复：为 gradlew 添加执行权限
-      - name: Grant execute permission for gradlew
-        run: chmod +x bv-source/gradlew
-
-      # 修复：添加签名属性
-      - name: Add signing properties
-        env:
-          SIGNING_PROPERTIES: ${{ secrets.SIGNING_PROPERTIES }}
-        run: |
-          echo "$SIGNING_PROPERTIES" > bv-source/encoded_signing_properties
-          base64 -Dd -i bv-source/encoded_signing_properties > bv-source/signing.properties
-          echo "Signing properties created:"
-          ls -la bv-source/signing.properties
-
-      # 修复：添加 jks 文件
-      - name: Add jks file
-        env:
-          SIGN_KEY: ${{ secrets.SIGN_KEY }}
-        run: |
-          echo "$SIGN_KEY" > bv-source/encoded_key
-          base64 -Dd -i bv-source/encoded_key > bv-source/key.jks
-          echo "Key file created:"
-          ls -la bv-source/key.jks
-
-      # 修复：在 bv-source 目录中构建
-      - name: Build apk
-        run: |
-          cd bv-source
-          ./gradlew assembleDefaultRelease assembleDefaultDebug
-          echo "Build completed. Listing APK files:"
-          find app/build/outputs/apk -name "*.apk" -type f | xargs ls -la
-
-      # 修复：读取元数据文件
-      - name: Read release apk output metadata
-        id: apk-meta-release
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: bv-source/app/build/outputs/apk/default/release/output-metadata.json
-
-      - name: Read debug apk output metadata
-        id: apk-meta-debug
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: bv-source/app/build/outputs/apk/default/debug/output-metadata.json
-
-      # 修复：正确解析 JSON 数据
-      - name: Parse apk infos
-        id: apk-infos
-        run: |
-          RELEASE_CONTENT='${{ steps.apk-meta-release.outputs.content }}'
-          DEBUG_CONTENT='${{ steps.apk-meta-debug.outputs.content }}'
+          echo "=== 从 bv-libs Monorepo 复制各子库 ==="
+          cd fantasy-bv-source
           
-          # 解析 release 版本信息
-          RELEASE_VERSION_CODE=$(echo "$RELEASE_CONTENT" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['elements'][0]['versionCode'])")
-          RELEASE_VERSION_NAME=$(echo "$RELEASE_CONTENT" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['elements'][0]['versionName'])")
+          # 确保主项目的 libs 目录存在
+          mkdir -p libs
           
-          # 解析 debug 版本信息
-          DEBUG_VERSION_CODE=$(echo "$DEBUG_CONTENT" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['elements'][0]['versionCode'])")
-          DEBUG_VERSION_NAME=$(echo "$DEBUG_CONTENT" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['elements'][0]['versionName'])")
+          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
+          declare -A LIB_PATHS
+          LIB_PATHS=(
+            ["av1Decoder"]="av1Decoder"
+            ["ffmpegDecoder"]="ffmpegDecoder"
+            ["libVLC"]="libVLC"
+            ["media3Container"]="media3Container"
+          )
           
-          echo "release_info_version_code=$RELEASE_VERSION_CODE" >> $GITHUB_ENV
-          echo "release_info_version_name=$RELEASE_VERSION_NAME" >> $GITHUB_ENV
-          echo "release_debug_info_version_code=$DEBUG_VERSION_CODE" >> $GITHUB_ENV
-          echo "release_debug_info_version_name=$DEBUG_VERSION_NAME" >> $GITHUB_ENV
-          
-          echo "Release: v$RELEASE_VERSION_NAME ($RELEASE_VERSION_CODE)"
-          echo "Debug: v$DEBUG_VERSION_NAME ($DEBUG_VERSION_CODE)"
-
-      # 修复：获取变更日志
-      - name: Get changelog
-        id: changelog
-        run: |
-          cd bv-source
-          {
-            echo "changelog<<EOF"
-            # 如果没有特定提交范围，则获取最近10个提交
-            if [ -z "${{ github.event.before }}" ] || [ -z "${{ github.sha }}" ]; then
-              echo "Recent changes:"
-              git log --oneline -10 --pretty=format:"- %s (%h)"
+          for LIB_NAME in "${!LIB_PATHS[@]}"; do
+            SRC_PATH="../bv-libs-source/${LIB_PATHS[$LIB_NAME]}"
+            DEST_PATH="libs/$LIB_NAME"
+            
+            echo "处理库: $LIB_NAME"
+            echo "  源路径: $SRC_PATH"
+            
+            if [ -d "$SRC_PATH" ]; then
+              # 删除目标目录，确保干净复制
+              rm -rf "$DEST_PATH"
+              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
+              cp -r "$SRC_PATH" "$DEST_PATH"
+              echo "  ✅ 已复制到: $DEST_PATH"
+              # 显示复制后的关键文件
+              if [ -f "$DEST_PATH"/*.aar ]; then
+                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
+              fi
             else
-              git log --pretty=format:"- %s (%h)" ${{ github.event.before }}..${{ github.sha }}
+              echo "  ❌ 错误：源路径不存在！"
+              echo "  当前bv-libs-source目录内容:"
+              ls -la "../bv-libs-source/" || true
+              exit 1
             fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      # 修复：上传调试版 APK
-      - name: Archive release debug build artifacts
-        uses: actions/upload-artifact@v4
+            echo ""
+          done
+          
+          echo "=== 合并完成，最终 libs/ 目录结构 ==="
+          ls -la libs/
+ 
+      # 阶段 3: 设置构建环境
+      - name: Cache Gradle
+        uses: actions/cache@main
         with:
-          name: Release debug build artifact
-          path: bv-source/app/build/outputs/apk/default/debug/*.apk
-
-      # 修复：上传 release mapping
-      - name: Archive release build mappings
-        uses: actions/upload-artifact@v4
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            fantasy-bv-source/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+ 
+      - name: Set up JDK
+        uses: actions/setup-java@main
         with:
-          name: Release build mappings
-          path: bv-source/app/build/outputs/mapping/defaultRelease/*
-
-      # 修复：上传 release APK
-      - name: Archive release build artifacts
-        uses: actions/upload-artifact@v4
+          java-version: ${{ env.JDK_VERSION }}
+          distribution: 'temurin'
+ 
+      # - name: Setup Android SDK (Minimal)
+      #   uses: android-actions/setup-android@main
+      #   with:
+      #     api-level: ${{ env.ANDROID_COMPILE_SDK }}
+      #     build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
+      #     # 由于是预编译库，NDK和CMake可能不是必需的，但保留以防万一
+      #     # ndk: '25.2.9519653'  # 如果后续编译akdanmaku需要NDK，请取消注释
+      - name: Setup Android SDK (Corrected)
+        uses: android-actions/setup-android@v3
         with:
-          name: Release build artifact
-          path: bv-source/app/build/outputs/apk/default/release/*.apk
-
-      # 修复：压缩 mapping 文件
-      - name: Zip mapping
+          # 使用 packages 参数列出所有需要的组件
+          packages: |
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;25.2.9519653
+            cmake;3.22.1
+          # 接受许可（可选，可避免交互式提示）
+          accept-android-sdk-licenses: true
+      
+      # 阶段 4: 应用项目特定配置
+      - name: Fix App Version Calculation
+        working-directory: ./fantasy-bv-source
         run: |
-          cd bv-source
-          mkdir -p ../artifacts
-          zip -rj ../artifacts/mapping.zip app/build/outputs/mapping/defaultRelease
-          echo "Mapping zip created:"
-          ls -la ../artifacts/
-
-      # 修复：发布到 GitHub Release
-      - name: Publish Release
-        uses: softprops/action-gh-release@v2
+          config_file="buildSrc/src/main/kotlin/AppConfiguration.kt"
+          if [ -f "$config_file" ]; then
+            echo "正在修改版本号计算规则 (git commit计数 + 1)..."
+            sed -i.bak 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' "$config_file"
+            echo "修改后 versionCode 定义:"
+            grep -A2 -B2 "versionCode.*by lazy" "$config_file"
+          else
+            echo "警告: 未找到 $config_file，跳过版本修改。"
+          fi
+ 
+      # 阶段 5: 验证与准备构建
+      - name: Validate Final Project Structure
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 最终项目完整性验证 ==="
+          echo ""
+          echo "1. 验证预编译库:"
+          for lib_dir in libs/*; do
+            if [ -d "$lib_dir" ]; then
+              lib_name=$(basename "$lib_dir")
+              aar_count=$(find "$lib_dir" -name "*.aar" -type f | wc -l)
+              kts_count=$(find "$lib_dir" -name "*.kts" -type f | wc -l)
+              echo "  $lib_name: $aar_count个AAR文件, $kts_count个KTS文件"
+            fi
+          done
+          echo ""
+          echo "2. 验证源码模块:"
+          if [ -f "akdanmaku/build.gradle.kts" ] || [ -f "akdanmaku/build.gradle" ]; then
+            echo "  ✅ akdanmaku - 找到构建文件"
+          else
+            echo "  ❌ akdanmaku - 缺少构建文件！"
+            exit 1
+          fi
+ 
+      - name: Prepare Gradle Environment
+        working-directory: ./fantasy-bv-source
+        run: |
+          chmod +x gradlew
+          echo "Gradle 版本信息:"
+          ./gradlew --version
+ 
+      # 阶段 6: 顺序构建（先编译akdanmaku，再构建主应用）
+      - name: Build Danmaku Module (akdanmaku)
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 开始编译弹幕库 (akdanmaku) ==="
+          ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
+          echo "=== akdanmaku 编译完成 ==="
+ 
+      - name: Build Main Application
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 开始构建主应用 (所有依赖已就位) ==="
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          
+          echo ""
+          echo "=== 🎉 构建完成！查找APK产物 ==="
+          find . -name "*.apk" -type f | grep -i release | while read apk; do
+            echo "  📦 $(ls -lh "$apk")"
+          done || echo "未找到APK文件，请检查构建日志。"
+ 
+      # 阶段 7: 收集与上传结果
+      - name: Upload APK Artifacts
+        if: success()
+        uses: actions/upload-artifact@main
         with:
+          name: release-apks
+          path: |
+            fantasy-bv-source/app/build/outputs/apk/**/*release*.apk
+            fantasy-bv-source/akdanmaku/build/outputs/aar/**/*release*.aar
+          if-no-files-found: error
+          retention-days: 30
+ 
+      - name: Upload Build Logs for Debugging
+        if: always()
+        uses: actions/upload-artifact@main
+        with:
+          name: build-reports-and-libs
+          path: |
+            fantasy-bv-source/**/build/reports/
+            # 上传复制后的libs目录结构以供验证
+            fantasy-bv-source/libs/
+          retention-days: 7
+ 
+      - name: Create GitHub Release & Upload APK
+        # 通常我们只为特定事件（如打标签）创建正式发布，避免每次提交都产生大量Release。
+        # 这里示例：当推送的标签符合 ‘v*’ 模式（如 v1.0.0）时触发。
+        # if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@master
+        with:
+          # 发布名称，默认使用标签名
+          name: Release ${{ github.ref_name }}
+          # 从文件生成发布说明，此处示例为读取 CHANGELOG.md。
+          # 你也可以使用 `body: |` 直接写字符串，或留空。
+          body_path: CHANGELOG.md
+          # 要附加到此次发布的文件列表
           files: |
-            bv-source/app/build/outputs/apk/default/debug/*.apk
-            bv-source/app/build/outputs/apk/default/release/*.apk
-            artifacts/mapping.zip
-          tag_name: v${{ env.release_info_version_name }}
-          name: Release v${{ env.release_info_version_name }}
+            fantasy-bv-source/app/build/outputs/apk/release/*.apk
+            # fantasy-bv-source/akdanmaku/build/outputs/aar/*release*.aar
+          # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
+          draft: false
+          # 是否为预发布版本
           prerelease: false
-          body: |
-            ### Release v${{ env.release_info_version_name }} (${{ env.release_info_version_code }})
-            
-            **Debug Version:** v${{ env.release_debug_info_version_name }} (${{ env.release_debug_info_version_code }})
-            
-            **Changes:**
-            ${{ steps.changelog.outputs.changelog }}
-          target_commitish: ${{ github.sha }}
+        env:
+          # 使用自动生成的 GITHUB_TOKEN 进行认证
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
