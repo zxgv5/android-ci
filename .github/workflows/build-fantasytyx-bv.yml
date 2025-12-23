@@ -1,232 +1,219 @@
 name: build-fantasytyx-bv
 
 on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
   workflow_dispatch:
-    inputs:
-      branch:
-        description: '要构建的分支'
-        required: false
-        default: 'develop'
+
+env:
+  JDK_VERSION: '21'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout source code from xqqv5/fantasy-bv develop branch
-      uses: actions/checkout@main
-      with:
-        repository: xqqv5/fantasy-bv
-        ref: ${{ github.event.inputs.branch || 'develop' }}
-        token: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-        
-    - name: Verify checkout and project structure
-      run: |
-        echo "当前工作目录: $(pwd)"
-        echo "目录内容:"
-        ls -la
-        
-        echo "检查Gradle包装器:"
-        if [ -f "gradlew" ]; then
-          echo "✅ Gradle包装器存在"
-          ls -la gradlew*
-        else
-          echo "❌ Gradle包装器不存在"
-          echo "搜索整个目录..."
-          find . -name "gradlew" -o -name "gradlew.bat" | head -10
-          exit 1
-        fi
-        
-        echo "检查项目配置:"
-        if [ -f "settings.gradle.kts" ] || [ -f "settings.gradle" ]; then
-          echo "✅ Gradle设置文件存在"
-        else
-          echo "❌ Gradle设置文件不存在"
-          exit 1
-        fi
-        
-    - name: Set up JDK 21
-      uses: actions/setup-java@main
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: 'gradle'
-        
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@main
-      
-    - name: Accept Android SDK licenses and install packages
-      run: |
-        # 接受Android SDK许可证
-        yes | sdkmanager --licenses
-        
-        # 安装必要的SDK组件
-        sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-        
-        echo "Android SDK安装完成"
-        
-    - name: Make gradlew executable
-      run: |
-        chmod +x gradlew
-        echo "Gradle包装器权限设置完成"
-        
-    - name: Generate keystore file for signing
-      env:
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'fantasytyx_key' }}
-        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD || secrets.KEYSTORE_PASSWORD }}
-      run: |
-        echo "生成keystore文件..."
-        
-        # 检查是否已有keystore文件
-        if [ -f "keystore.jks" ]; then
-          echo "⚠️  keystore.jks已存在，跳过生成"
-        else
-          echo "正在生成新的keystore.jks文件..."
+      # 阶段 1: 并行克隆两个仓库
+      - name: Checkout MAIN source repo (fantasy-bv)
+        uses: actions/checkout@main
+        with:
+          repository: zxgv5/fantasy-bv
+          ref: develop
+          path: fantasy-bv-source
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout PRE-BUILT libs repo (bv-libs)
+        uses: actions/checkout@main
+        with:
+          repository: zxgv5/bv-libs
+          # 关键：根据实际分支修改，可能是 main, master 或其他
+          ref: main
+          path: bv-libs-source
+
+      # 阶段 2: 从Monorepo精确合并每个库（核心改进）
+      - name: Merge Libraries from Monorepo Structure
+        run: |
+          echo "=== 从 bv-libs Monorepo 复制各子库 ==="
+          cd fantasy-bv-source
           
-          # 如果密码未设置，生成随机密码
-          if [ -z "$KEYSTORE_PASSWORD" ]; then
-            echo "未设置KEYSTORE_PASSWORD secret，使用随机密码"
-            KEYSTORE_PASSWORD=$(openssl rand -base64 32)
-            KEY_ALIAS_PASSWORD=$KEYSTORE_PASSWORD
+          # 确保主项目的 libs 目录存在
+          mkdir -p libs
+          
+          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
+          declare -A LIB_PATHS
+          LIB_PATHS=(
+            ["av1Decoder"]="av1Decoder"
+            ["ffmpegDecoder"]="ffmpegDecoder"
+            ["libVLC"]="libVLC"
+            ["media3Container"]="media3Container"
+          )
+          
+          for LIB_NAME in "${!LIB_PATHS[@]}"; do
+            SRC_PATH="../bv-libs-source/${LIB_PATHS[$LIB_NAME]}"
+            DEST_PATH="libs/$LIB_NAME"
+            
+            echo "处理库: $LIB_NAME"
+            echo "  源路径: $SRC_PATH"
+            
+            if [ -d "$SRC_PATH" ]; then
+              # 删除目标目录，确保干净复制
+              rm -rf "$DEST_PATH"
+              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
+              cp -r "$SRC_PATH" "$DEST_PATH"
+              echo "  ✅ 已复制到: $DEST_PATH"
+              # 显示复制后的关键文件
+              if [ -f "$DEST_PATH"/*.aar ]; then
+                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
+              fi
+            else
+              echo "  ❌ 错误：源路径不存在！"
+              echo "  当前bv-libs-source目录内容:"
+              ls -la "../bv-libs-source/" || true
+              exit 1
+            fi
+            echo ""
+          done
+          
+          echo "=== 合并完成，最终 libs/ 目录结构 ==="
+          ls -la libs/
+
+      # 阶段 3: 设置构建环境
+      - name: Cache Gradle
+        uses: actions/cache@main
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            fantasy-bv-source/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Set up JDK
+        uses: actions/setup-java@main
+        with:
+          java-version: ${{ env.JDK_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Android SDK (Minimal)
+        uses: android-actions/setup-android@main
+        with:
+          api-level: ${{ env.ANDROID_COMPILE_SDK }}
+          build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
+          # 由于是预编译库，NDK和CMake可能不是必需的，但保留以防万一
+          # ndk: '25.2.9519653'  # 如果后续编译akdanmaku需要NDK，请取消注释
+
+      # 阶段 4: 应用项目特定配置
+      - name: Fix App Version Calculation
+        working-directory: ./fantasy-bv-source
+        run: |
+          config_file="buildSrc/src/main/kotlin/AppConfiguration.kt"
+          if [ -f "$config_file" ]; then
+            echo "正在修改版本号计算规则 (git commit计数 + 1)..."
+            sed -i.bak 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' "$config_file"
+            echo "修改后 versionCode 定义:"
+            grep -A2 -B2 "versionCode.*by lazy" "$config_file"
+          else
+            echo "警告: 未找到 $config_file，跳过版本修改。"
           fi
+
+      # 阶段 5: 验证与准备构建
+      - name: Validate Final Project Structure
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 最终项目完整性验证 ==="
+          echo ""
+          echo "1. 验证预编译库:"
+          for lib_dir in libs/*; do
+            if [ -d "$lib_dir" ]; then
+              lib_name=$(basename "$lib_dir")
+              aar_count=$(find "$lib_dir" -name "*.aar" -type f | wc -l)
+              kts_count=$(find "$lib_dir" -name "*.kts" -type f | wc -l)
+              echo "  $lib_name: $aar_count个AAR文件, $kts_count个KTS文件"
+            fi
+          done
+          echo ""
+          echo "2. 验证源码模块:"
+          if [ -f "akdanmaku/build.gradle.kts" ] || [ -f "akdanmaku/build.gradle" ]; then
+            echo "  ✅ akdanmaku - 找到构建文件"
+          else
+            echo "  ❌ akdanmaku - 缺少构建文件！"
+            exit 1
+          fi
+
+      - name: Prepare Gradle Environment
+        working-directory: ./fantasy-bv-source
+        run: |
+          chmod +x gradlew
+          echo "Gradle 版本信息:"
+          ./gradlew --version
+
+      # 阶段 6: 顺序构建（先编译akdanmaku，再构建主应用）
+      - name: Build Danmaku Module (akdanmaku)
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 开始编译弹幕库 (akdanmaku) ==="
+          ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
+          echo "=== akdanmaku 编译完成 ==="
+
+      - name: Build Main Application
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 开始构建主应用 (所有依赖已就位) ==="
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
           
-          # 生成keystore文件
-          keytool -genkeypair \
-            -v \
-            -keystore keystore.jks \
-            -alias "$KEY_ALIAS" \
-            -keyalg RSA \
-            -keysize 4096 \
-            -validity 10000 \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -keypass "$KEY_ALIAS_PASSWORD" \
-            -dname "CN=Fantasytyx, OU=Android, O=Fantasytyx, L=Unknown, ST=Unknown, C=CN" \
-            -noprompt
-          
-          echo "✅ keystore.jks生成成功"
-          ls -la keystore.jks
-        fi
-        
-    - name: Create signing.properties file
-      env:
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'fantasytyx_key' }}
-        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'android' }}
-        KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD || secrets.KEYSTORE_PASSWORD || 'android' }}
-      run: |
-        echo "创建signing.properties文件..."
-        
-        # 创建signing.properties文件
-        cat > signing.properties << EOF
-        # 自动生成的签名配置
-        # 生成时间: $(date)
-        keystore.path=./keystore.jks
-        keystore.pwd=$KEYSTORE_PASSWORD
-        keystore.alias=$KEY_ALIAS
-        keystore.alias_pwd=$KEY_ALIAS_PASSWORD
-        EOF
-        
-        echo "✅ signing.properties创建成功"
-        echo "文件内容（密码已隐藏）:"
-        sed 's/=.*/=***/g' signing.properties
-        
-    - name: Cache Gradle dependencies
-      uses: actions/cache@main
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-          .gradle
-        key: ${{ runner.os }}-gradle-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'build.gradle*', 'settings.gradle*', 'app/build.gradle*') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-          
-    - name: Build Release APK
-      run: |
-        echo "开始构建Release APK..."
-        
-        # 设置Java内存选项（可选）
-        export GRADLE_OPTS="-Xmx4g -Xms1g -XX:MaxMetaspaceSize=1g"
-        
-        # 清理并构建
-        ./gradlew clean assembleRelease --no-daemon --stacktrace
-        
-        echo "✅ 构建完成"
-        
-        # 显示构建结果
-        echo "构建输出文件:"
-        if [ -d "app/build/outputs/apk/release" ]; then
-          ls -la app/build/outputs/apk/release/
-        else
-          echo "未找到app/build/outputs/apk/release目录，尝试查找其他位置..."
-          find . -name "*.apk" -type f | xargs ls -lh
-        fi
-        
-    - name: Collect build artifacts
-      run: |
-        echo "收集构建产物..."
-        
-        # 创建产物目录
-        mkdir -p artifacts
-        
-        # 复制APK文件
-        if ls app/build/outputs/apk/release/*.apk 1> /dev/null 2>&1; then
-          cp app/build/outputs/apk/release/*.apk artifacts/
-          echo "APK文件已复制到artifacts目录"
-        else
-          echo "未找到APK文件，尝试在其他位置查找..."
-          find . -name "*.apk" -type f -exec cp {} artifacts/ \;
-        fi
-        
-        # 复制AAB文件（如果有）
-        if ls app/build/outputs/bundle/release/*.aab 1> /dev/null 2>&1; then
-          cp app/build/outputs/bundle/release/*.aab artifacts/
-          echo "AAB文件已复制到artifacts目录"
-        fi
-        
-        # 显示收集到的产物
-        echo "收集到的构建产物:"
-        ls -la artifacts/
-        
-        # 记录构建信息
-        echo "构建信息:" > artifacts/build-info.txt
-        echo "仓库: xqqv5/fantasy-bv" >> artifacts/build-info.txt
-        echo "分支: ${{ github.event.inputs.branch || 'develop' }}" >> artifacts/build-info.txt
-        echo "构建时间: $(date)" >> artifacts/build-info.txt
-        echo "工作流运行ID: ${{ github.run_id }}" >> artifacts/build-info.txt
-        echo "提交哈希: $(git rev-parse HEAD)" >> artifacts/build-info.txt
-        
-    - name: Upload APK artifacts
-      uses: actions/upload-artifact@main
-      with:
-        name: fantasytyx-bv-apk-${{ github.run_number }}-${{ github.run_attempt }}
-        path: artifacts/*
-        retention-days: 30
-        if-no-files-found: error
-        
-    - name: Create GitHub Release (如果指定了标签)
-      if: github.event.inputs.tag != ''
-      uses: softprops/action-gh-release@master
-      with:
-        tag_name: ${{ github.event.inputs.tag }}
-        name: Fantasytyx BV ${{ github.event.inputs.tag }}
-        body: |
-          自动构建版本: ${{ github.event.inputs.tag }}
-          构建时间: $(date)
-          源仓库: xqqv5/fantasy-bv
-          分支: ${{ github.event.inputs.branch || 'develop' }}
-          
-          构建包含:
-          - APK安装包
-          - 构建信息
-        draft: false
-        prerelease: false
-        files: artifacts/*
-        
-    - name: Notify build completion
-      if: success()
-      run: |
-        echo "🎉 Fantasytyx BV 构建成功完成!"
-        echo "构建产物已上传到GitHub Artifacts"
-        echo "工作流运行ID: ${{ github.run_id }}"
-        echo "查看Artifacts: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo ""
+          echo "=== 🎉 构建完成！查找APK产物 ==="
+          find . -name "*.apk" -type f | grep -i release | while read apk; do
+            echo "  📦 $(ls -lh "$apk")"
+          done || echo "未找到APK文件，请检查构建日志。"
+
+      # 阶段 7: 收集与上传结果
+      - name: Upload APK Artifacts
+        if: success()
+        uses: actions/upload-artifact@main
+        with:
+          name: release-apks
+          path: |
+            fantasy-bv-source/app/build/outputs/apk/**/*release*.apk
+            fantasy-bv-source/akdanmaku/build/outputs/aar/**/*release*.aar
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Build Logs for Debugging
+        if: always()
+        uses: actions/upload-artifact@main
+        with:
+          name: build-reports-and-libs
+          path: |
+            fantasy-bv-source/**/build/reports/
+            # 上传复制后的libs目录结构以供验证
+            fantasy-bv-source/libs/
+          retention-days: 7
+
+      - name: Create GitHub Release & Upload APK
+        # 通常我们只为特定事件（如打标签）创建正式发布，避免每次提交都产生大量Release。
+        # 这里示例：当推送的标签符合 ‘v*’ 模式（如 v1.0.0）时触发。
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@master
+        with:
+          # 发布名称，默认使用标签名
+          name: Release ${{ github.ref_name }}
+          # 从文件生成发布说明，此处示例为读取 CHANGELOG.md。
+          # 你也可以使用 `body: |` 直接写字符串，或留空。
+          body_path: CHANGELOG.md
+          # 要附加到此次发布的文件列表
+          files: |
+            fantasy-bv-source/app/build/outputs/apk/release/*.apk
+            fantasy-bv-source/akdanmaku/build/outputs/aar/*release*.aar
+          # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
+          draft: false
+          # 是否为预发布版本
+          prerelease: false
+        env:
+          # 使用自动生成的 GITHUB_TOKEN 进行认证
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
