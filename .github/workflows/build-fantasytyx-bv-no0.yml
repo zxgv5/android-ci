@@ -13,6 +13,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # 阶段 0: 环境变量初始化
+      - name: Initialization values
+        run: |
+          echo "BV_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
       # 阶段 1: 并行克隆两个仓库
       - name: Checkout MAIN source repo (fantasy-bv)
         uses: actions/checkout@main
@@ -194,7 +199,8 @@ jobs:
       - name: Create GitHub Release & Upload APK
         uses: softprops/action-gh-release@master
         with:
-          tag_name: latest-release
+          tag_name: ${{env.OC_DATE}}-fantasybv
+          # tag_name: latest-release
           # 要附加到此次发布的文件列表
           files: |
             fantasy-bv-source/app/build/outputs/apk/default/release/*.apk
