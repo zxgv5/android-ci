@@ -13,7 +13,7 @@ on:
         description: "Android ABI"
         required: true
         # default: '21'
-        default: '25'
+        default: '27'
       ENABLED_DECODERS:
         description: "Enabled FFmpeg decoder"
         required: true
