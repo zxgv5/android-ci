@@ -3,7 +3,6 @@ name: build-media3-ffmpeg-decoder
  
 on:
   workflow_dispatch:
-  workflow_call:
     inputs:
       ANDROID_NDK:
         description: "Android NDK"
@@ -113,7 +112,7 @@ jobs:
       #     path: |
       #       media/libraries/decoder_ffmpeg/ffmpeg/android-libs/*
       #     compression-level: 9
- 
+
       # - name: Upload FFmpeg aar
       #   uses: actions/upload-artifact@main
       #   with:
