@@ -3,6 +3,7 @@ name: build-media3-ffmpeg-decoder
  
 on:
   workflow_dispatch:
+  workflow_call:
     inputs:
       ANDROID_NDK:
         description: "Android NDK"
