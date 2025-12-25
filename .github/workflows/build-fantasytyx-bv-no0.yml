@@ -152,7 +152,21 @@ jobs:
           chmod +x gradlew
           echo "Gradle 版本信息:"
           ./gradlew --version
- 
+      - name: Decode and Write Release Keystore
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
+
+      - name: Write signing.properties for Release Build
+        working-directory: ./fantasy-bv-source
+        run: |
+          cat <<EOF > signing.properties
+          keystore.path=keystore.jks
+          keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
+          keystore.alias=${{ secrets.KEY_ALIAS }}
+          keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
+
       # 阶段 6: 顺序构建（先编译akdanmaku，再构建主应用）
       - name: Build Danmaku Module (akdanmaku)
         working-directory: ./fantasy-bv-source
