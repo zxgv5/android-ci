@@ -105,21 +105,21 @@ jobs:
           cd "$GITHUB_WORKSPACE"/media
           ./gradlew lib-decoder-ffmpeg:assembleRelease
  
-      - name: Upload FFmpeg jni
-        uses: actions/upload-artifact@main
-        with:
-          name: FFmpeg-jni
-          path: |
-            media/libraries/decoder_ffmpeg/ffmpeg/android-libs/*
-          compression-level: 9
+      # - name: Upload FFmpeg jni
+      #   uses: actions/upload-artifact@main
+      #   with:
+      #     name: FFmpeg-jni
+      #     path: |
+      #       media/libraries/decoder_ffmpeg/ffmpeg/android-libs/*
+      #     compression-level: 9
  
-      - name: Upload FFmpeg aar
-        uses: actions/upload-artifact@main
-        with:
-          name: FFmpeg-aar
-          path: |
-            media/libraries/decoder_ffmpeg/buildout/outputs/aar/*
-          compression-level: 9
+      # - name: Upload FFmpeg aar
+      #   uses: actions/upload-artifact@main
+      #   with:
+      #     name: FFmpeg-aar
+      #     path: |
+      #       media/libraries/decoder_ffmpeg/buildout/outputs/aar/*
+      #     compression-level: 9
           
       - name: Create GitHub release
         uses: softprops/action-gh-release@master
