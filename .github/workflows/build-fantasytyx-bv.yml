@@ -2,7 +2,34 @@ name: build-fantasytyx-bv
 
 on:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        type: choice
+        required: true
+        default: 'incremental'
+        options:
+          - incremental  # 增量编译（默认）
+          - clean        # 清理后全量编译
+          - full         # 直接全量编译
+      clean_cache:
+        description: '是否清理Gradle缓存'
+        type: boolean
+        required: false
+        default: false
+  
   workflow_call:
+    inputs:
+      build_type:
+        description: '构建类型'
+        type: string
+        required: false
+        default: 'incremental'
+      clean_cache:
+        description: '是否清理Gradle缓存'
+        type: boolean
+        required: false
+        default: false
 
 env:
   JDK_VERSION: '21'
@@ -13,20 +40,23 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     steps:
       # 阶段 0: 环境变量初始化
       - name: Initialization values
         run: |
-          echo "BV_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_TYPE=${{ inputs.build_type || 'incremental' }}" >> $GITHUB_ENV
+          echo "CLEAN_CACHE=${{ inputs.clean_cache || false }}" >> $GITHUB_ENV
 
-      # 阶段 1: 并行克隆两个仓库
+      # 阶段 1: 并行克隆两个仓库（优化为增量克隆）
       - name: Checkout MAIN source repo (fantasy-bv)
         uses: actions/checkout@main
         with:
           repository: zxgv5/fantasy-bv
           ref: develop
           path: fantasy-bv-source
-          fetch-depth: 0
+          fetch-depth: ${{ env.BUILD_TYPE == 'incremental' && 50 || 0 }}  # 增量编译时只拉取最近提交
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout PRE-BUILT libs repo (bv-libs)
@@ -35,9 +65,46 @@ jobs:
           repository: zxgv5/bv-libs
           ref: main
           path: bv-libs-source
+          # 如果只是应用代码修改，库代码通常不变，可以使用浅克隆
+          fetch-depth: 1
 
-      # 阶段 2: 从Monorepo精确合并每个库（核心改进）
+      # 阶段 1.5: 智能判断是否需要合并库文件
+      - name: Detect Library Changes
+        id: detect-lib-changes
+        if: env.BUILD_TYPE == 'incremental'
+        run: |
+          echo "=== 检测库文件变更 ==="
+          cd fantasy-bv-source
+          
+          # 计算库文件的hash值
+          LIB_HASH_FILE=".github/fantasybv_libs_hash.txt"
+          
+          # 如果有之前的hash记录，进行比较
+          if [ -f "$LIB_HASH_FILE" ]; then
+            echo "找到之前的库文件hash记录"
+            OLD_HASH=$(cat "$LIB_HASH_FILE" 2>/dev/null || echo "")
+            
+            # 计算当前库文件的hash
+            NEW_HASH=$(find libs -type f -name "*.aar" -o -name "*.kts" -o -name "*.gradle" | \
+                      xargs sha256sum 2>/dev/null | sort | sha256sum | cut -d' ' -f1)
+            
+            if [ "$OLD_HASH" = "$NEW_HASH" ]; then
+              echo "库文件未变化，跳过合并"
+              echo "skip_lib_merge=true" >> $GITHUB_OUTPUT
+            else
+              echo "库文件有变化，需要合并"
+              echo "skip_lib_merge=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "没有找到hash记录，需要合并库文件"
+            echo "skip_lib_merge=false" >> $GITHUB_OUTPUT
+          fi
+
+      # 阶段 2: 从Monorepo精确合并每个库（条件执行）
       - name: Merge Libraries from Monorepo Structure
+        if: |
+          (env.BUILD_TYPE != 'incremental') || 
+          (steps.detect-lib-changes.outputs.skip_lib_merge != 'true')
         run: |
           echo "=== 从 bv-libs Monorepo 复制各子库 ==="
           cd fantasy-bv-source
@@ -45,7 +112,7 @@ jobs:
           # 确保主项目的 libs 目录存在
           mkdir -p libs
           
-          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
+          # 定义需要复制的库及其在bv-libs中的路径
           declare -A LIB_PATHS
           LIB_PATHS=(
             ["av1Decoder"]="av1Decoder"
@@ -59,68 +126,75 @@ jobs:
             DEST_PATH="libs/$LIB_NAME"
             
             echo "处理库: $LIB_NAME"
-            echo "  源路径: $SRC_PATH"
             
             if [ -d "$SRC_PATH" ]; then
-              # 删除目标目录，确保干净复制
-              rm -rf "$DEST_PATH"
-              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
-              cp -r "$SRC_PATH" "$DEST_PATH"
-              echo "  已复制到: $DEST_PATH"
-              # 显示复制后的关键文件
-              if [ -f "$DEST_PATH"/*.aar ]; then
-                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
+              # 增量编译时，只复制有变化的文件
+              if [ "$BUILD_TYPE" = "incremental" ] && [ -d "$DEST_PATH" ]; then
+                echo "  增量更新库文件..."
+                rsync -av --update "$SRC_PATH/" "$DEST_PATH/"
+              else
+                echo "  全量复制库文件..."
+                rm -rf "$DEST_PATH"
+                cp -r "$SRC_PATH" "$DEST_PATH"
               fi
             else
               echo "  错误：源路径不存在！"
-              echo "  当前bv-libs-source目录内容:"
-              ls -la "../bv-libs-source/" || true
               exit 1
             fi
-            echo ""
           done
           
-          echo "=== 合并完成，最终 libs/ 目录结构 ==="
-          ls -la libs/
- 
-      # 阶段 3: 设置构建环境
-      - name: Cache Gradle
+          # 保存库文件的hash值用于下次比较
+          LIB_HASH_FILE=".github/fantasybv_libs_hash.txt"
+          mkdir -p .github
+          find libs -type f -name "*.aar" -o -name "*.kts" -o -name "*.gradle" | \
+            xargs sha256sum 2>/dev/null | sort | sha256sum | cut -d' ' -f1 > "$LIB_HASH_FILE"
+
+      # 阶段 3: 设置构建环境（优化缓存）
+      - name: Cache Gradle Dependencies
+        if: env.CLEAN_CACHE != 'true'
         uses: actions/cache@main
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
             fantasy-bv-source/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties', 'fantasy-bv-source/build.gradle.kts') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
- 
+
+      - name: Cache Android Build Outputs
+        if: env.BUILD_TYPE == 'incremental' && env.CLEAN_CACHE != 'true'
+        uses: actions/cache@main
+        with:
+          path: |
+            fantasy-bv-source/app/build
+            fantasy-bv-source/akdanmaku/build
+            fantasy-bv-source/.gradle/configuration-cache
+          key: ${{ runner.os }}-android-build-${{ github.sha }}-${{ hashFiles('fantasy-bv-source/app/src/**/*.kt', 'fantasy-bv-source/app/src/**/*.java') }}
+          restore-keys: |
+            ${{ runner.os }}-android-build-
+
       - name: Set up JDK
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
-      - name: Setup Android SDK (Minimal)
+      - name: Setup Android SDK
         uses: android-actions/setup-android@main
         with:
           api-level: ${{ env.ANDROID_COMPILE_SDK }}
           build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
           accept-android-sdk-licenses: true
 
-      # 阶段 4: 应用项目特定配置
-      - name: Fix App Version Calculation
+      # 阶段 4: 根据构建类型执行不同操作
+      - name: Clean Project (if needed)
+        if: env.BUILD_TYPE == 'clean'
         working-directory: ./fantasy-bv-source
         run: |
-          config_file="buildSrc/src/main/kotlin/AppConfiguration.kt"
-          if [ -f "$config_file" ]; then
-            echo "正在修改版本号计算规则 (git commit计数 + 1)..."
-            sed -i.bak 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' "$config_file"
-            echo "修改后 versionCode 定义:"
-            grep -A2 -B2 "versionCode.*by lazy" "$config_file"
-          else
-            echo "警告: 未找到 $config_file，跳过版本修改。"
-          fi
+          echo "执行清理操作..."
+          ./gradlew clean
+          
  
       # 阶段 5: 验证与准备构建
       - name: Validate Final Project Structure
@@ -168,25 +242,48 @@ jobs:
           keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
 
-      # 阶段 6: 顺序构建（先编译akdanmaku，再构建主应用）
+      # 阶段 6: 智能构建（根据构建类型）
       - name: Build Danmaku Module (akdanmaku)
         working-directory: ./fantasy-bv-source
         run: |
           echo "=== 开始编译弹幕库 (akdanmaku) ==="
-          ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
+          
+          if [ "$BUILD_TYPE" = "incremental" ]; then
+            echo "使用增量编译模式"
+            ./gradlew :akdanmaku:assembleRelease \
+              --no-daemon \
+              --stacktrace \
+              --build-cache \
+              --configuration-cache
+          else
+            echo "使用全量编译模式"
+            ./gradlew :akdanmaku:assembleRelease \
+              --no-daemon \
+              --stacktrace
+          fi
+          
           echo "=== akdanmaku 编译完成 ==="
- 
       - name: Build Main Application
         working-directory: ./fantasy-bv-source
         run: |
-          echo "=== 开始构建主应用 (所有依赖已就位) ==="
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          echo "=== 开始构建主应用 ==="
           
-          echo ""
-          echo "=== 构建完成！查找APK产物 ==="
-          find . -name "*.apk" -type f | grep -i release | while read apk; do
-            echo "  $(ls -lh "$apk")"
-          done || echo "未找到APK文件，请检查构建日志。"
+          if [ "$BUILD_TYPE" = "incremental" ]; then
+            echo "使用增量编译模式"
+            ./gradlew :app:assembleRelease \
+              --no-daemon \
+              --stacktrace \
+              --build-cache \
+              --configuration-cache \
+              --offline  # 如果可以的话，使用离线模式加速
+          else
+            echo "使用全量编译模式"
+            ./gradlew :app:assembleRelease \
+              --no-daemon \
+              --stacktrace
+          fi
+          
+          echo "=== 构建完成！ ==="
  
       # 阶段 7: 收集与上传结果
       # - name: Upload APK Artifacts
@@ -214,7 +311,7 @@ jobs:
       - name: Create GitHub Release & Upload APK
         uses: softprops/action-gh-release@master
         with:
-          tag_name: ${{env.BV_DATE}}-fantasybv
+          tag_name: ${{env.BUILD_DATE}}-fantasybv
           # tag_name: latest-release
           # 要附加到此次发布的文件列表
           files: |
