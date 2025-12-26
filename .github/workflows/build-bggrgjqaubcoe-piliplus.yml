@@ -14,8 +14,11 @@ jobs:
     permissions: write-all
     
     steps:
-    
-      - name: Checkout MAIN source repo (fantasy-bv)
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Checkout MAIN source repo
         uses: actions/checkout@main
         with:
           repository: bggRGjQaUbCoE/PiliPlus
