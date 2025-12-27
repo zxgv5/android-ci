@@ -38,12 +38,12 @@ jobs:
         uses: subosito/flutter-action@main
         id: flutter-action
         with:
-          # channel: stable
-          # flutter-version-file: pubspec.yaml
-          # cache: true
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: true
           # 尝试更激进的版本策略
-          channel: master
-      - run: flutter --version
+          # channel: master
+      # - run: flutter --version
 
       - name: Apply bottom sheet patch
         working-directory: ${{ env.FLUTTER_ROOT }}
