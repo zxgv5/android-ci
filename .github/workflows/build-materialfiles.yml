@@ -94,11 +94,28 @@ jobs:
           exit 1
         fi
         
-        APK_NEW_PATH="$(dirname "$APK_PATH")/MaterialFiles_${{ env.version }}.apk"
-        mv $APK_PATH $APK_NEW_PATH
-
+        # 从gradle.properties文件获取版本号
+        if [ -f "gradle.properties" ]; then
+          VERSION=$(grep -E "versionName|version" gradle.properties | head -1 | cut -d'=' -f2 | tr -d ' "')
+        fi
+        
+        # 如没有成功，改从build.gradle文件获取
+        if [ -z "$VERSION" ]; then
+          if [ -f "app/build.gradle" ]; then
+            VERSION=$(grep -E "versionName\s+" app/build.gradle | head -1 | sed -E "s/.*versionName\s+['\"]([^'\"]+)['\"].*/\1/")
+          fi
+        fi
+        
+        # 如果仍然没有版本号，使用构建日期
+        if [ -z "$VERSION" ]; then
+          VERSION=${{env.BUILD_DATE}}
+        fi
+        
+        APK_NEW_PATH="$(dirname "$APK_PATH")/MaterialFiles_${VERSION}.apk"
+        mv "$APK_PATH" "$APK_NEW_PATH"
+        
         echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
-        echo APK_NEW_PATH=$APK_NEW_PATH" >> $GITHUB_OUTPUT
+        echo "APK_NEW_PATH=$APK_NEW_PATH" >> $GITHUB_OUTPUT
         echo "Found APK: $APK_NEW_PATH"
         echo "APK file details:"
         ls -la "$APK_NEW_PATH"
