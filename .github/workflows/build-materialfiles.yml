@@ -6,7 +6,6 @@ on:
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
-
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
@@ -95,16 +94,20 @@ jobs:
           exit 1
         fi
         
+        APK_NEW_PATH="$(dirname "$APK_PATH")/MaterialFiles_${{ env.version }}.apk"
+        mv $APK_PATH $APK_NEW_PATH
+
         echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
-        echo "Found APK: $APK_PATH"
+        echo APK_NEW_PATH=$APK_NEW_PATH" >> $GITHUB_OUTPUT
+        echo "Found APK: $APK_NEW_PATH"
         echo "APK file details:"
-        ls -la "$APK_PATH"
+        ls -la "$APK_NEW_PATH"
       working-directory: ./materialfiles-source
 
     - name: Create Release
       uses: softprops/action-gh-release@master
       with:
         tag_name: ${{env.BUILD_DATE}}-materialfiles
-        files: ./materialfiles-source/${{ steps.find-apk.outputs.APK_PATH }}
+        files: ./materialfiles-source/${{ steps.find-apk.outputs.APK_NEW_PATH }}
         draft: false
         prerelease: false
