@@ -44,11 +44,12 @@ jobs:
               GITHUB_SHA="${{ github.event.pull_request.head.sha }}"
           fi
 
+          # Set RELEASE_VERSION_NAME to "<CURRENT_VERSION_NAME>+<last_commit_hash>"
           CURRENT_VERSION_NAME_REGEX='\s+versionName "([^"]+)"$'
           CURRENT_VERSION_NAME="$(grep -m 1 -E "$CURRENT_VERSION_NAME_REGEX" ./app/build.gradle | sed -r "s/$CURRENT_VERSION_NAME_REGEX/\1/")"
           RELEASE_VERSION_NAME="v$CURRENT_VERSION_NAME+${GITHUB_SHA:0:7}"
           if ! printf "%s" "${RELEASE_VERSION_NAME/v/}" | grep -qP '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'; then
-           exit_on_error "The versionName '${RELEASE_VERSION_NAME/v/}' is not a valid version as per semantic version '2.0.0' spec in the format 'major.minor.patch(-prerelease)(+buildmetadata)'. https://semver.org/spec/v2.0.0.html."
+           exit_on_error "The versionName '${RELEASE_VERSION_NAME/v/}' is not a valid version..."
           fi
 
           APK_DIR_PATH="./app/build/outputs/apk/release"
@@ -65,6 +66,7 @@ jobs:
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}"
 
           # Configure signing
+          echo "Configuring release build with signing"
           cat >> ./app/build.gradle << EOF
           android {
               signingConfigs {
@@ -75,7 +77,7 @@ jobs:
                       keyPassword '${{ env.KEY_ALIAS_PASSWORD }}'
                   }
               }
-          
+    
               buildTypes {
                   release {
                       minifyEnabled true
@@ -84,49 +86,29 @@ jobs:
                       signingConfig signingConfigs.release
                   }
               }
-          
-              // ?? 关键：强制只打包 arm64-v8a ABI
-              splits {
-                  abi {
-                      enable true
-                      reset()
-                      include 'arm64-v8a'
-                      universalApk false
-                  }
-              }
           }
           EOF
-          # 构建 release 版本（会生成 arm64-v8a 子目录）
-          if ! ./gradlew assembleRelease; then
-            exit_on_error "Build failed for '$APK_VERSION_TAG' build."
+          
+          # ?? 关键修改：在 assembleRelease 后面添加参数，只构建 arm64-v8a
+          if ! ./gradlew assembleRelease -Pandroid.injected.build.abi=arm64-v8a; then
+            exit_on_error "Build failed."
           fi
 
-          # ?? 修正路径：ABI 分包后 APK 在子目录中
-          ABI_APK_PATH="$APK_DIR_PATH/arm64-v8a/${APK_BASENAME_PREFIX}-arm64-v8a.apk"
-
           echo "Validating APKs"
-          if ! test -f "$ABI_APK_PATH"; then
-            files_found="$(find "$APK_DIR_PATH" -type f)"
-            exit_on_error "Failed to find built APK at '$ABI_APK_PATH'. Files found: "$'\n'"$files_found"
+          if ! test -f "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_arm64-v8a.apk"; then
+            files_found="$(ls "$APK_DIR_PATH")"
+            exit_on_error "Failed to find built APK. Files found: $files_found"
           fi
 
           echo "Generating sha256sums file"
-          if ! (cd "$APK_DIR_PATH/arm64-v8a"; sha256sum \
-            "${APK_BASENAME_PREFIX}-arm64-v8a.apk" \
-            > "${APK_BASENAME_PREFIX}_sha256sums"); then
-            exit_on_error "Generate sha256sums failed for '$APK_VERSION_TAG' release."
-          fi
-
-          # 更新环境变量指向正确的路径
-          echo "APK_DIR_PATH=$APK_DIR_PATH/arm64-v8a" >> $GITHUB_ENV
-          echo "APK_FULL_PATH=$ABI_APK_PATH" >> $GITHUB_ENV
+          (cd "$APK_DIR_PATH"; sha256sum "${APK_BASENAME_PREFIX}_arm64-v8a.apk" > "${APK_BASENAME_PREFIX}_sha256sums")
 
       - name: Attach arm64-v8a APK file
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APK_BASENAME_PREFIX }}_arm64-v8a
           path: |
-            ${{ env.APK_FULL_PATH }}
+            ${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_arm64-v8a.apk
             ${{ env.APK_DIR_PATH }}/output-metadata.json
 
       - name: Create GitHub Release & Upload APK
@@ -134,7 +116,7 @@ jobs:
         with:
           tag_name: ${{env.BUILD_DATE}}-termux
           files: |
-            ${{ env.APK_FULL_PATH }}
+            ${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_arm64-v8a.apk
             ${{ env.APK_DIR_PATH }}/output-metadata.json
           draft: false
           prerelease: false
