@@ -1,0 +1,142 @@
+name: build-acode
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  STORE_FILE_PATH: /tmp/app-release.keystore
+  BUILD_JSON_PATH: build.json
+  VERSION_LABEL: 'nightly'
+
+jobs:
+  build:
+    # timeout-minutes: 60
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 修复：使用正确的权限
+
+    outputs:
+      release_output_url: ${{ steps.release.outputs.url }} 
+      updated_version: ${{ steps.update-version.outputs.UPDATED_VERSION}} 
+      RELEASE_NOTES: ${{ env.RELEASE_NOTES }}
+    steps:
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+    
+      - name: Fast Fail if secrets are missing
+        if: ${{ secrets.KEYSTORE_CONTENT == '' || secrets.ACODE_BUILD_JSON_CONTENT == '' }}  # 修复：直接检查secrets
+        run: |
+          echo "::error title=Missing Secrets::KEYSTORE_CONTENT or ACODE_BUILD_JSON_CONTENT secrets are missing! Aborting workflow."
+          exit 1
+      
+      - name: Logging & summaries
+        run: |
+          echo "::group::Logging" 
+          echo "🎯 github trigger event name: ${{ github.event_name }}"
+          echo "env: STORE_FILE_PATH: ${{ env.STORE_FILE_PATH }}" 
+          echo "env: BUILD_JSON_PATH: ${{ env.BUILD_JSON_PATH }}" 
+          echo "github sha: ${{ github.sha }}" 
+          echo "::endgroup::" 
+
+      - name: Checkout Source repo
+        uses: actions/checkout@main
+        with:
+          fetch-depth: 0
+          repository: Acode-Foundation/Acode
+          ref: main
+
+      - name: Set up Java 21
+        uses: actions/setup-java@main
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'  # 修复：简化缓存逻辑
+
+      - name: Set up Node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: 'lts/*'
+
+      - name: Add keystore and build.json from secrets
+        run: |
+          echo "${{ secrets.KEYSTORE_CONTENT }}" | base64 -d > $STORE_FILE_PATH
+          echo "${{ secrets.ACODE_BUILD_JSON_CONTENT }}" | base64 -d > $BUILD_JSON_PATH
+          echo "Keystore and build.json added successfully."
+
+      - name: Export Commit Hash & prev tag
+        run: |
+          echo "GIT_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          echo "PREV_TAG=$(git describe --tags --abbrev=0 || git rev-list --max-parents=0 HEAD)" >> $GITHUB_ENV
+
+      - name: Extract versionCode and version from config.xml
+        id: extract_version
+        run: |
+          if [ ! -f config.xml ]; then
+            echo "config.xml not found!"
+            exit 1
+          fi
+          VERSION_CODE=$(grep -oP 'versionCode="\K[0-9]+' config.xml || grep -oP 'versionCode="([0-9]+)' config.xml | sed -E 's/versionCode="([0-9]+)"/\1/')
+          VERSION=$(grep -oP 'version="\K[0-9.]+' config.xml)
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted Version Code: $VERSION_CODE"
+          echo "Extracted Version: $VERSION"
+
+      - name: Append Commit Hash to Version and Update config.xml
+        id: update-version 
+        run: |
+          SHORT_COMMIT_HASH=$(echo "${{ env.GIT_COMMIT }}" | cut -c 1-7)
+          UPDATED_VERSION="${{ steps.extract_version.outputs.VERSION }}-${{ env.VERSION_LABEL }}.$SHORT_COMMIT_HASH"
+          echo "Updated Version: $UPDATED_VERSION"
+          
+          # Update config.xml with the new version
+          sed -i "s/version=\"${{ steps.extract_version.outputs.VERSION }}\"/version=\"$UPDATED_VERSION\"/g" config.xml
+          echo "Updated version in config.xml"
+          # Output the updated version
+          echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_ENV
+          echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_OUTPUT 
+
+      - name: Install Node.js Packages
+        run: npm install
+
+      - name: Install Cordova CLI
+        run: npm install -g cordova
+
+      - name: Run npm setup
+        run: npm run setup
+
+      - name: Run npm build paid release apk
+        run: |
+          node utils/storage_manager.mjs y
+          npm run build paid release apk
+          mv platforms/android/app/build/outputs/apk/release/app-release.apk /tmp/app-release-normal.apk
+          echo "VERSION: $UPDATED_VERSION" >> $GITHUB_STEP_SUMMARY
+           
+      - name: Run npm build paid release apk fdroid (for F-Droid)
+        run: |
+          node utils/storage_manager.mjs y
+          npm run build paid release apk fdroid
+          mv platforms/android/app/build/outputs/apk/release/app-release.apk /tmp/app-release-fdroid.apk
+      
+      - name: Remove keystore and build.json
+        run: |
+          rm -f $STORE_FILE_PATH $BUILD_JSON_PATH  # 修复：添加-f标志防止错误
+          echo "Keystore and build.json removed successfully."
+      
+      - name: Create gitHub release
+        id: release
+        uses: softprops/action-gh-release@master
+        with:
+          prerelease: false
+          draft: false
+          tag_name: ${{ env.BUILD_DATE }}-acode  # 修复：使用env前缀
+          files: |
+            /tmp/app-release-normal.apk
+            /tmp/app-release-fdroid.apk
+
+
+
