@@ -1,0 +1,74 @@
+name: build-xed-editor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          
+      - name: Checkout Source repo
+        uses: actions/checkout@main
+        with:
+          repository: Xed-Editor/Xed-Editor
+          ref: main
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@main
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: gradle
+		  
+      - name: Cache Gradle Build Files
+        uses: actions/cache@main
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Decode and create secrets
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > /tmp/xed.keystore
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" > /tmp/signing.properties
+          echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> /tmp/signing.properties
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> /tmp/signing.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Set Commit Hash
+        id: commit_hash
+        run: echo "COMMIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Clone submodules
+        run: git submodule update --init --recursive
+
+      - name: Build with Gradle for ARM64
+        run: ./gradlew assembleRelease --no-daemon -Pandroid.ndk.abiFilters=arm64-v8a && mv app/build/outputs/apk/release/*.apk app/xed-editor-${{ env.COMMIT_HASH }}-arm64-v8a.apk
+        env:
+          KEYSTORE_FILE: /tmp/xed.keystore
+          SIGNING_PROPERTIES_FILE: /tmp/signing.properties
+        continue-on-error: false
+
+      - name: Create GitHub Release & Upload APK
+        uses: softprops/action-gh-release@master
+        with:
+          tag_name: ${{env.BUILD_DATE}}-xed-editor
+          files: |
+            app/xed-editor-${{ env.COMMIT_HASH }}-arm64-v8a.apk
+          draft: false
+          prerelease: false
+		  
+      - name: Delete secrets
+        run: rm /tmp/xed.keystore /tmp/signing.properties
