@@ -25,7 +25,7 @@ jobs:
           
       - name: Decode Keystore
         run: |
-          echo ${{ secrets.KEYSTORE_BASE64 }} | base64 -d > keystore.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
@@ -33,7 +33,7 @@ jobs:
         shell: bash {0}
         env:
           PACKAGE_VARIANT: apt-android-7
-          KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
+          KEYSTORE_PATH: ${{ github.workspace }}/keystore.p12
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
