@@ -12,7 +12,8 @@ jobs:
     steps:
       - name: Initialization values
         run: |
-          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE_UTC8=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           
       - name: Checkout Source repo
         uses: actions/checkout@main
@@ -26,7 +27,7 @@ jobs:
           java-version: "21"
           distribution: "temurin"
           cache: gradle
-		  
+          
       - name: Cache Gradle Build Files
         uses: actions/cache@main
         with:
@@ -47,34 +48,30 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Clone submodules
+        run: git submodule update --init --recursive
+
       - name: Set Commit Hash
         id: commit_hash
         run: echo "COMMIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      - name: Clone submodules
-        run: git submodule update --init --recursive
-
       - name: Build with Gradle for ARM64
         run: |
           ./gradlew assembleRelease --no-daemon -Pandroid.ndk.abiFilters=arm64-v8a
-          mv app/build/outputs/apk/release/*.apk app/xed-editor-${{ env.COMMIT_HASH }}-arm64-v8a.apk
+          mkdir -p release-apks
+          mv app/build/outputs/apk/release/*.apk release-apks/xed-editor-${{ env.COMMIT_HASH }}-arm64-v8a.apk
         env:
           KEYSTORE_FILE: /tmp/xed.keystore
           SIGNING_PROPERTIES_FILE: /tmp/signing.properties
-        continue-on-error: false
 
       - name: Create GitHub Release & Upload APK
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-xed-editor
-          files: |
-            app/xed-editor-${{ env.COMMIT_HASH }}-arm64-v8a.apk
+          files: release-apks/xed-editor-${{ env.COMMIT_HASH }}-arm64-v8a.apk
           draft: false
           prerelease: false
-		  
+          
       - name: Delete secrets
         if: always()
         run: rm -f /tmp/xed.keystore /tmp/signing.properties
-
-
-
