@@ -120,10 +120,10 @@ jobs:
       - name: Run npm setup
         run: npm run setup
 
-      - name: Run npm build paid release apk
+      - name: Run npm build free release apk
         run: |
           node utils/storage_manager.mjs y
-          npm run build paid prod apk
+          npm run build free prod apk
           # 显式调用Gradle release构建
           cd platforms/android
           ./gradlew assembleRelease
