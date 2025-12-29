@@ -128,9 +128,9 @@ jobs:
           # 显式调用Gradle release构建
           cd platforms/android
           ./gradlew assembleRelease
-          ls app/build/outputs/apk/release/*.apk
-          ls app/build/outputs/apk/*.apk
-          # mv app/build/outputs/apk/release/app-release-unsigned.apk /tmp/acode-release-unsigned.apk
+          # ls app/build/outputs/apk/release/*.apk
+          # ls app/build/outputs/apk/*.apk
+          mv app/build/outputs/apk/release/app-release-unsigned.apk /tmp/acode-unsigned.apk
           
       - name: Sign the apk (PKCS12)
         run: |
@@ -143,9 +143,9 @@ jobs:
             --key-pass "pass:${{ env.KEY_PASSWORD }}" \
             --ks-key-alias "${{ env.KEY_ALIAS }}" \
             --ks-type PKCS12 \
-            /tmp/acode-release-unsigned.apk
-          apksigner verify /tmp/acode-release-unsigned.apk
-          mv /tmp/acode-release-unsigned.apk "/tmp/acode-${BUILD_DATE}.apk"
+            /tmp/acode-unsigned.apk
+          apksigner verify /tmp/acode-unsigned.apk
+          mv /tmp/acode-unsigned.apk "/tmp/acode-${{ env.BUILD_DATE }}.apk"
            
       - name: Remove keystore and build.json
         run: |
@@ -165,6 +165,6 @@ jobs:
         with:
           tag_name: ${{ env.BUILD_DATE }}-acode
           files: |
-            "/tmp/acode-${BUILD_DATE}.apk"
+            "/tmp/acode-${{ env.BUILD_DATE }}.apk"
           draft: false
           prerelease: false
