@@ -10,6 +10,7 @@ env:
   STORE_FILE_PATH: /tmp/app-release.keystore
   BUILD_JSON_PATH: build.json
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  KEYSTORE_PASSWORD: ${{secrets.KEYSTORE_PASSWORD}}
 
 jobs:
   build:
@@ -39,12 +40,18 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Add keystore from secrets
+      - name: Add keystore and build.json from secrets
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ env.STORE_FILE_PATH }}
-          echo "Keystore added successfully."
-          # 验证 keystore
-          keytool -list -keystore "${{ env.STORE_FILE_PATH }}" -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -alias "${{ secrets.KEY_ALIAS }}" || echo "Keystore verification failed, will continue anyway"
+          echo "${{ secrets.ACODE_BUILD_JSON_CONTENT }}" | base64 -d > ${{ env.BUILD_JSON_PATH }}
+          echo "Keystore and build.json added successfully."
+          # 验证keystore密码
+          echo "Verifying keystore password..."
+          echo "${{ env.KEYSTORE_PASSWORD }}" > /tmp/keystore_password.txt
+          keytool -list -keystore ${{ env.STORE_FILE_PATH }} -storepass "$(cat /tmp/keystore_password.txt)" -v || {
+            echo "Keystore password verification failed!"
+            exit 1
+          }
 
       - name: Export Commit Hash & prev tag
         run: |
@@ -88,73 +95,32 @@ jobs:
       - name: Run npm setup
         run: npm run setup
 
-      - name: Create build.json for release signing
-        run: |
-          cat > ${{ env.BUILD_JSON_PATH }} << EOF
-          {
-            "android": {
-              "debug": {
-                "keystore": "${{ env.STORE_FILE_PATH }}",
-                "storePassword": "${{ secrets.KEYSTORE_PASSWORD }}",
-                "alias": "${{ secrets.KEY_ALIAS }}",
-                "password" : "${{ secrets.KEY_ALIAS_PASSWORD }}",
-                "keystoreType": "pkcs12"
-              },
-              "release": {
-                "keystore": "${{ env.STORE_FILE_PATH }}",
-                "storePassword": "${{ secrets.KEYSTORE_PASSWORD }}",
-                "alias": "${{ secrets.KEY_ALIAS }}",
-                "password" : "${{ secrets.KEY_ALIAS_PASSWORD }}",
-                "keystoreType": "pkcs12"
-              }
-            }
-          }
-          EOF
-          echo "build.json created for release signing"
-          # 使用更安全的方法显示 build.json（隐藏密码）
-          echo "Build.json content (passwords hidden):"
-          python3 -c "
-import json
-with open('${{ env.BUILD_JSON_PATH }}', 'r') as f:
-    data = json.load(f)
-if 'android' in data:
-    if 'debug' in data['android']:
-        data['android']['debug']['storePassword'] = '***'
-        data['android']['debug']['password'] = '***'
-    if 'release' in data['android']:
-        data['android']['release']['storePassword'] = '***'
-        data['android']['release']['password'] = '***'
-print(json.dumps(data, indent=2))
-          "
-
       - name: Run npm build paid release apk
         run: |
           node utils/storage_manager.mjs y
-          # 使用 npm 脚本构建
-          npm run build paid release apk
-          # 检查生成的 APK 文件
-          find platforms/android -name "*.apk" -type f | xargs ls -la
-          # 复制 release APK
-          cp platforms/android/app/build/outputs/apk/release/app-release.apk /tmp/app-release-normal.apk || \
-          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk /tmp/app-release-normal.apk
+          # 确保使用release构建
+          npm run build paid release apk -- --release
+          mv platforms/android/app/build/outputs/apk/release/app-release.apk /tmp/app-release-normal.apk
           echo "VERSION: ${{ env.UPDATED_VERSION }}" >> $GITHUB_STEP_SUMMARY
-
+           
       - name: Run npm build paid release apk fdroid (for F-Droid)
         run: |
           node utils/storage_manager.mjs y
-          # 对于 F-Droid 构建，可能不需要签名
-          # 创建一个不包含签名的 build.json
-          echo '{}' > ${{ env.BUILD_JSON_PATH }}
-          npm run build paid release apk fdroid
-          # 检查生成的 APK 文件
-          find platforms/android -name "*.apk" -type f | xargs ls -la
-          cp platforms/android/app/build/outputs/apk/release/app-release.apk /tmp/app-release-fdroid.apk || \
-          cp platforms/android/app/build/outputs/apk/debug/app-debug.apk /tmp/app-release-fdroid.apk
-
+          # 确保使用release构建
+          npm run build paid release apk fdroid -- --release
+          mv platforms/android/app/build/outputs/apk/release/app-release.apk /tmp/app-release-fdroid.apk
+      
       - name: Remove keystore and build.json
         run: |
           rm -f ${{ env.STORE_FILE_PATH }} ${{ env.BUILD_JSON_PATH }}
           echo "Keystore and build.json removed successfully."
+      
+      - name: Prepare release assets
+        id: prepare_assets
+        run: |
+          echo "Prepared release assets for GitHub release"
+          echo "NORMAL_APK_PATH=/tmp/app-release-normal.apk" >> $GITHUB_OUTPUT
+          echo "FDROID_APK_PATH=/tmp/app-release-fdroid.apk" >> $GITHUB_OUTPUT
       
       - name: Create GitHub release with APK
         id: release_normal
