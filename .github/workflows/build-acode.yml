@@ -36,29 +36,27 @@ jobs:
       - name: Replace build-extras.gradle with release configuration
         run: |
           cat > build-extras.gradle << 'EOF'
-android {
-    packagingOptions {
-        pickFirst 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
-    }
-}
-
-configurations {
-  all {
-      exclude module: 'commons-logging'
-      exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
-      exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15on'
-      exclude group: 'org.bouncycastle', module: 'bcpkix-jdk18on'
-      exclude group: 'org.bouncycastle', module: 'bcprov-jdk18on'
-  }
-}
-
-buildTypes {
-    release {
-        minifyEnabled false
-        proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
-    }
-}
-EOF
+          android {
+              packagingOptions {
+                  pickFirst 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
+              }
+          }
+          configurations {
+            all {
+                exclude module: 'commons-logging'
+                exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+                exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15on'
+                exclude group: 'org.bouncycastle', module: 'bcpkix-jdk18on'
+                exclude group: 'org.bouncycastle', module: 'bcprov-jdk18on'
+            }
+          }
+          buildTypes {
+              release {
+                  minifyEnabled false
+                  proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+              }
+          }
+          EOF
           echo "Replaced build-extras.gradle with release configuration"
 
       - name: Set up Java 21
