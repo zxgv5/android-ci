@@ -1,6 +1,4 @@
-name: build-acode-debug
-
-# 如何构建release版本，还没有琢磨出来
+name: build-acode
 
 on:
   workflow_dispatch:
@@ -15,6 +13,12 @@ env:
   KEYSTORE_PASSWORD: ${{secrets.KEYSTORE_PASSWORD}}
   KEY_ALIAS: ${{secrets.KEY_ALIAS}}
   KEY_PASSWORD: ${{secrets.KEY_PASSWORD}}
+  BUILD_DATE: ${{ env.BUILD_DATE }}
+  GIT_COMMIT: ${{ env.GIT_COMMIT }}
+  PREV_TAG: ${{ env.PREV_TAG }}
+  VERSION_CODE: ${{ steps.extract_version.outputs.VERSION_CODE }}
+  VERSION: ${{ steps.extract_version.outputs.VERSION }}
+  UPDATED_VERSION: ${{ env.UPDATED_VERSION }}
 
 jobs:
   build:
@@ -24,7 +28,9 @@ jobs:
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-  
+          echo "GIT_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          echo "PREV_TAG=$(git describe --tags --abbrev=0 || git rev-list --max-parents=0 HEAD)" >> $GITHUB_ENV
+
       - name: Checkout Source repo
         uses: actions/checkout@main
         with:
@@ -55,11 +61,6 @@ jobs:
             echo "Keystore password verification failed!"
             exit 1
           }
-
-      - name: Export Commit Hash & prev tag
-        run: |
-          echo "GIT_COMMIT=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          echo "PREV_TAG=$(git describe --tags --abbrev=0 || git rev-list --max-parents=0 HEAD)" >> $GITHUB_ENV
 
       - name: Extract versionCode and version from config.xml
         id: extract_version
@@ -106,19 +107,36 @@ jobs:
           # 显式调用Gradle release构建
           cd platforms/android
           ./gradlew assembleRelease
-          # mv app/build/outputs/apk/release/app-release.apk /tmp/app-release-normal.apk
-          mv app/build/outputs/apk/debug/app-debug.apk /tmp/app-debug-normal.apk
+          # 检查APK文件是否存在
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            mv app/build/outputs/apk/release/app-release.apk /tmp/acode-release-normal.apk
+          elif [ -f app/build/outputs/apk/app-release.apk ]; then
+            mv app/build/outputs/apk/app-release.apk /tmp/acode-release-normal.apk
+          else
+            echo "Error: Release APK not found in expected locations!"
+            ls -la app/build/outputs/apk/
+            exit 1
+          fi
           echo "VERSION: ${{ env.UPDATED_VERSION }}" >> $GITHUB_STEP_SUMMARY
            
-      # - name: Run npm build paid release apk fdroid (for F-Droid)
-      #   run: |
-      #     node utils/storage_manager.mjs y
-      #     # 确保使用release构建
-      #     npm run build paid release apk fdroid -- --release
-      #     # 显式调用Gradle release构建
-      #     cd platforms/android
-      #     ./gradlew assembleRelease
-      #     mv app/build/outputs/apk/release/app-release.apk /tmp/app-release-fdroid.apk
+      - name: Run npm build paid release apk fdroid (for F-Droid)
+        run: |
+          node utils/storage_manager.mjs y
+          # 确保使用release构建
+          npm run build paid release apk fdroid -- --release
+          # 显式调用Gradle release构建
+          cd platforms/android
+          ./gradlew assembleRelease
+          # 检查APK文件是否存在
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            mv app/build/outputs/apk/release/app-release.apk /tmp/acode-release-fdroid.apk
+          elif [ -f app/build/outputs/apk/app-release.apk ]; then
+            mv app/build/outputs/apk/app-release.apk /tmp/acode-release-fdroid.apk
+          else
+            echo "Error: Release APK not found in expected locations!"
+            ls -la app/build/outputs/apk/
+            exit 1
+          fi
       
       - name: Remove keystore and build.json
         run: |
@@ -129,8 +147,8 @@ jobs:
         id: prepare_assets
         run: |
           echo "Prepared release assets for GitHub release"
-          echo "NORMAL_APK_PATH=/tmp/app-release-normal.apk" >> $GITHUB_OUTPUT
-          echo "FDROID_APK_PATH=/tmp/app-release-fdroid.apk" >> $GITHUB_OUTPUT
+          echo "NORMAL_APK_PATH=/tmp/acode-release-normal.apk" >> $GITHUB_OUTPUT
+          echo "FDROID_APK_PATH=/tmp/acode-release-fdroid.apk" >> $GITHUB_OUTPUT
       
       - name: Create GitHub release with APK
         id: release_normal
@@ -138,8 +156,7 @@ jobs:
         with:
           tag_name: ${{ env.BUILD_DATE }}-acode
           files: |
-            /tmp/app-debug-normal.apk
-            # /tmp/app-release-normal.apk
-            # /tmp/app-release-fdroid.apk
+            /tmp/acode-release-normal.apk
+            /tmp/acode-release-fdroid.apk
           draft: false
           prerelease: false
