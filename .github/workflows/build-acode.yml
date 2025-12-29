@@ -130,7 +130,7 @@ jobs:
           ./gradlew assembleRelease
           mv app/build/outputs/apk/release/app-release-unsigned.apk /tmp/acode-release-unsigned.apk
           
-      - name: Sign the apk
+      - name: Sign the apk (PKCS12)
         run: |
           # 确保 Android build-tools 在 PATH 中（根据你的 runner 环境可能需要调整）
           export PATH="$PATH:/usr/local/lib/android/sdk/build-tools/35.0.0"  # 根据实际版本调整
@@ -140,6 +140,7 @@ jobs:
             --ks-pass "pass:${{ env.KEYSTORE_PASSWORD }}" \
             --key-pass "pass:${{ env.KEY_PASSWORD }}" \
             --ks-key-alias "${{ env.KEY_ALIAS }}" \
+            --ks-type PKCS12 \
             /tmp/acode-release-unsigned.apk
           apksigner verify /tmp/acode-release-unsigned.apk
           mv /tmp/acode-release-unsigned.apk "/tmp/acode-${BUILD_DATE}.apk"
