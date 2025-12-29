@@ -133,7 +133,7 @@ jobs:
       - name: Sign the apk
         run: |
           # 确保 Android build-tools 在 PATH 中（根据你的 runner 环境可能需要调整）
-          # export PATH="$PATH:/usr/local/lib/android/sdk/build-tools/35.0.0"  # 根据实际版本调整
+          export PATH="$PATH:/usr/local/lib/android/sdk/build-tools/35.0.0"  # 根据实际版本调整
           # 使用 apksigner 对 APK 签名
           apksigner sign \
             --ks "${{ env.STORE_FILE_PATH }}" \
