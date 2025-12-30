@@ -34,7 +34,7 @@ jobs:
       # 阶段 1: 环境变量初始化
       - name: Initialization values
         run: |
-          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       # 阶段 2: 从Monorepo精确合并每个库（核心改进）
       - name: Merge Libraries from Monorepo Structure
