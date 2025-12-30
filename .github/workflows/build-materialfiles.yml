@@ -20,7 +20,7 @@ jobs:
 
     - name: Initialization values
       run: |
-        echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
     - name: Clone MaterialFiles source code
       run: |
