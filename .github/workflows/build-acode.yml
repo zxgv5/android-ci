@@ -31,7 +31,7 @@ jobs:
           # 先获取当前commit信息
           echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       - name: Fix build-extras.gradle for release build
         run: |
