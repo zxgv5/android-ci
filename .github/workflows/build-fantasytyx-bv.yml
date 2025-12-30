@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # 阶段 0: 并行克隆两个仓库
-      - name: Checkout main source repo (fantasy-bv)
+      - name: Checkout source repo (fantasy-bv)
         uses: actions/checkout@main
         with:
           repository: zxgv5/fantasy-bv
@@ -36,7 +36,7 @@ jobs:
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       # 阶段 2: 从Monorepo精确合并每个库（核心改进）
-      - name: Merge Libraries from Monorepo Structure
+      - name: Merge libraries from monorepo structure
         run: |
           echo "=== 从 bv-libs Monorepo 复制各子库 ==="
           cd fantasy-bv-source
@@ -83,7 +83,7 @@ jobs:
           ls -la libs/
  
       # 阶段 3: 设置构建环境
-      - name: Cache Gradle
+      - name: Cache gradle
         uses: actions/cache@main
         with:
           path: |
@@ -91,8 +91,8 @@ jobs:
             ~/.gradle/wrapper
             fantasy-bv-source/.gradle
           key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          # restore-keys: |
+          #   ${{ runner.os }}-gradle-
  
       - name: Set up jdk 21
         uses: actions/setup-java@main
@@ -100,7 +100,7 @@ jobs:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
-      - name: Setup Android SDK (Minimal)
+      - name: Setup android sdk (minimal)
         uses: android-actions/setup-android@main
         with:
           api-level: ${{ env.ANDROID_COMPILE_SDK }}
@@ -108,7 +108,7 @@ jobs:
           accept-android-sdk-licenses: true
 
       # 阶段 4: 应用项目特定配置
-      - name: Fix App Version Calculation
+      - name: Fix app version calculation
         working-directory: ./fantasy-bv-source
         run: |
           config_file="buildSrc/src/main/kotlin/AppConfiguration.kt"
@@ -122,7 +122,7 @@ jobs:
           fi
  
       # 阶段 5: 验证与准备构建
-      - name: Validate Final Project Structure
+      - name: Validate final project structure
         working-directory: ./fantasy-bv-source
         run: |
           echo "=== 最终项目完整性验证 ==="
@@ -145,19 +145,19 @@ jobs:
             exit 1
           fi
  
-      - name: Prepare Gradle Environment
+      - name: Prepare gradle environment
         working-directory: ./fantasy-bv-source
         run: |
           chmod +x gradlew
           echo "Gradle 版本信息:"
           ./gradlew --version
 
-      - name: Decode and Write Release Keystore
+      - name: Decode and write release keystore
         working-directory: ./fantasy-bv-source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
 
-      - name: Write signing.properties for Release Build
+      - name: Write signing.properties for release build
         working-directory: ./fantasy-bv-source
         run: |
           cat <<EOF > signing.properties
@@ -168,7 +168,7 @@ jobs:
           EOF
 
       # 阶段 6: 顺序构建（先编译akdanmaku，再构建主应用）
-      - name: Build Danmaku Module (akdanmaku)
+      - name: Build danmaku module (akdanmaku)
         working-directory: ./fantasy-bv-source
         run: |
           echo "=== 开始编译弹幕库 (akdanmaku) ==="
