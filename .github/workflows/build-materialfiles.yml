@@ -2,41 +2,34 @@ name: build-materialfiles
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
 jobs:
-  build-and-release:
-
+  build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Source repository
+    - name: Checkout source repo
       uses: actions/checkout@main
       with:
         fetch-depth: 0
         repository: zhanghai/MaterialFiles
         ref: master
         path: ./materialfiles-source
-        # path: ./ci-repo
 
     - name: Initialization values
       run: |
-        echo "BUILD_DATE=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-    # - name: Clone MaterialFiles source code
-    #   run: |
-    #     git clone --depth 1 --recurse-submodules https://github.com/xqqv5/MaterialFiles.git materialfiles-source
-    #   working-directory: ./
-
-    - name: Set up JDK 21
+    - name: Set up jdk 21
       uses: actions/setup-java@main
       with:
         distribution: 'temurin'
         java-version: '21'
 
-    - name: Setup Android SDK
+    - name: Setup android sdk
       uses: android-actions/setup-android@main
 
     - name: Decode keystore and create signing.properties
@@ -71,7 +64,7 @@ jobs:
       run: chmod +x ./gradlew
       working-directory: ./materialfiles-source
 
-    - name: Build Release APK
+    - name: Build release apk files
       run: ./gradlew assembleRelease
       working-directory: ./materialfiles-source
       env:
@@ -80,7 +73,7 @@ jobs:
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
 
-    - name: Find APK files
+    - name: Find apk files and rename
       id: find-apk
       run: |
         # 首先尝试在标准的release目录中查找
@@ -124,12 +117,15 @@ jobs:
         echo "Found APK: $APK_NEW_PATH"
         echo "APK file details:"
         ls -la "$APK_NEW_PATH"
+        
+        mv "./materialfiles-source/${{ steps.find-apk.outputs.APK_NEW_PATH }}" "./materialfiles-source/materialfiles-${{ env.BUILD_DATE }}.apk"
       working-directory: ./materialfiles-source
 
-    - name: Create Release
+    - name: Create github release & upload apk
       uses: softprops/action-gh-release@master
       with:
         tag_name: ${{env.BUILD_DATE}}-materialfiles
-        files: ./materialfiles-source/${{ steps.find-apk.outputs.APK_NEW_PATH }}
+        files: ./materialfiles-source/materialfiles-${{ env.BUILD_DATE }}.apk
+        # files: ./materialfiles-source/${{ steps.find-apk.outputs.APK_NEW_PATH }}
         draft: false
         prerelease: false

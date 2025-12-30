@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source repo
+      - name: Checkout source repo
         uses: actions/checkout@main
         with:
           repository: termux/termux-app
@@ -19,15 +19,15 @@ jobs:
 
       - name: Initialization values
         run: |
-          echo "BUILD_DATE=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      - name: Decode Keystore
+      - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
-      - name: Build APKs
+      - name: Build apk files and rename
         shell: bash {0}
         env:
           PACKAGE_VARIANT: apt-android-7
@@ -108,13 +108,16 @@ jobs:
           echo "Generating sha256sums file"
           # 针对 universal 文件生成校验码
           (cd "$APK_DIR_PATH"; sha256sum "${APK_BASENAME_PREFIX}_universal.apk" > "${APK_BASENAME_PREFIX}_sha256sums")
+          
+          mv "${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_universal.apk" "${{ env.APK_DIR_PATH }}/termux-${{ env.BUILD_DATE }}.apk"
 
-      - name: Create GitHub Release & Upload APK
+      - name: Create github release & upload apk
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-termux
           files: |
-            ${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_universal.apk
-            ${{ env.APK_DIR_PATH }}/output-metadata.json
+            ${{ env.APK_DIR_PATH }}/termux-${{ env.BUILD_DATE }}.apk
+            # ${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_universal.apk
+            # ${{ env.APK_DIR_PATH }}/output-metadata.json
           draft: false
           prerelease: false

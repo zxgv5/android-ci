@@ -11,9 +11,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions: write-all
-    
     steps:
-      - name: Checkout MAIN source repo
+      - name: Checkout source repo
         uses: actions/checkout@main
         with:
           repository: bggRGjQaUbCoE/PiliPlus
@@ -22,9 +21,9 @@ jobs:
 
       - name: Initialization values
         run: |
-          echo "BUILD_DATE=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      - name: Set up JDK
+      - name: Set up jdk 21
         uses: actions/setup-java@main
         with:
           java-version: "21"
@@ -61,30 +60,32 @@ jobs:
             echo keyPassword='${{ secrets.KEY_ALIAS_PASSWORD }}' >> android/key.properties
           fi
           
-      - name: Set and Extract version
+      - name: Set and extract version
         shell: pwsh
         run: lib/scripts/build.ps1 android
         
-      - name: Flutter build apk
+      - name: Flutter build release apk files
         # run: flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --pub
         # 改为仅编译arm64-v8a架构版本
         run: flutter build apk --release --target-platform=android-arm64 --split-per-abi --dart-define-from-file=pili_release.json --pub
         
-      - name: Rename apk
+      - name: Rename apk files
         run: |
           for file in build/app/outputs/flutter-apk/app-*-release.apk; do
             abi=$(echo "$file" | sed -E 's|.*app-(.*)-release\.apk|\1|')
-            mv "$file" "PiliPlus_android_${{ env.version }}_${abi}.apk"
+            # mv "$file" "PiliPlus_android_${{ env.version }}_${abi}.apk"
+            mv "$file" "piliplus-${{ env.BUILD_DATE }}.apk" 
           done
           # 配合仅编译arm64-v8a架构版本导致的文件名变化进行的修改
           # mv "build/app/outputs/flutter-apk/app-release.apk" "PiliPlus_android_${{ env.version }}_${abi}.apk"
         shell: bash
         
-      - name: Create GitHub Release & Upload APK
+      - name: Create github release & upload apk
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-piliplus
           files: |
-              PiliPlus_android_*-v8a.apk
+              piliplus-${{ env.BUILD_DATE }}.apk
+              # PiliPlus_android_*-v8a.apk
           draft: false
           prerelease: false

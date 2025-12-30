@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # 阶段 0: 并行克隆两个仓库
-      - name: Checkout MAIN source repo (fantasy-bv)
+      - name: Checkout main source repo (fantasy-bv)
         uses: actions/checkout@main
         with:
           repository: zxgv5/fantasy-bv
@@ -23,7 +23,7 @@ jobs:
           path: fantasy-bv-source
           fetch-depth: 0
 
-      - name: Checkout PRE-BUILT libs repo (bv-libs)
+      - name: Checkout pre-built libs repo (bv-libs)
         uses: actions/checkout@main
         with:
           repository: zxgv5/bv-libs
@@ -33,7 +33,7 @@ jobs:
       # 阶段 1: 环境变量初始化
       - name: Initialization values
         run: |
-          echo "BUILD_DATE=$(TZ=UTC+8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       # 阶段 2: 从Monorepo精确合并每个库（核心改进）
       - name: Merge Libraries from Monorepo Structure
@@ -94,7 +94,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
  
-      - name: Set up JDK
+      - name: Set up jdk 21
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}
@@ -175,7 +175,7 @@ jobs:
           ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
           echo "=== akdanmaku 编译完成 ==="
  
-      - name: Build Main Application
+      - name: Build release apk files
         working-directory: ./fantasy-bv-source
         run: |
           echo "=== 开始构建主应用 (所有依赖已就位) ==="
@@ -186,6 +186,8 @@ jobs:
           find . -name "*.apk" -type f | grep -i release | while read apk; do
             echo "  $(ls -lh "$apk")"
           done || echo "未找到APK文件，请检查构建日志。"
+          
+          mv "fantasy-bv-source/app/build/outputs/apk/default/release/*.apk" "fantasy-bv-source/app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk"
  
       # 阶段 7: 收集与上传结果
       # - name: Upload APK Artifacts
@@ -210,14 +212,15 @@ jobs:
       #       fantasy-bv-source/libs/
       #     retention-days: 7
 
-      - name: Create GitHub Release & Upload APK
+      - name: Create github release & upload apk
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-fantasybv
           # tag_name: latest-release
           # 要附加到此次发布的文件列表
           files: |
-            fantasy-bv-source/app/build/outputs/apk/default/release/*.apk
+            fantasy-bv-source/app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk
+            # fantasy-bv-source/app/build/outputs/apk/default/release/*.apk
           # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
           draft: false
           # 是否为预发布版本
