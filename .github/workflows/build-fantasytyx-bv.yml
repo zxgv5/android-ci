@@ -22,7 +22,6 @@ jobs:
           ref: develop
           path: fantasy-bv-source
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout PRE-BUILT libs repo (bv-libs)
         uses: actions/checkout@main
