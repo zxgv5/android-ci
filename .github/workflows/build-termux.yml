@@ -11,16 +11,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Initialization values
-        run: |
-          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-          
       - name: Checkout Source repo
         uses: actions/checkout@main
         with:
           repository: termux/termux-app
           ref: master
-          
+
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
       - name: Decode Keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
@@ -88,7 +88,7 @@ jobs:
           }
           EOF
           
-          # Ö»ÐèÖ´ÐÐ±ê×¼¹¹½¨
+          # åªéœ€æ‰§è¡Œæ ‡å‡†æž„å»º
           if ! ./gradlew assembleRelease; then
             exit_on_error "Build failed."
           fi
@@ -96,7 +96,7 @@ jobs:
           echo "Validating APKs"
           
           # ------------------------------------------------------
-          # ?? ÐÞ¸Äµã£ºÑéÖ¤ universal.apk ¶ø²»ÊÇ arm64-v8a.apk
+          # ?? ä¿®æ”¹ç‚¹ï¼šéªŒè¯ universal.apk è€Œä¸æ˜¯ arm64-v8a.apk
           # ------------------------------------------------------
           UNIVERSAL_APK="$APK_DIR_PATH/${APK_BASENAME_PREFIX}_universal.apk"
           if [ ! -f "$UNIVERSAL_APK" ]; then
@@ -106,7 +106,7 @@ jobs:
           fi
 
           echo "Generating sha256sums file"
-          # Õë¶Ô universal ÎÄ¼þÉú³ÉÐ£ÑéÂë
+          # é’ˆå¯¹ universal æ–‡ä»¶ç”Ÿæˆæ ¡éªŒç 
           (cd "$APK_DIR_PATH"; sha256sum "${APK_BASENAME_PREFIX}_universal.apk" > "${APK_BASENAME_PREFIX}_sha256sums")
 
       - name: Create GitHub Release & Upload APK
