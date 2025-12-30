@@ -86,10 +86,16 @@ jobs:
         working-directory: ./frost819-bv-source
         run: |
           cat <<EOF > signing.properties
-          keystore.path=keystore.p12
-          keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
-          keystore.alias=${{ secrets.KEY_ALIAS }}
-          keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
+          # CI只提供release构建的密钥，debug配置留空或使用占位符
+          releaseStoreFile=keystore.p12
+          releaseKeyAlias=${{ secrets.KEY_ALIAS }}
+          releaseStorePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          releaseKeyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
+          # 为避免debug配置读取失败，可以赋予其一个明确为空或无效的值
+          debugStoreFile=
+          debugKeyAlias=
+          debugStorePassword=
+          debugKeyPassword=
           EOF
 
       - name: Build release apk files
