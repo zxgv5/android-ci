@@ -165,7 +165,8 @@ jobs:
             echo "  $(ls -lh "$apk")"
           done || echo "未找到APK文件，请检查构建日志。"
           
-          mv "./app/build/outputs/apk/default/release/*.apk" "./app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk"
+          mv ./app/build/outputs/apk/default/release/BV_*.release_default_universal.apk ./app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk
+          mv ./app/build/outputs/apk/default/release/BV_*.release_lite_universal.apk ./app/build/outputs/apk/default/release/f819bv-lite-${{ env.BUILD_DATE }}.apk
  
       - name: Create github release & upload apk
         uses: softprops/action-gh-release@master
@@ -175,8 +176,8 @@ jobs:
           # 要附加到此次发布的文件列表
           files: |
             frost819-bv-source/app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk
+            frost819-bv-source/app/build/outputs/apk/default/release/f819bv-lite-${{ env.BUILD_DATE }}.apk
             # frost819-bv-source/app/build/outputs/apk/default/release/*.apk
           # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
           draft: false
-          # 是否为预发布版本
           prerelease: false
