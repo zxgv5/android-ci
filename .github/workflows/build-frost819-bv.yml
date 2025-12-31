@@ -166,7 +166,7 @@ jobs:
           # done || echo "未找到APK文件，请检查构建日志。"
           
           mv ./app/build/outputs/apk/default/release/BV_*.release_default_universal.apk ./app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk
-          mv ./app/build/outputs/apk/lite/release/BV_*.release_lite_universal.apk ./app/build/outputs/lite/release/f819bv-lite-${{ env.BUILD_DATE }}.apk
+          mv ./app/build/outputs/apk/lite/release/BV_*.release_lite_universal.apk ./app/build/outputs/apk/lite/release/f819bv-lite-${{ env.BUILD_DATE }}.apk
  
       - name: Create github release & upload apk
         uses: softprops/action-gh-release@master
