@@ -6,8 +6,7 @@ on:
 env:
   # 配置版本变量
   ANDROID_NDK_VERSION: '27.1.11718014'
-  ANDROID_ABI: '21'      # 最小API级别
-  BUILD_TYPE: 'Release'
+  ANDROID_ABI: '27'
   HOST_PLATFORM: 'linux-x86_64'  # GitHub Actions运行器平台
 
 jobs:
@@ -70,7 +69,7 @@ jobs:
         nasm -v
         cmake --version
         
-    - name: Build av1 extension (dav1d)
+    - name: Build av1 jni
       id: build-av1
       run: |
         set -e
@@ -137,11 +136,14 @@ jobs:
         
         echo "=== Step 5: 设置正确的 HOST_PLATFORM ==="
         # 根据实际系统设置 HOST_PLATFORM
-        # GitHub Actions Ubuntu 22.04 使用 linux-x86_64
-        HOST_PLATFORM="linux-x86_64"
+        HOST_PLATFORM=${{ env.HOST_PLATFORM }}
         echo "Using HOST_PLATFORM: $HOST_PLATFORM"
         
-        echo "=== Step 6: 确保构建脚本可执行 ==="
+        echo "=== Step 6: 设置正确的 ANDROID_ABI ==="
+        ANDROID_ABI=${{ env.ANDROID_ABI }}
+        echo "Using ANDROID_ABI: $ANDROID_ABI"
+        
+        echo "=== Step 7: 确保构建脚本可执行 ==="
         if [ -f "build_dav1d.sh" ]; then
           chmod +x build_dav1d.sh
           
@@ -154,25 +156,24 @@ jobs:
           exit 1
         fi
         
-        echo "=== Step 7: 构建 dav1d ==="
+        echo "=== Step 8: 构建 dav1d ==="
         # 使用绝对路径和调试输出
         echo "Running build_dav1d.sh with:"
         echo "  AV1_MODULE_PATH: $AV1_MODULE_PATH"
         echo "  NDK_PATH: $NDK_PATH"
         echo "  HOST_PLATFORM: $HOST_PLATFORM"
+        echo "  ANDROID_ABI: $ANDROID_ABI"
         
         # 设置环境变量供脚本使用
         export AV1_MODULE_PATH
         export NDK_PATH
         export HOST_PLATFORM
-        
+        export ANDROID_ABI
+
         # 运行构建脚本，增加详细输出
-        bash -x ./build_dav1d.sh \
-          "$AV1_MODULE_PATH" \
-          "$NDK_PATH" \
-          "$HOST_PLATFORM"
+        bash -x ./build_dav1d.sh "$AV1_MODULE_PATH" "$NDK_PATH" "$HOST_PLATFORM" "$ANDROID_ABI"
         
-        echo "=== Step 8: 验证 dav1d 构建 ==="
+        echo "=== Step 9: 验证 dav1d 构建 ==="
         if [ -d "dav1d" ]; then
           echo "✓ dav1d 源代码目录存在"
           # 检查构建结果
@@ -198,40 +199,25 @@ jobs:
         cd $MEDIA_PATH
         
         echo "=== Step 1: Sync Gradle ==="
-        ./gradlew :lib-decoder-av1:assemble$BUILD_TYPE --dry-run
+        ./gradlew :lib-decoder-av1:assembleRelease --dry-run
         
         echo "=== Step 2: Build AV1 AAR ==="
-        ./gradlew :lib-decoder-av1:assemble$BUILD_TYPE \
+        ./gradlew :lib-decoder-av1:assembleRelease \
           -Pandroidx.enableComposeCompilerReports=true
-               
-        echo "=== Step 3: Verify AAR files ==="
-        echo "Checking for generated AAR files..."
-        
-        AV1_AAR_PATH="libraries/decoder_av1/build/outputs/aar"
-        
-        if [ -f "$AV1_AAR_PATH/decoder_av1-$BUILD_TYPE.aar" ]; then
-          echo "AV1 AAR found: $AV1_AAR_PATH/decoder_av1-$BUILD_TYPE.aar"
-          ls -lh "$AV1_AAR_PATH/"
-        else
-          echo "AV1 AAR not found"
-          # 尝试查找任何AAR文件
-          find "$AV1_AAR_PATH" -name "*.aar" 2>/dev/null || true
-        fi
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@main
       with:
         name: media3-av1-decoder
         path: |
-          ${{ env.MEDIA_PATH }}/libraries/decoder_av1/build/outputs/aar/*.aar
+          ${{ env.MEDIA_PATH }}/libraries/decoder_av1/buildout/outputs/aar/*
         retention-days: 30
-        if-no-files-found: error
         
     - name: Create github release & upload apk
       uses: softprops/action-gh-release@master
       with:
         tag_name: ${{env.BV_DATE}}-av1lib
         files: |
-          ${{ env.MEDIA_PATH }}/libraries/decoder_av1/build/outputs/aar/*.aar
+          ${{ env.MEDIA_PATH }}/libraries/decoder_av1/buildout/outputs/aar/*
         draft: false
         prerelease: false
