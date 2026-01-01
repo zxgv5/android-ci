@@ -36,7 +36,9 @@ jobs:
       id: clone-media
       run: |
         echo "Cloning AndroidX Media repository..."
-        git clone --depth 1 https://github.com/androidx/media.git android-media
+        git clone --branch release --depth 1 https://github.com/androidx/media.git android-media
+        # 该仓库的main分支为开发版，更新很快
+        # git clone --branch main --depth 1 https://github.com/androidx/media.git android-media
         cd android-media
         echo "MEDIA_PATH=$(pwd)" >> $GITHUB_ENV
         
@@ -196,10 +198,10 @@ jobs:
         cd $MEDIA_PATH
         
         echo "=== Step 1: Sync Gradle ==="
-        ./gradlew :media3-decoder-av1:assemble$BUILD_TYPE --dry-run
+        ./gradlew :lib-decoder-av1:assemble$BUILD_TYPE --dry-run
         
         echo "=== Step 2: Build AV1 AAR ==="
-        ./gradlew :media3-decoder-av1:assemble$BUILD_TYPE \
+        ./gradlew :lib-decoder-av1:assemble$BUILD_TYPE \
           -Pandroidx.enableComposeCompilerReports=true
                
         echo "=== Step 3: Verify AAR files ==="
