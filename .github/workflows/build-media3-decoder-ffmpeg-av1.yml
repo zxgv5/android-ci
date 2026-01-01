@@ -5,7 +5,7 @@ on:
 
 env:
   # 配置版本变量
-  ANDROID_NDK_VERSION: '26.1.10909125'  # 使用README推荐的r26b
+  ANDROID_NDK_VERSION: '27.1.11718014'
   FFMPEG_VERSION: '6.0'  # 使用FFmpeg 6.0
   ANDROID_ABI: '21'      # 最小API级别
   BUILD_TYPE: 'Release'
@@ -74,57 +74,126 @@ jobs:
         nasm -v
         cmake --version
         
-    - name: Build av1 extension (dav1d)
-      id: build-av1
-      run: |
-        set -e
-        cd $AV1_MODULE_PATH/jni
-        
-        echo "=== Step 1: Clone cpu_features ==="
-        if [ ! -d "cpu_features" ]; then
-          git clone https://github.com/google/cpu_features
-        fi
-        
-        echo "=== Step 2: Clone dav1d ==="
-        if [ ! -d "dav1d" ]; then
-          git clone https://code.videolan.org/videolan/dav1d.git
-        else
-          cd dav1d
-          git pull
-          cd ..
-        fi
-        
-        echo "=== Step 3: Set NDK path ==="
-        # 查找NDK路径
-        if [ -n "$ANDROID_HOME" ]; then
-          NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
-        elif [ -n "$ANDROID_NDK_HOME" ]; then
-          NDK_PATH="$ANDROID_NDK_HOME"
-        else
+- name: Build AV1 Extension (dav1d)
+  id: build-av1
+  run: |
+    set -e
+    cd $AV1_MODULE_PATH/jni
+    
+    echo "=== Step 1: Clone cpu_features ==="
+    if [ ! -d "cpu_features" ]; then
+      git clone https://github.com/google/cpu_features
+    fi
+    
+    echo "=== Step 2: Clone dav1d ==="
+    if [ ! -d "dav1d" ]; then
+      git clone https://code.videolan.org/videolan/dav1d.git
+    else
+      cd dav1d
+      git pull
+      cd ..
+    fi
+    
+    echo "=== Step 3: 验证 NDK 路径 ==="
+    # 优先使用 ANDROID_NDK_ROOT 环境变量
+    if [ -n "$ANDROID_NDK_ROOT" ]; then
+      NDK_PATH="$ANDROID_NDK_ROOT"
+    elif [ -n "$ANDROID_NDK_HOME" ]; then
+      NDK_PATH="$ANDROID_NDK_HOME"
+    elif [ -n "$ANDROID_HOME" ]; then
+      # 检查多种可能的 NDK 路径格式
+      if [ -d "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" ]; then
+        NDK_PATH="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+      elif [ -d "$ANDROID_HOME/ndk-bundle" ]; then
+        NDK_PATH="$ANDROID_HOME/ndk-bundle"
+      else
+        # 尝试查找任何 NDK 目录
+        NDK_PATH=$(find $ANDROID_HOME -name "ndk*" -type d | head -1)
+        if [ -z "$NDK_PATH" ]; then
           echo "ERROR: NDK not found!"
+          echo "Available directories in $ANDROID_HOME:"
+          ls -la $ANDROID_HOME/
           exit 1
         fi
-        
-        echo "NDK_PATH: $NDK_PATH"
-        
-        echo "=== Step 4: Make build script executable ==="
-        chmod +x build_dav1d.sh
-        
-        echo "=== Step 5: Build dav1d ==="
-        ./build_dav1d.sh \
-          "$AV1_MODULE_PATH" \
-          "$NDK_PATH" \
-          "$HOST_PLATFORM"
-        
-        echo "=== Step 6: Verify dav1d build ==="
-        if [ -d "dav1d" ]; then
-          echo "✓ dav1d library built successfully"
-          # 检查是否生成了必要的库文件
-          find . -name "*.a" | head -5
-        else
-          echo "✗ dav1d build failed"
-          exit 1
-        fi
+      fi
+    else
+      echo "ERROR: ANDROID_HOME not set!"
+      exit 1
+    fi
+    
+    echo "NDK_PATH: $NDK_PATH"
+    echo "Checking NDK directory structure..."
+    if [ -d "$NDK_PATH" ]; then
+      echo "NDK directory exists"
+      ls -la $NDK_PATH/ | head -10
+    else
+      echo "ERROR: NDK directory does not exist!"
+      exit 1
+    fi
+    
+    echo "=== Step 4: 检查必要的 NDK 组件 ==="
+    # 检查是否有 toolchains 目录
+    if [ ! -d "$NDK_PATH/toolchains" ]; then
+      echo "ERROR: NDK toolchains directory not found!"
+      echo "This might be an incomplete NDK installation"
+      exit 1
+    fi
+    
+    echo "=== Step 5: 设置正确的 HOST_PLATFORM ==="
+    # 根据实际系统设置 HOST_PLATFORM
+    # GitHub Actions Ubuntu 22.04 使用 linux-x86_64
+    HOST_PLATFORM="linux-x86_64"
+    echo "Using HOST_PLATFORM: $HOST_PLATFORM"
+    
+    echo "=== Step 6: 确保构建脚本可执行 ==="
+    if [ -f "build_dav1d.sh" ]; then
+      chmod +x build_dav1d.sh
+      
+      # 检查脚本内容
+      echo "=== build_dav1d.sh 脚本内容预览 ==="
+      head -50 build_dav1d.sh
+    else
+      echo "ERROR: build_dav1d.sh not found!"
+      ls -la
+      exit 1
+    fi
+    
+    echo "=== Step 7: 构建 dav1d ==="
+    # 使用绝对路径和调试输出
+    echo "Running build_dav1d.sh with:"
+    echo "  AV1_MODULE_PATH: $AV1_MODULE_PATH"
+    echo "  NDK_PATH: $NDK_PATH"
+    echo "  HOST_PLATFORM: $HOST_PLATFORM"
+    
+    # 设置环境变量供脚本使用
+    export AV1_MODULE_PATH
+    export NDK_PATH
+    export HOST_PLATFORM
+    
+    # 运行构建脚本，增加详细输出
+    bash -x ./build_dav1d.sh \
+      "$AV1_MODULE_PATH" \
+      "$NDK_PATH" \
+      "$HOST_PLATFORM"
+    
+    echo "=== Step 8: 验证 dav1d 构建 ==="
+    if [ -d "dav1d" ]; then
+      echo "✓ dav1d 源代码目录存在"
+      # 检查构建结果
+      echo "检查生成的静态库文件..."
+      find dav1d -name "*.a" -type f | head -10
+      
+      # 检查构建输出目录
+      if [ -d "build" ]; then
+        echo "构建输出目录:"
+        ls -la build/
+      fi
+      
+      echo "✓ dav1d 库构建成功"
+    else
+      echo "✗ dav1d 目录不存在，构建可能失败"
+      exit 1
+    fi
         
     - name: Build ffmpeg extension
       id: build-ffmpeg
