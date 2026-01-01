@@ -1,4 +1,4 @@
-name: a-ci-sequential
+name: android-all-ci-sequential
 
 on:
   workflow_dispatch:
