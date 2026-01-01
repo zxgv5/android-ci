@@ -5,7 +5,7 @@ on:
 
 env:
   # 配置版本变量
-  ANDROID_NDK_VERSION: '27.0.11718014'
+  ANDROID_NDK_VERSION: '27.1.11718014'
   FFMPEG_VERSION: '6.0'  # 使用FFmpeg 6.0
   ANDROID_ABI: '21'      # 最小API级别
   BUILD_TYPE: 'Release'
