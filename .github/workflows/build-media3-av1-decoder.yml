@@ -171,7 +171,7 @@ jobs:
           fi
           
       - name: Create github release
-        uses: softprops/action-gh-release@main
+        uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-av1lib
           files: |
