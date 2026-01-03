@@ -12,7 +12,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Clean runner environment
         run: |
@@ -21,7 +21,7 @@ jobs:
     
       - name: Checkout repo
         uses: actions/checkout@main
-      
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -37,10 +37,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          
+
       - name: Setup android sdk
         uses: android-actions/setup-android@v3
-        
+
       - name: Install specific ndk version
         run: |
           # VLC 项目需要特定版本的 NDK: 27.0.12077973
@@ -106,11 +106,229 @@ jobs:
             
           pip3 install meson
             
+      - name: Configure optimized download settings
+        run: |
+          echo "Configuring optimized download settings..."
+          
+          # 安装并配置 aria2 作为下载后端
+          sudo apt-get install -y aria2 pv
+          
+          # 创建优化的 curl 包装器
+          cat > /tmp/optimized_curl << 'EOF'
+          #!/bin/bash
+          
+          # 使用 aria2c 替代 curl 进行大文件下载
+          use_aria2_for_large_files() {
+              local url=""
+              local output=""
+              local other_args=()
+              local next_is_output=""
+              
+              # 解析参数
+              for arg in "$@"; do
+                  if [[ "$arg" == "--output" || "$arg" == "-o" ]]; then
+                      next_is_output=1
+                  elif [ -n "$next_is_output" ]; then
+                      output="$arg"
+                      next_is_output=""
+                  elif [[ "$arg" =~ ^https?:// ]]; then
+                      url="$arg"
+                  else
+                      other_args+=("$arg")
+                  fi
+              done
+              
+              # 如果是下载大文件且指定了输出文件，使用 aria2
+              if [ -n "$url" ] && [ -n "$output" ] && [[ "$url" =~ \.(tar\.gz|tar\.bz2|zip|tgz|gz)$ ]]; then
+                  echo "Using aria2c for optimized download: $url -> $output"
+                  aria2c \
+                    --max-connection-per-server=8 \
+                    --split=8 \
+                    --min-split-size=1M \
+                    --retry-wait=2 \
+                    --max-tries=5 \
+                    --timeout=30 \
+                    --connect-timeout=30 \
+                    --allow-overwrite=true \
+                    --auto-file-renaming=false \
+                    --check-certificate=false \
+                    --user-agent="Mozilla/5.0" \
+                    --out="$output" \
+                    "$url"
+                  return $?
+              fi
+              
+              # 否则使用原来的 curl
+              /usr/bin/curl_original "$@"
+          }
+          
+          use_aria2_for_large_files "$@"
+          EOF
+          
+          # 备份并替换 curl
+          sudo cp /usr/bin/curl /usr/bin/curl_original
+          sudo cp /tmp/optimized_curl /usr/bin/curl
+          sudo chmod +x /usr/bin/curl
+          
+          # 创建优化的 wget 包装器
+          cat > /tmp/optimized_wget << 'EOF'
+          #!/bin/bash
+          
+          # 使用 aria2c 替代 wget 进行大文件下载
+          use_aria2_for_large_files() {
+              local url=""
+              local output=""
+              local other_args=()
+              local next_is_output=""
+              
+              # 解析参数
+              for arg in "$@"; do
+                  if [[ "$arg" == "--output-document" || "$arg" == "-O" ]]; then
+                      next_is_output=1
+                  elif [ -n "$next_is_output" ]; then
+                      output="$arg"
+                      next_is_output=""
+                  elif [[ "$arg" =~ ^https?:// ]]; then
+                      url="$arg"
+                  else
+                      other_args+=("$arg")
+                  fi
+              done
+              
+              # 如果是下载大文件且指定了输出文件，使用 aria2
+              if [ -n "$url" ] && [ -n "$output" ] && [[ "$url" =~ \.(tar\.gz|tar\.bz2|zip|tgz|gz)$ ]]; then
+                  echo "Using aria2c for optimized download: $url -> $output"
+                  aria2c \
+                    --max-connection-per-server=8 \
+                    --split=8 \
+                    --min-split-size=1M \
+                    --retry-wait=2 \
+                    --max-tries=5 \
+                    --timeout=30 \
+                    --connect-timeout=30 \
+                    --allow-overwrite=true \
+                    --auto-file-renaming=false \
+                    --check-certificate=false \
+                    --user-agent="Mozilla/5.0" \
+                    --out="$output" \
+                    "$url"
+                  return $?
+              fi
+              
+              # 否则使用原来的 wget
+              /usr/bin/wget_original "$@"
+          }
+          
+          use_aria2_for_large_files "$@"
+          EOF
+          
+          # 备份并替换 wget
+          sudo cp /usr/bin/wget /usr/bin/wget_original
+          sudo cp /tmp/optimized_wget /usr/bin/wget
+          sudo chmod +x /usr/bin/wget
+          
+          # 设置 aria2 的配置文件
+          mkdir -p ~/.aria2
+          cat > ~/.aria2/aria2.conf << 'EOF'
+          # 下载设置
+          max-concurrent-downloads=5
+          max-connection-per-server=8
+          split=8
+          min-split-size=1M
+          
+          # 重试设置
+          retry-wait=2
+          max-tries=5
+          timeout=30
+          connect-timeout=30
+          
+          # 其他设置
+          allow-overwrite=true
+          auto-file-renaming=false
+          check-certificate=false
+          user-agent=Mozilla/5.0
+          
+          # 速度限制（无限制）
+          max-overall-download-limit=0
+          max-download-limit=0
+          
+          # 磁盘缓存
+          disk-cache=32M
+          file-allocation=prealloc
+          EOF
+          
+          echo "Download optimization configured"
+          
+      - name: Pre-download VLC build dependencies
+        run: |
+          echo "Pre-downloading VLC build dependencies..."
+          
+          # 下载 protobuf 3.1.0
+          echo "Downloading protobuf-3.1.0.tar.gz..."
+          if [ ! -f /tmp/protobuf-3.1.0.tar.gz ]; then
+            aria2c \
+              --max-connection-per-server=8 \
+              --split=8 \
+              --min-split-size=1M \
+              --retry-wait=2 \
+              --max-tries=5 \
+              --timeout=30 \
+              --connect-timeout=30 \
+              --allow-overwrite=true \
+              --auto-file-renaming=false \
+              --check-certificate=false \
+              --user-agent="Mozilla/5.0" \
+              --out="/tmp/protobuf-3.1.0.tar.gz" \
+              "https://github.com/protocolbuffers/protobuf/releases/download/v3.1.0/protobuf-cpp-3.1.0.tar.gz"
+          fi
+          
+          # 下载 meson 0.63.0
+          echo "Downloading meson-0.63.0.tar.gz..."
+          if [ ! -f /tmp/meson-0.63.0.tar.gz ]; then
+            aria2c \
+              --max-connection-per-server=8 \
+              --split=8 \
+              --min-split-size=1M \
+              --retry-wait=2 \
+              --max-tries=5 \
+              --timeout=30 \
+              --connect-timeout=30 \
+              --allow-overwrite=true \
+              --auto-file-renaming=false \
+              --check-certificate=false \
+              --user-agent="Mozilla/5.0" \
+              --out="/tmp/meson-0.63.0.tar.gz" \
+              "https://github.com/mesonbuild/meson/releases/download/0.63.0/meson-0.63.0.tar.gz"
+          fi
+          
+          echo "Pre-download completed"
+            
       - name: Clone vlc android repository
         run: |
           cd "$GITHUB_WORKSPACE"
           echo "Cloning VLC Android repository from ${{ env.VLC_REPO_URL }}"
           git clone --depth 1 --branch ${{ env.VLC_BRANCH }} ${{ env.VLC_REPO_URL }} vlc-android
+          
+      - name: Pre-populate dependencies cache
+        run: |
+          echo "Pre-populating VLC dependencies cache..."
+          cd "$GITHUB_WORKSPACE"/vlc-android
+          
+          # 确保 extras/tools 目录存在
+          mkdir -p libvlcjni/vlc/extras/tools
+          
+          # 复制预下载的依赖文件
+          if [ -f /tmp/protobuf-3.1.0.tar.gz ]; then
+            echo "Copying protobuf-3.1.0.tar.gz to extras/tools/"
+            cp /tmp/protobuf-3.1.0.tar.gz libvlcjni/vlc/extras/tools/
+          fi
+          
+          if [ -f /tmp/meson-0.63.0.tar.gz ]; then
+            echo "Copying meson-0.63.0.tar.gz to extras/tools/"
+            cp /tmp/meson-0.63.0.tar.gz libvlcjni/vlc/extras/tools/
+          fi
+          
+          echo "Cache population completed"
           
       - name: Setup environment variables
         run: |
