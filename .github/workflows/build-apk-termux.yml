@@ -1,4 +1,4 @@
-name: build-termux
+name: build-apk-termux
 
 on:
   workflow_dispatch:

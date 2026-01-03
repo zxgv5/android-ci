@@ -1,4 +1,4 @@
-name: build-fantasytyx-bv
+name: build-apk-fantasytyx-bv
 
 on:
   workflow_dispatch:

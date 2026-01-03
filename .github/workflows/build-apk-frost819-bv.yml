@@ -1,4 +1,4 @@
-name: build-frost819-bv
+name: build-apk-frost819-bv
 
 on:
   workflow_dispatch:

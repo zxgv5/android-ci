@@ -1,4 +1,4 @@
-name: build-acode
+name: build-apk-acode
 
 on:
   workflow_dispatch:

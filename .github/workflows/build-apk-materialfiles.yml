@@ -1,4 +1,4 @@
-name: build-materialfiles
+name: build-apk-materialfiles
 
 on:
   workflow_dispatch:

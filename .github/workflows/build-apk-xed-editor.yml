@@ -1,4 +1,4 @@
-name: build-xed-editor
+name: build-apk-xed-editor
 
 on:
   workflow_dispatch:
