@@ -26,16 +26,38 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           
+      - name: Setup git config
+        run: |
+          # 设置 git 用户信息，避免应用补丁时出错
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub CI"
+          
       - name: Setup jdk 17
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
           java-version: '17'
           
-      - name: Setup android sdk and ndk
+      - name: Setup android sdk
         uses: android-actions/setup-android@v3
-        with:
-          ndk-version: '25.2.9519653'
+        
+      - name: Install specific ndk version
+        run: |
+          # VLC 项目需要特定版本的 NDK: 27.0.12077973
+          echo "Downloading NDK 27.0.12077973..."
+          cd /usr/local/lib/android/sdk
+          
+          # 下载指定版本的 NDK
+          wget -q https://dl.google.com/android/repository/android-ndk-r27-linux.zip
+          unzip -q android-ndk-r27-linux.zip
+          mv android-ndk-r27 ndk/27.0.12077973
+          rm -f android-ndk-r27-linux.zip
+          
+          # 设置环境变量
+          echo "ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.0.12077973" >> $GITHUB_ENV
+          echo "ANDROID_NDK=/usr/local/lib/android/sdk/ndk/27.0.12077973" >> $GITHUB_ENV
+          
+          echo "NDK installed at: /usr/local/lib/android/sdk/ndk/27.0.12077973"
           
       - name: Install build dependencies
         run: |
@@ -79,7 +101,8 @@ jobs:
             meson \
             libc6-dev-i386 \
             gcc-multilib \
-            g++-multilib
+            g++-multilib \
+            rsync
             
           pip3 install meson
             
@@ -164,10 +187,20 @@ jobs:
           done
           
           # 查找并复制 so 文件
-          find . -name "*.so" -type f 2>/dev/null | head -10 | while read file; do
+          find . -name "*.so" -type f 2>/dev/null | head -20 | while read file; do
             echo "Found .so for arm64-v8a: $file"
             # 提取架构信息
-            arch=$(echo "$file" | grep -o "arm64-v8a\|armeabi-v7a\|x86\|x86_64" || echo "unknown")
+            if echo "$file" | grep -q "arm64-v8a"; then
+              arch="arm64-v8a"
+            elif echo "$file" | grep -q "armeabi-v7a"; then
+              arch="armeabi-v7a"
+            elif echo "$file" | grep -q "x86"; then
+              arch="x86"
+            elif echo "$file" | grep -q "x86_64"; then
+              arch="x86_64"
+            else
+              arch="unknown"
+            fi
             mkdir -p "$GITHUB_WORKSPACE/build_artifacts/libs/$arch"
             cp "$file" "$GITHUB_WORKSPACE/build_artifacts/libs/$arch/"
           done
@@ -184,11 +217,19 @@ jobs:
             echo "Cleaning libvlc build directory..."
             rm -rf libvlcjni/libvlc/build/outputs
             rm -rf libvlcjni/libvlc/build/intermediates
+            rm -rf libvlcjni/libvlc/build/tmp
           fi
           
           if [ -d "libvlcjni/vlc/build-android-" ]; then
             echo "Cleaning vlc build directories..."
             rm -rf libvlcjni/vlc/build-android-*
+          fi
+          
+          # 清理 gradle 缓存
+          if [ -d ".gradle" ]; then
+            echo "Cleaning gradle cache..."
+            rm -rf .gradle/caches
+            rm -rf .gradle/daemon
           fi
           
       - name: Build libvlc for armeabi-v7a architecture
@@ -228,10 +269,20 @@ jobs:
           done
           
           # 查找并复制 so 文件
-          find . -name "*.so" -type f 2>/dev/null | head -10 | while read file; do
+          find . -name "*.so" -type f 2>/dev/null | head -20 | while read file; do
             echo "Found .so for armeabi-v7a: $file"
             # 提取架构信息
-            arch=$(echo "$file" | grep -o "arm64-v8a\|armeabi-v7a\|x86\|x86_64" || echo "unknown")
+            if echo "$file" | grep -q "arm64-v8a"; then
+              arch="arm64-v8a"
+            elif echo "$file" | grep -q "armeabi-v7a"; then
+              arch="armeabi-v7a"
+            elif echo "$file" | grep -q "x86"; then
+              arch="x86"
+            elif echo "$file" | grep -q "x86_64"; then
+              arch="x86_64"
+            else
+              arch="unknown"
+            fi
             mkdir -p "$GITHUB_WORKSPACE/build_artifacts/libs/$arch"
             cp "$file" "$GITHUB_WORKSPACE/build_artifacts/libs/$arch/"
           done
@@ -243,17 +294,17 @@ jobs:
           echo "Merging multi-architecture AAR files..."
           
           # 首先找到最新的 AAR 文件（应该是 armeabi-v7a 构建的）
+          BASE_AAR=""
           if [ -d "build_artifacts/armeabi-v7a" ]; then
-            LATEST_AAR=$(find build_artifacts/armeabi-v7a -name "*.aar" -type f 2>/dev/null | head -1)
-          elif [ -d "build_artifacts/arm64-v8a" ]; then
-            LATEST_AAR=$(find build_artifacts/arm64-v8a -name "*.aar" -type f 2>/dev/null | head -1)
-          else
-            echo "✗ Error: No AAR files found in build artifacts"
-            exit 1
+            BASE_AAR=$(find build_artifacts/armeabi-v7a -name "*.aar" -type f 2>/dev/null | head -1)
           fi
           
-          if [ -n "$LATEST_AAR" ] && [ -f "$LATEST_AAR" ]; then
-            echo "Found base AAR: $LATEST_AAR"
+          if [ -z "$BASE_AAR" ] && [ -d "build_artifacts/arm64-v8a" ]; then
+            BASE_AAR=$(find build_artifacts/arm64-v8a -name "*.aar" -type f 2>/dev/null | head -1)
+          fi
+          
+          if [ -n "$BASE_AAR" ] && [ -f "$BASE_AAR" ]; then
+            echo "Found base AAR: $BASE_AAR"
             
             # 创建临时目录
             TEMP_DIR=$(mktemp -d)
@@ -261,7 +312,7 @@ jobs:
             
             # 解压基础 AAR
             echo "Extracting base AAR..."
-            unzip -q "$LATEST_AAR" -d "$TEMP_DIR"
+            unzip -q "$BASE_AAR" -d "$TEMP_DIR"
             
             # 确保 jni 目录存在
             mkdir -p "$TEMP_DIR/jni"
@@ -270,14 +321,22 @@ jobs:
             if [ -d "build_artifacts/libs/arm64-v8a" ]; then
               echo "Copying arm64-v8a libraries..."
               mkdir -p "$TEMP_DIR/jni/arm64-v8a"
-              cp build_artifacts/libs/arm64-v8a/*.so "$TEMP_DIR/jni/arm64-v8a/" 2>/dev/null || true
+              # 只复制 .so 文件，忽略其他文件
+              find "build_artifacts/libs/arm64-v8a" -name "*.so" -type f | while read so_file; do
+                cp "$so_file" "$TEMP_DIR/jni/arm64-v8a/"
+              done
+              echo "Copied $(ls -1 "$TEMP_DIR/jni/arm64-v8a/" 2>/dev/null | wc -l) arm64-v8a libraries"
             fi
             
             # 复制 armeabi-v7a 的 so 文件
             if [ -d "build_artifacts/libs/armeabi-v7a" ]; then
               echo "Copying armeabi-v7a libraries..."
               mkdir -p "$TEMP_DIR/jni/armeabi-v7a"
-              cp build_artifacts/libs/armeabi-v7a/*.so "$TEMP_DIR/jni/armeabi-v7a/" 2>/dev/null || true
+              # 只复制 .so 文件，忽略其他文件
+              find "build_artifacts/libs/armeabi-v7a" -name "*.so" -type f | while read so_file; do
+                cp "$so_file" "$TEMP_DIR/jni/armeabi-v7a/"
+              done
+              echo "Copied $(ls -1 "$TEMP_DIR/jni/armeabi-v7a/" 2>/dev/null | wc -l) armeabi-v7a libraries"
             fi
             
             # 创建合并后的 AAR
@@ -286,11 +345,14 @@ jobs:
             zip -qr "$GITHUB_WORKSPACE/libvlc-release.aar" .
             
             echo "Merged AAR created: $GITHUB_WORKSPACE/libvlc-release.aar"
+            echo "File size: $(du -h "$GITHUB_WORKSPACE/libvlc-release.aar" | cut -f1)"
             
             # 清理临时目录
             rm -rf "$TEMP_DIR"
           else
             echo "✗ Error: Could not find a valid AAR file to use as base"
+            echo "Searching for AAR files in vlc-android directory..."
+            find "$GITHUB_WORKSPACE/vlc-android" -name "*.aar" -type f 2>/dev/null | head -10
             exit 1
           fi
           
@@ -305,7 +367,7 @@ jobs:
             file libvlc-release.aar
             
             # 检查 AAR 文件内容
-            echo "AAR contents (first 30 lines):"
+            echo "AAR contents overview:"
             unzip -l libvlc-release.aar | head -30
             
             # 检查是否包含原生库
@@ -326,6 +388,9 @@ jobs:
               done
             else
               echo "⚠ AAR does not contain native libraries"
+              # 列出 AAR 中的所有文件
+              echo "Listing all files in AAR:"
+              unzip -l libvlc-release.aar
             fi
             
             # 检查 AndroidManifest
@@ -350,10 +415,16 @@ jobs:
             echo "Checking individual architecture builds:"
             for arch in arm64-v8a armeabi-v7a; do
               if [ -d "$GITHUB_WORKSPACE/build_artifacts/$arch" ]; then
-                echo "  $arch:"
+                echo "  $arch directory contents:"
                 ls -la "$GITHUB_WORKSPACE/build_artifacts/$arch/" 2>/dev/null || echo "    No files"
               fi
             done
+            
+            # 检查 libs 目录
+            if [ -d "$GITHUB_WORKSPACE/build_artifacts/libs" ]; then
+              echo "libs directory contents:"
+              find "$GITHUB_WORKSPACE/build_artifacts/libs" -type f 2>/dev/null | head -20
+            fi
             
             exit 1
           fi
