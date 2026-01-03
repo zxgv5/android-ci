@@ -1,28 +1,20 @@
-﻿name: build-lib-akdanmaku
+name: build-lib-akdanmaku
 
 on:
   workflow_dispatch:
   workflow_call:
-    outputs:
-      aar_path:
-        description: 'Path to the built aar file'
-        value: ${{ jobs.build.outputs.aar_path }}
-      build_date:
-        description: 'Build timestamp'
-        value: ${{ jobs.build.outputs.build_date }}
 
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
+  AAR_PATH: 'akdanmaku/build/outputs/aar'
+  AAR_NAME: 'lib-akdanmaku-release.aar'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      aar_path: ${{ steps.output_vars.outputs.aar_path }}
-      build_date: ${{ env.BUILD_DATE }}
     steps:
       - name: Clean runner environment
         run: |
@@ -107,13 +99,12 @@ jobs:
           
           echo "=== akdanmaku 编译完成 ==="
           echo "查找AAR产物:"
-          AAR_FILE=$(find akdanmaku/build/outputs/aar -name "*.aar" -type f | head -1)
+          AAR_FILE=$(find ${{ AAR_PATH }} -name "*.aar" -type f | head -1)
           if [ -n "$AAR_FILE" ]; then
             echo "找到AAR文件: $AAR_FILE"
             echo "文件大小: $(ls -lh "$AAR_FILE" | awk '{print $5}')"
             # 重命名AAR文件为固定名称
-            mv "$AAR_FILE" akdanmaku/build/outputs/aar/lib-akdanmaku-release.aar
-            echo "aar_path=akdanmaku/build/outputs/aar/lib-akdanmaku-release.aar" >> $GITHUB_OUTPUT
+            mv "$AAR_FILE" "${{ env.AAR_PATH }}/${{ env.AAR_NAME }}"
           else
             echo "错误: 未找到AAR文件！"
             exit 1
@@ -123,8 +114,7 @@ jobs:
       - name: Upload AAR artifact
         uses: actions/upload-artifact@main
         with:
-          name: akdanmaku-aar
-          path: akdanmaku-source/akdanmaku/build/outputs/aar/lib-akdanmaku-release.aar
+          path: akdanmaku-source/${{ env.AAR_PATH }}/${{ env.AAR_NAME }}
           retention-days: 30
 
       # 可选：创建GitHub Release（如果需要独立发布）
@@ -136,7 +126,7 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            akdanmaku-source/akdanmaku/build/outputs/aar/lib-akdanmaku-release.aar
+            akdanmaku-source/${{ env.AAR_PATH }}/${{ env.AAR_NAME }}
             
       # 使用SSH Deploy Key的方式来实现对bv-libs的推送
       # 生成ED25519密钥对（更安全，推荐）
@@ -200,7 +190,7 @@ jobs:
           git checkout main
           
           # 复制新的 AAR 文件到目标位置
-          SOURCE_AAR="$GITHUB_WORKSPACE/akdanmaku-source/akdanmaku/build/outputs/aar/lib-akdanmaku-release.aar"
+          SOURCE_AAR="$GITHUB_WORKSPACE/akdanmaku-source/${{ env.AAR_PATH }}/${{ env.AAR_NAME }}"
           TARGET_DIR="akDanmaku"
           
           # 检查 AAR 文件是否存在
@@ -216,7 +206,7 @@ jobs:
             
             # 提交更改
             echo "Committing changes..."
-            git add "$TARGET_DIR/lib-akdanmaku-release.aar"
+            git add "$TARGET_DIR/${{ env.AAR_NAME }}"
             
             # 检查是否有更改
             if git diff --cached --quiet; then

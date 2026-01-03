@@ -41,7 +41,12 @@ on:
         required: true
         default: false
         type: boolean
- 
+
+env:
+  AAR_PATH: 'media/libraries/decoder_ffmpeg/buildout/outputs/aar'
+  AAR_NAME: 'lib-decoder-ffmpeg-release.aar'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -122,7 +127,7 @@ jobs:
       #   with:
       #     name: FFmpeg-aar
       #     path: |
-      #       media/libraries/decoder_ffmpeg/buildout/outputs/aar/*
+      #       ${{ AAR_PATH }}/*
       #     compression-level: 9
           
       - name: Create github release
@@ -131,7 +136,7 @@ jobs:
           tag_name: ${{env.BUILD_DATE}}-ffmpeglib
           # 要附加到此次发布的文件列表
           files: |
-            media/libraries/decoder_ffmpeg/buildout/outputs/aar/*
+            ${{ AAR_PATH }}/*
           # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
           draft: false
           # 是否为预发布版本
@@ -195,7 +200,7 @@ jobs:
           git checkout main
           
           # 复制新的 AAR 文件到目标位置
-          SOURCE_AAR="$GITHUB_WORKSPACE/media/libraries/decoder_ffmpeg/buildout/outputs/aar/lib-decoder-ffmpeg-release.aar"
+          SOURCE_AAR="$GITHUB_WORKSPACE/${{ AAR_PATH }}/${{ AAR_NAME }}"
           TARGET_DIR="ffmpegDecoder"
           
           # 检查 AAR 文件是否存在
@@ -206,10 +211,10 @@ jobs:
             mkdir -p "$TARGET_DIR"
             
             # 备份旧文件（可选）
-            # if [ -f "$TARGET_DIR/lib-decoder-ffmpeg-release.aar" ]; then
+            # if [ -f "$TARGET_DIR/${{ AAR_NAME }}" ]; then
             #   echo "Backing up old AAR file..."
             #   TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-            #   cp "$TARGET_DIR/lib-decoder-ffmpeg-release.aar" "$TARGET_DIR/lib-decoder-ffmpeg-release_${TIMESTAMP}.aar.backup"
+            #   cp "$TARGET_DIR/${{ AAR_NAME }}" "$TARGET_DIR/lib-decoder-ffmpeg-release_${TIMESTAMP}.aar.backup"
             # fi
             
             # 复制新文件
@@ -218,7 +223,7 @@ jobs:
             
             # 提交更改
             echo "Committing changes..."
-            git add "$TARGET_DIR/lib-decoder-ffmpeg-release.aar"
+            git add "$TARGET_DIR/${{ AAR_NAME }}"
             
             # 检查是否有更改
             if git diff --cached --quiet; then

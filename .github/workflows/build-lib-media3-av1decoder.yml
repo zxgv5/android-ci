@@ -2,11 +2,14 @@ name: build-lib-media3-av1decoder
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 env:
   # ANDROID_ABI在build_dav1d.sh使用了21的硬编码(-android21)，不用再传此参数
   ANDROID_NDK: 'r29'
   HOST_PLATFORM: 'linux-x86_64'
+  AAR_PATH: 'media/libraries/decoder_av1/buildout/outputs/aar'
+  AAR_NAME: 'lib-decoder-av1-release.aar'
 
 jobs:
   build:
@@ -175,7 +178,7 @@ jobs:
         with:
           tag_name: ${{env.BUILD_DATE}}-av1lib
           files: |
-            media/libraries/decoder_av1/buildout/outputs/aar/*
+            ${{ env.AAR_PATH }}/*
           draft: false
           prerelease: false
 
@@ -241,7 +244,7 @@ jobs:
           git checkout main
           
           # 复制新的 AAR 文件到目标位置
-          SOURCE_AAR="$GITHUB_WORKSPACE/media/libraries/decoder_av1/buildout/outputs/aar/lib-decoder-av1-release.aar"
+          SOURCE_AAR="$GITHUB_WORKSPACE/${{ env.AAR_PATH }}/${{ env.AAR_NAME }}"
           TARGET_DIR="av1Decoder"
           
           # 检查 AAR 文件是否存在
@@ -252,10 +255,10 @@ jobs:
             mkdir -p "$TARGET_DIR"
             
             # 备份旧文件（可选）
-            # if [ -f "$TARGET_DIR/lib-decoder-av1-release.aar" ]; then
+            # if [ -f "$TARGET_DIR/${{ env.AAR_NAME }}" ]; then
             #   echo "Backing up old AAR file..."
             #   TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-            #   cp "$TARGET_DIR/lib-decoder-av1-release.aar" "$TARGET_DIR/lib-decoder-av1-release_${TIMESTAMP}.aar.backup"
+            #   cp "$TARGET_DIR/${{ env.AAR_NAME }}" "$TARGET_DIR/lib-decoder-av1-release_${TIMESTAMP}.aar.backup"
             # fi
             
             # 复制新文件
@@ -264,7 +267,7 @@ jobs:
             
             # 提交更改
             echo "Committing changes..."
-            git add "$TARGET_DIR/lib-decoder-av1-release.aar"
+            git add "$TARGET_DIR/${{ env.AAR_NAME }}"
             
             # 检查是否有更改
             if git diff --cached --quiet; then
