@@ -76,7 +76,10 @@ jobs:
             bison \
             lzip \
             ninja-build \
-            meson
+            meson \
+            libc6-dev-i386 \
+            gcc-multilib \
+            g++-multilib
             
           pip3 install meson
             
@@ -91,16 +94,20 @@ jobs:
           cd "$GITHUB_WORKSPACE"/vlc-android
           
           # 设置环境变量（根据 compile.sh 的要求）
-          echo "ANDROID_SDK=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "ANDROID_NDK=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
+          export ANDROID_SDK="$ANDROID_HOME"
+          export ANDROID_NDK="$ANDROID_NDK_ROOT"
           
           # 创建本地配置文件
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "ndk.dir=$ANDROID_NDK_ROOT" >> local.properties
           
           echo "Environment variables set:"
-          echo "ANDROID_SDK=$ANDROID_HOME"
-          echo "ANDROID_NDK=$ANDROID_NDK_ROOT"
+          echo "ANDROID_SDK=$ANDROID_SDK"
+          echo "ANDROID_NDK=$ANDROID_NDK"
+          
+          # 将这些变量导出到后续步骤
+          echo "ANDROID_SDK=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
           
       - name: Build libvlc for all architectures
         run: |
@@ -110,9 +117,31 @@ jobs:
           echo "Directory structure:"
           ls -la
           
+          # 设置环境变量
+          export ANDROID_SDK="$ANDROID_HOME"
+          export ANDROID_NDK="$ANDROID_NDK_ROOT"
+          
+          echo "ANDROID_SDK: $ANDROID_SDK"
+          echo "ANDROID_NDK: $ANDROID_NDK"
+          echo "PATH: $PATH"
+          
+          # 检查 buildsystem 目录和脚本
+          echo "Checking buildsystem directory..."
+          ls -la buildsystem/
+          
           # 使构建脚本可执行
-          chmod +x compile.sh
-          chmod +x compile-medialibrary.sh
+          chmod +x buildsystem/compile.sh
+          chmod +x buildsystem/compile-medialibrary.sh
+          chmod +x buildsystem/compile-remoteaccess.sh
+          
+          # 检查脚本是否存在
+          if [ -f "buildsystem/compile.sh" ]; then
+            echo "✓ Found compile.sh in buildsystem/"
+          else
+            echo "✗ compile.sh not found in buildsystem/"
+            find . -name "compile.sh" -type f
+            exit 1
+          fi
           
           # 根据 README 和 compile.sh，构建 libVLC 使用 -l 参数
           # 使用 -a all 构建所有架构
@@ -124,21 +153,30 @@ jobs:
           
           # 构建所有架构的 libVLC
           # 注意：构建过程会下载 VLC 源代码和依赖，需要网络连接
-          ./compile.sh -l -a all -t -r
+          # 使用完整的路径调用脚本
+          ./buildsystem/compile.sh -l -a all -t -r
           
           echo "Build completed!"
+          
+          # 检查构建结果
+          echo "Checking build results..."
+          find . -name "*.aar" -type f 2>/dev/null | head -10
+          find . -name "*.so" -type f 2>/dev/null | head -10
           
       - name: Find and copy generated aar files
         run: |
           cd "$GITHUB_WORKSPACE"/vlc-android
           
           echo "Searching for generated AAR files..."
+          echo "Current directory: $(pwd)"
           
           # 根据项目结构，AAR 文件可能在这些位置
+          # 根据 settings.gradle 文件，libvlc 模块在 libvlcjni:libvlc
           POSSIBLE_PATHS=(
             "libvlcjni/libvlc/build/outputs/aar"
             "libvlc/build/outputs/aar"
             "build/outputs/aar"
+            "."
           )
           
           AAR_FOUND=false
@@ -163,13 +201,24 @@ jobs:
           # 如果没有找到 release AAR，取第一个找到的
           if [ "$AAR_FOUND" = false ]; then
             echo "No release AAR found, searching for any AAR file..."
-            find . -name "*.aar" -type f 2>/dev/null | head -5 | while read file; do
+            find . -name "*.aar" -type f 2>/dev/null | head -10 | while read file; do
               echo "Found AAR: $file"
               if [ ! -f "$GITHUB_WORKSPACE/libvlc-release.aar" ]; then
                 cp "$file" "$GITHUB_WORKSPACE/libvlc-release.aar"
                 echo "Copied to: $GITHUB_WORKSPACE/libvlc-release.aar"
                 AAR_FOUND=true
               fi
+            done
+          fi
+          
+          # 如果还没有找到，尝试查找 libvlcjni 目录
+          if [ "$AAR_FOUND" = false ] && [ -d "libvlcjni" ]; then
+            echo "Checking libvlcjni directory..."
+            find libvlcjni -name "*.aar" -type f 2>/dev/null | head -10 | while read file; do
+              echo "Found AAR in libvlcjni: $file"
+              cp "$file" "$GITHUB_WORKSPACE/libvlc-release.aar"
+              echo "Copied to: $GITHUB_WORKSPACE/libvlc-release.aar"
+              AAR_FOUND=true
             done
           fi
           
@@ -184,7 +233,7 @@ jobs:
             file libvlc-release.aar
             
             # 检查 AAR 文件内容
-            echo "AAR contents:"
+            echo "AAR contents (first 20 lines):"
             unzip -l libvlc-release.aar | head -20
             
             # 检查是否包含原生库
@@ -205,7 +254,12 @@ jobs:
             
             # 输出一些调试信息
             echo "Listing build artifacts in vlc-android directory:"
-            find "$GITHUB_WORKSPACE/vlc-android" -name "*.aar" -o -name "*.apk" -o -name "*.jar" -type f 2>/dev/null | head -20
+            find "$GITHUB_WORKSPACE/vlc-android" -name "*.aar" -o -name "*.apk" -o -name "*.jar" -o -name "*.so" -type f 2>/dev/null | head -30
+            
+            # 查看目录结构
+            echo "Directory structure of vlc-android:"
+            cd "$GITHUB_WORKSPACE/vlc-android"
+            find . -maxdepth 3 -type d | sort
             
             exit 1
           fi
