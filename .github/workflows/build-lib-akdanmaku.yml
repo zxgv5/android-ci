@@ -40,6 +40,7 @@ jobs:
           fetch-depth: 0
           sparse-checkout: |
             akdanmaku/
+            buildSrc/
             gradle/
             gradlew
             gradle.properties
