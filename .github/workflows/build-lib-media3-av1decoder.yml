@@ -1,4 +1,4 @@
-name: build-media3-av1-decoder
+name: build-lib-media3-av1decoder
 
 on:
   workflow_dispatch:
@@ -187,7 +187,7 @@ jobs:
       # 将公钥添加到目标仓库的Deploy Keys:
       # zxgv5/bv-libs → "Settings" → "Deploy keys" → "Add deploy key"
       # 填写：
-      # Title: github-actions-av1-ffmpeg-deploy
+      # Title: github-actions-decoder-lib-deploy
       # Key: 粘贴 deploy_key.pub 内容
       # 重要： 一定要勾选 "Allow write access"
       # 然后点击 "Add key"

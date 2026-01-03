@@ -53,6 +53,7 @@ jobs:
           # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
           declare -A LIB_PATHS
           LIB_PATHS=(
+            ["akDanmaku"]="akDanmaku"
             ["av1Decoder"]="av1Decoder"
             ["ffmpegDecoder"]="ffmpegDecoder"
             ["libVLC"]="libVLC"
@@ -131,7 +132,7 @@ jobs:
         run: |
           echo "=== 最终项目完整性验证 ==="
           echo ""
-          echo "1. 验证预编译库:"
+          # echo "1. 验证预编译库:"
           for lib_dir in libs/*; do
             if [ -d "$lib_dir" ]; then
               lib_name=$(basename "$lib_dir")
@@ -140,14 +141,15 @@ jobs:
               echo "  $lib_name: $aar_count个AAR文件, $kts_count个KTS文件"
             fi
           done
-          echo ""
-          echo "2. 验证源码模块:"
-          if [ -f "akdanmaku/build.gradle.kts" ] || [ -f "akdanmaku/build.gradle" ]; then
-            echo "  akdanmaku - 找到构建文件"
-          else
-            echo "  akdanmaku - 缺少构建文件！"
-            exit 1
-          fi
+          # 已在build-lib-akdanmaku工作流中构建并提交，此处不再验证，节约资源，减少时间
+          # echo ""
+          # echo "2. 验证源码模块:"
+          # if [ -f "akdanmaku/build.gradle.kts" ] || [ -f "akdanmaku/build.gradle" ]; then
+          #   echo "  akdanmaku - 找到构建文件"
+          # else
+          #   echo "  akdanmaku - 缺少构建文件！"
+          #   exit 1
+          # fi
  
       - name: Prepare gradle environment
         working-directory: ./fantasy-bv-source
@@ -172,12 +174,13 @@ jobs:
           EOF
 
       # 顺序构建（先编译akdanmaku，再构建主应用）
-      - name: Build danmaku module (akdanmaku)
-        working-directory: ./fantasy-bv-source
-        run: |
-          echo "=== 开始编译弹幕库 (akdanmaku) ==="
-          ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
-          echo "=== akdanmaku 编译完成 ==="
+      # 已在build-lib-akdanmaku工作流中构建并提交，此处不再单独构建，节约资源，减少时间
+      # - name: Build danmaku module (akdanmaku)
+      #   working-directory: ./fantasy-bv-source
+      #   run: |
+      #     echo "=== 开始编译弹幕库 (akdanmaku) ==="
+      #     ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
+      #     echo "=== akdanmaku 编译完成 ==="
  
       - name: Build release apk files
         working-directory: ./fantasy-bv-source
@@ -224,7 +227,7 @@ jobs:
           # 要附加到此次发布的文件列表
           files: |
             fantasy-bv-source/app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk
-            fantasy-bv-source/akdanmaku/build/outputs/aar/**/*release*.aar
+            # fantasy-bv-source/akdanmaku/build/outputs/aar/**/*release*.aar
             # fantasy-bv-source/app/build/outputs/apk/default/release/*.apk
           # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
           draft: false
