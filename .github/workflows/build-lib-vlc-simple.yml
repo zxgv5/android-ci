@@ -24,7 +24,7 @@ jobs:
           sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev g++-multilib gcc-multilib libasound2-dev libx11-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libmbedtls-dev libpng-dev libturbojpeg-dev libuv1-dev libvorbis-dev
           sudo apt install automake ant autopoint cmake build-essential libtool-bin \
               patch pkg-config protobuf-compiler ragel subversion unzip git \
-              flex python2 wget
+              flex python3 wget
 
       - name: Setup Android NDK
         uses: nttld/setup-ndk@main
