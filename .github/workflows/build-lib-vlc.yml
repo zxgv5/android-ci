@@ -1,14 +1,14 @@
 name: build-lib-vlc
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   VLC_REPO_URL: 'https://github.com/videolan/vlc-android.git'
   VLC_BRANCH: 'master'
   AAR_NAME: 'libvlc-release.aar'
-
+ 
 jobs:
   build:
     timeout-minutes: 360  # 6小时，最大可以设置到360分钟
@@ -132,7 +132,18 @@ jobs:
           # 将这些变量导出到后续步骤
           echo "ANDROID_SDK=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_NDK=$ANDROID_NDK_ROOT" >> $GITHUB_ENV
+
+      - name: Pre-download missing dependencies
+        run: |
+          mkdir -p ~/.gradle
+          echo "systemProp.http.proxyHost=mirrors.tencentyun.com" >> ~/.gradle/gradle.properties
+          echo "systemProp.https.proxyHost=mirrors.tencentyun.com" >> ~/.gradle/gradle.properties
           
+          # 使用镜像源下载
+          cd /tmp
+          wget https://mirrors.tencentyun.com/apache/protobuf/protobuf-3.1.0.tar.gz
+          # 将文件复制到正确位置
+
       - name: Build libvlc for arm64-v8a architecture
         run: |
           cd "$GITHUB_WORKSPACE"/vlc-android
@@ -438,7 +449,7 @@ jobs:
             ${{ github.workspace }}/libvlc-release.aar
           draft: false
           prerelease: false
-
+ 
       # - name: Push vlc aar to bv-libs repository
       #   env:
       #     TARGET_REPO: "git@github.com:zxgv5/bv-libs.git"
@@ -512,7 +523,7 @@ jobs:
       #     # 清理 SSH 密钥
       #     rm -f ~/.ssh/id_ed25519
       #     rm -f ~/.ssh/config
-
+ 
       # 可选：缓存构建结果以加速后续构建
       # - name: Cache build artifacts
       #   uses: actions/cache@v3
