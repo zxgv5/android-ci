@@ -1,7 +1,7 @@
 name: build-lib-vlc-simple
 
 on:
-  workflow_dispatch:  # 只支持手动触发，因为CI不在源仓库中
+  workflow_dispatch:
     inputs:
       source_branch:
         description: 'Source repository branch to build'
@@ -40,14 +40,23 @@ jobs:
         echo "Source directory size:"
         du -sh vlc-android-source/
     
-    - name: Setup java
+    - name: Setup java 17 for android sdk
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    
+    - name: Setup android sdk and ndk
+      uses: android-actions/setup-android@v3
+      with:
+        ndk-version: '25.2.9519653'
+        cmdline-tools-version: '11076708'  # 使用旧版本，兼容JDK 8
+    
+    - name: Setup java 8 for vlc build
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '8'
-    
-    - name: Setup android sdk
-      uses: android-actions/setup-android@v3
     
     - name: Install build dependencies
       run: |
@@ -87,9 +96,13 @@ jobs:
       run: |
         cd vlc-android-source
         
+        # 检查Android SDK和NDK
+        echo "Android SDK path: $ANDROID_SDK"
+        echo "Android NDK path: $ANDROID_NDK"
+        
         # 创建local.properties文件
-        echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-        echo "android.ndkPath=$ANDROID_NDK_ROOT" >> local.properties
+        echo "sdk.dir=$ANDROID_SDK" > local.properties
+        echo "ndk.dir=$ANDROID_NDK" >> local.properties
         
         # 创建gradle.properties文件
         echo "android.enableJetifier=true" > gradle.properties
