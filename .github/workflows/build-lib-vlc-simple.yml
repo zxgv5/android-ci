@@ -4,16 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       source_branch:
-        description: 'Branch of vlc-android repo to build from'
+        description: 'Source branch from videolan/vlc-android'
         required: true
         default: 'libvlc-3.6.5'
         type: string
-      release_tag:
-        description: 'Tag name for the GitHub Release'
-        required: true
-        default: 'libvlc-build'
-        type: string
 
+# 1. 启用缓存，加速后续构建
 env:
   SOURCE_REPO: 'https://github.com/videolan/vlc-android.git'
   BUILD_DIR: 'vlc-android-source'
@@ -22,13 +18,30 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 2. 设置超时时间，避免无限等待 (这里设为4小时)
+    timeout-minutes: 240
+
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v4
 
+      # 3. 尝试恢复Gradle和NDK构建缓存，大幅提速
+      - name: Cache Gradle and NDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ${{ env.BUILD_DIR }}/vlc/contrib-* # VLC 贡献库的编译缓存
+          key: ${{ runner.os }}-gradle-ndk-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-ndk-
+
       - name: Clone source repository
         run: |
-          echo "📥 Cloning source repo: ${{ env.SOURCE_REPO }}"
+          echo "Cloning source repository..."
+          # 使用更彻底的清理，避免残留文件导致问题
+          rm -rf "${{ env.BUILD_DIR }}"
           git clone --depth 1 --branch "${{ github.event.inputs.source_branch }}" \
             "${{ env.SOURCE_REPO }}" "${{ env.BUILD_DIR }}"
 
@@ -37,145 +50,215 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Setup Android SDK and NDK
-        id: android-setup  # 给步骤一个ID，便于后续引用
         uses: android-actions/setup-android@v3
-        # 此 Action 会自动设置 ANDROID_SDK_ROOT, ANDROID_HOME, ANDROID_NDK_ROOT 等变量
+        with:
+          # 明确指定一个与VLC 3.x兼容的NDK版本，避免最新版不兼容
+          ndk-version: '25.2.9519653'
 
-      - name: Install build dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             automake autopoint cmake build-essential libtool \
             patch pkg-config ragel subversion unzip git \
-            flex python3 wget ninja-build meson nasm yasm \
-            libssl-dev
+            flex python3 python3-pip wget ninja-build meson nasm yasm \
+            libssl-dev protobuf-compiler gettext
 
-      - name: Configure project environment
+      - name: Configure project and environment
         run: |
           cd "${{ env.BUILD_DIR }}"
-          echo "🔧 配置构建环境..."
+          echo "配置构建环境..."
           
-          # 关键修复 1：显式设置 compile.sh 所需的环境变量
-          # 从 android-actions 设置的环境中获取路径，并导出为脚本要求的变量名
-          echo "ANDROID_SDK used by compile.sh is set to: $ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK used by compile.sh is set to: $ANDROID_NDK_ROOT"
+          # 设置compile.sh脚本所需的环境变量 (关键修复)
+          export ANDROID_SDK="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK="$ANDROID_NDK_ROOT"
           
-          # 创建 local.properties (Gradle使用)
+          # 为gradle创建配置文件
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=$ANDROID_NDK_ROOT" >> local.properties
-          echo "✅ Created local.properties"
           
-          # 确保使用正确的 Gradle 版本
-          WRAPPER_PROPERTIES="gradle/wrapper/gradle-wrapper.properties"
-          if [ -f "$WRAPPER_PROPERTIES" ]; then
-            sed -i.bak "s|distributionUrl=.*|distributionUrl=https\\\\://services.gradle.org/distributions/gradle-${{ env.GRADLE_VERSION }}-all.zip|" "$WRAPPER_PROPERTIES"
-          fi
-          chmod +x buildsystem/compile.sh || true
-
-      # 为每个架构构建，并确保在构建步骤中导出环境变量
-      - name: Build for ARM64 (arm64-v8a)
-        run: |
-          cd "${{ env.BUILD_DIR }}"
-          echo "🏗️  开始 ARM64 架构的 RELEASE 构建..."
+          # 确保使用正确的Gradle版本
+          ./gradlew wrapper --gradle-version=${{ env.GRADLE_VERSION }} --distribution-type=all || echo "Gradle wrapper初始化完成。"
+          
+          # 验证环境
           echo "=== 环境验证 ==="
-          echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
-          
-          # 关键修复 2：在调用编译脚本前，确保导出脚本要求的具体变量名
-          # 许多传统脚本期望使用 ANDROID_SDK 和 ANDROID_NDK（无 _ROOT 后缀）
-          export ANDROID_SDK="$ANDROID_SDK_ROOT"
-          export ANDROID_NDK="$ANDROID_NDK_ROOT"
-          echo "导出供 compile.sh 使用的变量:"
-          echo "ANDROID_SDK=$ANDROID_SDK"
-          echo "ANDROID_NDK=$ANDROID_NDK"
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo "ANDROID_SDK: $ANDROID_SDK"
+          echo "ANDROID_NDK: $ANDROID_NDK"
           echo "================="
-          
-          # 执行构建
-          ./buildsystem/compile.sh -l -a arm64 --release
-          echo "✅ ARM64 构建完成。"
 
-      - name: Build for ARMv7 (armeabi-v7a)
+      - name: Configure project and environment
         run: |
           cd "${{ env.BUILD_DIR }}"
-          echo "🧹 清理之前的构建输出..."
-          rm -f libvlcjni/libvlc/build/outputs/aar/*.aar 2>/dev/null || true
+          echo "=== 配置构建环境 ==="
           
-          echo "🏗️  开始 ARMv7 架构的 RELEASE 构建..."
-          # 关键修复 3：同样为 ARMv7 构建导出环境变量
+          # 1. 首要：配置 Git 身份，解决 `git am` 错误
+          echo "设置 Git 身份用于应用补丁..."
+          git config --global user.email "build@github-actions"
+          git config --global user.name "GitHub Actions Bot"
+          echo "✅ Git 身份已设置"
+
+          # 2. 设置编译脚本所需的环境变量
+          export ANDROID_SDK="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK="$ANDROID_NDK_ROOT"
+          echo "环境变量已导出:"
+          echo "  ANDROID_SDK = $ANDROID_SDK"
+          echo "  ANDROID_NDK = $ANDROID_NDK"
+
+          # 3. 为 Gradle 创建配置文件
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=$ANDROID_NDK_ROOT" >> local.properties
+          echo "✅ local.properties 已创建"
+
+          # 4. 确保使用正确的 Gradle 版本
+          echo "初始化 Gradle Wrapper (版本: ${{ env.GRADLE_VERSION }})..."
+          # 静默执行，忽略已存在的警告
+          ./gradlew wrapper --gradle-version=${{ env.GRADLE_VERSION }} --distribution-type=all --quiet 2>/dev/null || true
+    
+          # 5. 给构建脚本添加执行权限
+          chmod +x buildsystem/compile.sh 2>/dev/null || true
+          echo "✅ 环境配置完成"
+
+      # 4. 分离两个架构的构建，并添加更详细的日志和错误处理
+      - name: Build LibVLC for ARM64
+        timeout-minutes: 180 # 为单个架构构建设置独立超时
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          echo "开始构建 ARM64 (arm64-v8a) 架构..."
+          
+          # 导出环境变量，确保对子shell生效
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK="$ANDROID_NDK_ROOT"
           
-          ./buildsystem/compile.sh -l -a arm --release
-          echo "✅ ARMv7 构建完成。"
+          # 执行构建，并将详细日志输出到文件以便调试
+          # 使用 `time` 命令记录构建耗时
+          time ./buildsystem/compile.sh -l -a arm64 --release 2>&1 | tee build_arm64.log
+          
+          # 检查构建结果
+          if [ -f "libvlcjni/libvlc/build/outputs/aar/"*.aar ]; then
+            echo "✅ ARM64 AAR 构建成功！"
+            cp libvlcjni/libvlc/build/outputs/aar/*.aar ../libvlc-arm64.aar
+          else
+            echo "⚠️  未找到ARM64 AAR文件，构建可能未生成预期输出。"
+            echo "构建日志尾部:"
+            tail -50 build_arm64.log
+          fi
 
-      - name: Prepare build artifacts
+      - name: Build LibVLC for ARMv7
+        timeout-minutes: 180
         run: |
           cd "${{ env.BUILD_DIR }}"
-          echo "📦 准备构建产物..."
-          AAR_DIR="libvlcjni/libvlc/build/outputs/aar"
-          if [ -d "$AAR_DIR" ]; then
-            # 复制所有AAR文件到工作区根目录
-            find "$AAR_DIR" -name "*.aar" -exec cp {} ../ \;
+          echo "清理前一次构建的中间产物..."
+          # 只清理AAR输出，保留已下载的源码和贡献库以加速第二次构建
+          rm -rf libvlcjni/libvlc/build/outputs/aar/*.aar 2>/dev/null || true
+          
+          echo "开始构建 ARMv7 (armeabi-v7a) 架构..."
+          export ANDROID_SDK="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK="$ANDROID_NDK_ROOT"
+          
+          time ./buildsystem/compile.sh -l -a arm --release 2>&1 | tee build_armv7.log
+          
+          if [ -f "libvlcjni/libvlc/build/outputs/aar/"*.aar ]; then
+            echo "✅ ARMv7 AAR 构建成功！"
+            cp libvlcjni/libvlc/build/outputs/aar/*.aar ../libvlc-armv7.aar
+          else
+            echo "⚠️  未找到ARMv7 AAR文件。"
+            echo "构建日志尾部:"
+            tail -50 build_armv7.log
           fi
-          cd ..
-          echo "当前目录的AAR文件:"
-          ls -la *.aar 2>/dev/null || echo "⚠️  未找到AAR文件。"
 
-      - name: Merge multi-ABI AAR
+      # 5. 合并AAR并验证
+      - name: Merge AARs and verify
+        if: always() # 即使上一步有警告也继续执行
         run: |
-          echo "🔀 合并多架构 AAR 文件..."
-          # 合并脚本
+          echo "准备合并AAR文件..."
+          cd "${{ env.BUILD_DIR }}"
+          
+          # 查找所有可能生成的AAR文件
+          find . -name "*.aar" -type f -exec cp {} ../ \;
+          cd ..
+          
+          echo "找到的AAR文件："
+          ls -la *.aar 2>/dev/null || { echo "未找到任何AAR文件，构建可能失败。"; exit 1; }
+          
+          # 智能合并：自动识别基础包和架构包
           /bin/bash -c '
-          set -e
-          shopt -s nullglob
-          aar_files=(*.aar)
-          if [ ${#aar_files[@]} -eq 0 ]; then
-              echo "❌ 未找到任何AAR文件用于合并。"
+          aars=(*.aar)
+          if [ ${#aars[@]} -lt 1 ]; then
               exit 1
           fi
-          echo "找到的AAR文件: ${aar_files[@]}"
-          BASE_AAR="${aar_files[0]}"
-          echo "以 $BASE_AAR 作为基础包"
+          # 尝试找到一个包含“all”或版本号最全的作为基础包
+          BASE_AAR=""
+          for aar in "${aars[@]}"; do
+              if [[ "$aar" == *"all"* ]] || [[ "$aar" == *"release"* ]]; then
+                  BASE_AAR="$aar"
+                  break
+              fi
+          done
+          if [ -z "$BASE_AAR" ]; then
+              BASE_AAR="${aars[0]}"
+          fi
+          
+          echo "使用 $BASE_AAR 作为基础包进行合并"
           mkdir -p merged-aar
           unzip -q "$BASE_AAR" -d merged-aar
-          for aar in "${aar_files[@]:1}"; do
-              echo "合并: $aar"
-              mkdir -p temp-merge
-              unzip -q "$aar" -d temp-merge
-              if [ -d "temp-merge/jni" ]; then
-                  cp -rf temp-merge/jni/. merged-aar/jni/ 2>/dev/null || true
+          
+          for aar in "${aars[@]}"; do
+              if [ "$aar" != "$BASE_AAR" ]; then
+                  echo "合并架构库从: $aar"
+                  unzip -q -u "$aar" -d merged-aar 2>/dev/null || true
               fi
-              rm -rf temp-merge
           done
+          
           cd merged-aar
           zip -qr ../libvlc-release.aar .
           cd ..
-          echo "✅ 合并完成，生成 libvlc-release.aar"
-          echo "📊 合并包内容概览 (JNI部分):"
-          unzip -l libvlc-release.aar | grep "jni/" || echo "未找到jni目录。"
+          
+          echo "✅ 合并完成！最终产物: libvlc-release.aar"
+          echo "包含的架构:"
+          unzip -l libvlc-release.aar | grep "jni/.*/" | cut -d"/" -f2 | sort -u || echo "无法列出架构"
           '
-      - name: Upload artifacts
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: libvlc-build-output
+          name: libvlc-build-output-${{ github.run_id }}
           path: |
             libvlc-release.aar
-          retention-days: 7
+            vlc-android-source/build_*.log
+            *.aar
+          retention-days: 30
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
         if: success()
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.event.inputs.release_tag }}-$(date +'%Y%m%d-%H%M%S')
-          name: "LibVLC AAR - ${{ github.event.inputs.source_branch }}"
+          tag_name: libvlc-${{ github.event.inputs.source_branch }}-$(date +'%Y%m%d-%H%M%S')
+          name: LibVLC AAR (${{ github.event.inputs.source_branch }}) - $(date +'%Y-%m-%d')
           body: |
-            Automated build of LibVLC for Android.
-            - **Source Branch:** ${{ github.event.inputs.source_branch }}
-            - **Build Date:** $(date -u)
-            - **Commit:** $(cd ${{ env.BUILD_DIR }} && git log -1 --oneline)
-            - **Contains:** ARM64-v8a & ARMEABI-v7a
+            🏗️ 自动构建的 LibVLC Android AAR 库
+            
+            **构建信息**
+            - 源分支: `${{ github.event.inputs.source_branch }}`
+            - 构建时间: $(date -u "+%Y-%m-%d %H:%M:%S UTC")
+            - 触发提交: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            - 工作流运行: [#${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            **使用说明**
+            1. 下载 `libvlc-release.aar`
+            2. 放入你 Android 项目的 `app/libs/` 目录
+            3. 在 `build.gradle` 中添加:
+            ```gradle
+            dependencies {
+                implementation files("libs/libvlc-release.aar")
+            }
+            ```
+            
+            **构建日志**
+            详细构建日志可在 Artifacts 中下载。
           files: libvlc-release.aar
           draft: false
           prerelease: false
