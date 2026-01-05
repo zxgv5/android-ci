@@ -1,4 +1,4 @@
-name: build-lib-vlc
+name: build-lib-vlc-simple
  
 on:
   workflow_dispatch:
