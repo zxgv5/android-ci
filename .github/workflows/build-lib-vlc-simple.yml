@@ -5,7 +5,7 @@ on:
     branches: [ libvlc-3.6.5 ]
   pull_request:
     branches: [ libvlc-3.6.5 ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 env:
   ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -13,30 +13,26 @@ env:
   GRADLE_VERSION: 8.13
 
 jobs:
-  Build-libvlc:
+  Build:
     runs-on: ubuntu-latest
     
-    strategy:
-      matrix:
-        abi: [arm64-v8a, armeabi-v7a]
-    
     steps:
-    - name: Checkout-code
+    - name: Checkout code
       uses: actions/checkout@v4
       with:
         ref: libvlc-3.6.5
         submodules: recursive
     
-    - name: Setup-java
+    - name: Setup java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '8'
     
-    - name: Setup-android-sdk
+    - name: Setup android sdk
       uses: android-actions/setup-android@v3
     
-    - name: Install-build-dependencies
+    - name: Install build dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -65,17 +61,17 @@ jobs:
           gobject-introspection \
           libgirepository1.0-dev
     
-    - name: Setup-gradle
+    - name: Setup gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: ${{ env.GRADLE_VERSION }}
     
-    - name: Configure-local-properties
+    - name: Configure local properties
       run: |
         echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
         echo "android.ndkPath=$ANDROID_NDK_ROOT" >> local.properties
     
-    - name: Create-gradle-properties
+    - name: Create gradle properties
       run: |
         echo "android.enableJetifier=true" > gradle.properties
         echo "android.useAndroidX=true" >> gradle.properties
@@ -86,102 +82,155 @@ jobs:
         echo "storealias=androiddebugkey" >> gradle.properties
         echo "storepwd=android" >> gradle.properties
     
-    - name: Initialize-gradle-wrapper
+    - name: Initialize gradle wrapper
       run: |
         chmod +x gradlew || true
         ./gradlew wrapper --gradle-version=$GRADLE_VERSION || echo "Gradle wrapper initialized"
     
-    - name: Build-libvlc-for-${{ matrix.abi }}
+    - name: Build libvlc for arm64
       run: |
         export ANDROID_SDK="$ANDROID_SDK_ROOT"
         export ANDROID_NDK="$ANDROID_NDK_ROOT"
         export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
         
-        # 设置架构参数
-        if [ "${{ matrix.abi }}" = "arm64-v8a" ]; then
-          ARCH="arm64"
-          GRADLE_ABI="ARMv8"
-        else
-          ARCH="arm"
-          GRADLE_ABI="ARMv7"
-        fi
+        echo "Building for ABI: arm64-v8a, ARCH: arm64 with release configuration"
         
-        echo "Building for ABI: ${{ matrix.abi }}, ARCH: $ARCH"
-        
-        # 构建libvlc
+        # 构建libvlc，使用release模式
         chmod +x buildsystem/compile.sh
-        ./buildsystem/compile.sh -l -a $ARCH --release
+        ./buildsystem/compile.sh -l -a arm64 --release
         
-        # 查找生成的aar文件
-        AAR_FILE=$(find . -name "*.aar" -type f | grep -i release | head -1)
-        if [ -n "$AAR_FILE" ]; then
-          echo "Found AAR: $AAR_FILE"
-          mv "$AAR_FILE" "libvlc-${{ matrix.abi }}-release.aar"
+        # 查找生成的aar文件（release版本）
+        echo "Looking for release AAR files..."
+        
+        # 在libvlc模块的输出目录中查找
+        if [ -d "libvlcjni/libvlc/build/outputs/aar" ]; then
+          echo "Checking libvlcjni/libvlc/build/outputs/aar directory..."
+          find libvlcjni/libvlc/build/outputs/aar -name "*.aar" -type f
+          
+          # 优先查找release版本
+          AAR_FILE=$(find libvlcjni/libvlc/build/outputs/aar -name "*release*.aar" -type f | head -1)
+          if [ -z "$AAR_FILE" ]; then
+            # 如果没有release字样，取第一个aar文件
+            AAR_FILE=$(find libvlcjni/libvlc/build/outputs/aar -name "*.aar" -type f | head -1)
+          fi
         else
-          # 如果没找到，尝试在libvlcjni目录中查找
-          AAR_FILE=$(find libvlcjni -name "*.aar" -type f | grep -i release | head -1)
-          if [ -n "$AAR_FILE" ]; then
-            echo "Found AAR in libvlcjni: $AAR_FILE"
-            mv "$AAR_FILE" "libvlc-${{ matrix.abi }}-release.aar"
+          echo "libvlcjni/libvlc/build/outputs/aar directory not found, searching in whole project..."
+          AAR_FILE=$(find . -name "*.aar" -type f | grep -E "(release|Release)" | head -1)
+          if [ -z "$AAR_FILE" ]; then
+            AAR_FILE=$(find . -name "*.aar" -type f | head -1)
           fi
         fi
-    
-    - name: Upload-build-artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: libvlc-${{ matrix.abi }}-release
-        path: |
-          libvlc-*.aar
-          .dbg/${{ matrix.abi }}/*.so
-        retention-days: 7
-  
-  Merge-and-release:
-    needs: Build-libvlc
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/libvlc-3.6.5'
-    
-    steps:
-    - name: Download-all-artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-        pattern: libvlc-*-release
-        merge-multiple: true
-    
-    - name: Merge-multi-abi-aar
-      run: |
-        echo "Merging multi-ABI AAR files..."
         
-        # 创建临时目录
-        mkdir -p merged-aar
-        
-        # 解压第一个aar作为基础
-        FIRST_AAR=$(find artifacts -name "*.aar" | head -1)
-        if [ -z "$FIRST_AAR" ]; then
-          echo "No AAR files found!"
+        if [ -n "$AAR_FILE" ]; then
+          echo "Found AAR: $AAR_FILE"
+          mv "$AAR_FILE" "libvlc-arm64-release.aar"
+        else
+          echo "ERROR: No AAR file found for arm64 build!"
           exit 1
         fi
         
-        echo "Using $FIRST_AAR as base"
-        unzip -q "$FIRST_AAR" -d merged-aar
+        # 复制构建的so文件（可选）
+        mkdir -p build-output/arm64
+        find . -name "*.so" -type f -path "*/arm64*" -exec cp {} build-output/arm64/ \; 2>/dev/null || true
+    
+    - name: Build libvlc for arm
+      run: |
+        export ANDROID_SDK="$ANDROID_SDK_ROOT"
+        export ANDROID_NDK="$ANDROID_NDK_ROOT"
+        export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+        
+        echo "Building for ABI: armeabi-v7a, ARCH: arm with release configuration"
+        
+        # 清理之前的构建，确保重新构建（可选）
+        rm -rf libvlcjni/libvlc/build/outputs/aar/*.aar 2>/dev/null || true
+        
+        # 构建libvlc，使用release模式
+        chmod +x buildsystem/compile.sh
+        ./buildsystem/compile.sh -l -a arm --release
+        
+        # 查找生成的aar文件（release版本）
+        echo "Looking for release AAR files..."
+        
+        # 在libvlc模块的输出目录中查找
+        if [ -d "libvlcjni/libvlc/build/outputs/aar" ]; then
+          echo "Checking libvlcjni/libvlc/build/outputs/aar directory..."
+          find libvlcjni/libvlc/build/outputs/aar -name "*.aar" -type f
+          
+          # 优先查找release版本
+          AAR_FILE=$(find libvlcjni/libvlc/build/outputs/aar -name "*release*.aar" -type f | head -1)
+          if [ -z "$AAR_FILE" ]; then
+            # 如果没有release字样，取第一个aar文件
+            AAR_FILE=$(find libvlcjni/libvlc/build/outputs/aar -name "*.aar" -type f | head -1)
+          fi
+        else
+          echo "libvlcjni/libvlc/build/outputs/aar directory not found, searching in whole project..."
+          AAR_FILE=$(find . -name "*.aar" -type f | grep -E "(release|Release)" | head -1)
+          if [ -z "$AAR_FILE" ]; then
+            AAR_FILE=$(find . -name "*.aar" -type f | head -1)
+          fi
+        fi
+        
+        if [ -n "$AAR_FILE" ]; then
+          echo "Found AAR: $AAR_FILE"
+          mv "$AAR_FILE" "libvlc-arm-release.aar"
+        else
+          echo "ERROR: No AAR file found for arm build!"
+          exit 1
+        fi
+        
+        # 复制构建的so文件（可选）
+        mkdir -p build-output/arm
+        find . -name "*.so" -type f -path "*/armeabi-v7a*" -exec cp {} build-output/arm/ \; 2>/dev/null || true
+    
+    - name: Merge multi abi aar
+      run: |
+        echo "Merging multi-ABI AAR files..."
+        
+        # 检查是否有至少一个aar文件
+        if [ ! -f "libvlc-arm64-release.aar" ] && [ ! -f "libvlc-arm-release.aar" ]; then
+          echo "ERROR: No AAR files found to merge!"
+          exit 1
+        fi
+        
+        # 创建临时目录
+        mkdir -p merged-aar/jni
+        
+        # 使用第一个可用的aar作为基础
+        if [ -f "libvlc-arm64-release.aar" ]; then
+          BASE_AAR="libvlc-arm64-release.aar"
+        else
+          BASE_AAR="libvlc-arm-release.aar"
+        fi
+        
+        echo "Using $BASE_AAR as base"
+        unzip -q "$BASE_AAR" -d merged-aar
         
         # 合并其他ABI的so文件
-        for AAR in artifacts/*.aar; do
-          if [ "$AAR" != "$FIRST_AAR" ]; then
-            echo "Merging $AAR"
-            # 创建临时目录解压
-            mkdir -p temp-aar
-            unzip -q "$AAR" -d temp-aar
-            
-            # 复制jni目录（如果存在）
-            if [ -d "temp-aar/jni" ]; then
-              cp -r temp-aar/jni/* merged-aar/jni/ 2>/dev/null || true
-            fi
-            
-            # 清理临时目录
-            rm -rf temp-aar
+        if [ -f "libvlc-arm-release.aar" ] && [ "$BASE_AAR" != "libvlc-arm-release.aar" ]; then
+          echo "Merging libvlc-arm-release.aar"
+          mkdir -p temp-aar
+          unzip -q "libvlc-arm-release.aar" -d temp-aar
+          
+          # 复制jni目录（如果存在）
+          if [ -d "temp-aar/jni" ]; then
+            cp -r temp-aar/jni/* merged-aar/jni/ 2>/dev/null || true
           fi
-        done
+          
+          rm -rf temp-aar
+        fi
+        
+        if [ -f "libvlc-arm64-release.aar" ] && [ "$BASE_AAR" != "libvlc-arm64-release.aar" ]; then
+          echo "Merging libvlc-arm64-release.aar"
+          mkdir -p temp-aar
+          unzip -q "libvlc-arm64-release.aar" -d temp-aar
+          
+          # 复制jni目录（如果存在）
+          if [ -d "temp-aar/jni" ]; then
+            cp -r temp-aar/jni/* merged-aar/jni/ 2>/dev/null || true
+          fi
+          
+          rm -rf temp-aar
+        fi
         
         # 重新打包为aar
         cd merged-aar
@@ -189,28 +238,79 @@ jobs:
         cd ..
         
         # 显示文件信息
-        echo "Generated merged AAR:"
+        echo "Generated merged AAR: libvlc-release.aar"
         ls -lh libvlc-release.aar
         
         # 验证内容
-        echo "Contents of merged AAR:"
-        unzip -l libvlc-release.aar | grep -E "(\.so$|AndroidManifest\.xml|classes\.jar)" | head -20
+        echo "Checking contents of merged AAR (JNI libraries):"
+        unzip -l libvlc-release.aar | grep "\.so$" || echo "No .so files found"
+        
+        echo "Checking for AndroidManifest.xml and classes.jar:"
+        unzip -l libvlc-release.aar | grep -E "(AndroidManifest\.xml|classes\.jar)" || echo "Required files not found"
     
-    - name: Create-release
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: libvlc-release-build
+        path: |
+          libvlc-release.aar
+          libvlc-*-release.aar
+          build-output/
+        retention-days: 30
+    
+    - name: Create release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/libvlc-3.6.5'
       uses: softprops/action-gh-release@v1
       with:
         files: |
           libvlc-release.aar
         tag_name: libvlc-v3.6.5-$(date +'%Y%m%d-%H%M%S')
-        name: LibVLC 3.6.5 Build
+        name: LibVLC 3.6.5 Release Build
         body: |
-          Multi-ABI LibVLC release build
+          # LibVLC 3.6.5 Multi-ABI Release Build
           
-          Contains:
+          This release contains a merged AAR file with both ARM architectures:
           - ARM64 (arm64-v8a)
           - ARMv7 (armeabi-v7a)
           
-          Built from branch: ${{ github.ref }}
-          Commit: ${{ github.sha }}
+          ## Build Information
+          - Branch: ${{ github.ref }}
+          - Commit: ${{ github.sha }}
+          - Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          ## Usage
+          
+          Add this to your app's `build.gradle`:
+          
+          ```gradle
+          dependencies {
+              implementation files('libvlc-release.aar')
+          }
+          ```
+          
+          Or if you're using a local Maven repository:
+          
+          ```gradle
+          repositories {
+              flatDir {
+                  dirs 'libs'
+              }
+          }
+          
+          dependencies {
+              implementation name: 'libvlc-release', ext: 'aar'
+          }
+          ```
+          
+          ## AAR Contents
+          
+          This AAR contains the following JNI libraries:
+          - libvlc.so (VLC core library)
+          - libvlcjni.so (JNI bindings)
+          - Other required VLC dependencies
+          
+          ## License
+          
+          This build is licensed under the LGPLv2.1 license.
         draft: false
         prerelease: false
