@@ -139,44 +139,44 @@ jobs:
           echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
 
-- name: Build libvlc for armeabi-v7a
-  run: |
-    cd "${{ env.BUILD_DIR }}"
-    echo "清理前一次构建的中间产物..."
-    rm -rf libvlcjni/libvlc/build/outputs/aar/*.aar 2>/dev/null || true
+      - name: Build libvlc for armeabi-v7a
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          echo "清理前一次构建的中间产物..."
+          rm -rf libvlcjni/libvlc/build/outputs/aar/*.aar 2>/dev/null || true
     
-    echo "检查当前 NDK 环境..."
-    # 备份并移除可能冲突的 NDK
-    if [ -d "$ANDROID_SDK_ROOT/ndk-bundle" ]; then
-      echo "发现 ndk-bundle，可能引起冲突，重命名..."
-      mv "$ANDROID_SDK_ROOT/ndk-bundle" "$ANDROID_SDK_ROOT/ndk-bundle.backup"
-    fi
+          echo "检查当前 NDK 环境..."
+          # 备份并移除可能冲突的 NDK
+          if [ -d "$ANDROID_SDK_ROOT/ndk-bundle" ]; then
+            echo "发现 ndk-bundle，可能引起冲突，重命名..."
+            mv "$ANDROID_SDK_ROOT/ndk-bundle" "$ANDROID_SDK_ROOT/ndk-bundle.backup"
+          fi
     
-    # 确保使用我们下载的 NDK r21
-    export ANDROID_NDK="${{ env.ANDROID_NDK }}"
-    export NDK_ROOT="${{ env.NDK_ROOT }}"
-    export ANDROID_NDK_ROOT="${{ env.ANDROID_NDK }}"
+          # 确保使用我们下载的 NDK r21
+          export ANDROID_NDK="${{ env.ANDROID_NDK }}"
+          export NDK_ROOT="${{ env.NDK_ROOT }}"
+          export ANDROID_NDK_ROOT="${{ env.ANDROID_NDK }}"
     
-    # 验证使用的 NDK
-    echo "使用的 NDK 路径: $ANDROID_NDK"
-    $ANDROID_NDK/ndk-build --version | head -5
+          # 验证使用的 NDK
+          echo "使用的 NDK 路径: $ANDROID_NDK"
+          $ANDROID_NDK/ndk-build --version | head -5
     
-    # 更新 local.properties
-    echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-    echo "ndk.dir=$ANDROID_NDK" >> local.properties
+          # 更新 local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=$ANDROID_NDK" >> local.properties
     
-    echo "开始构建 ARMv7 (armeabi-v7a) 架构..."
-    # 使用 -b 参数绕过一些检查（如果需要）
-    time ./buildsystem/compile.sh -l -a arm --release -t -b 2>&1 | tee build_armv7.log
+          echo "开始构建 ARMv7 (armeabi-v7a) 架构..."
+          # 使用 -b 参数绕过一些检查（如果需要）
+          time ./buildsystem/compile.sh -l -a arm --release -t -b 2>&1 | tee build_armv7.log
     
-    if ls libvlcjni/libvlc/build/outputs/aar/*.aar 1> /dev/null 2>&1; then
-      echo "✅ ARMv7 AAR 构建成功！"
-      cp libvlcjni/libvlc/build/outputs/aar/*.aar ../libvlc-armv7.aar
-    else
-      echo "❌ 未找到ARMv7 AAR文件。关键错误如下:"
-      grep -A 10 -B 5 -i "error\|failed\|ndk\|could not\|v21 needed" build_armv7.log | head -100
-      exit 1
-    fi
+          if ls libvlcjni/libvlc/build/outputs/aar/*.aar 1> /dev/null 2>&1; then
+            echo "✅ ARMv7 AAR 构建成功！"
+            cp libvlcjni/libvlc/build/outputs/aar/*.aar ../libvlc-armv7.aar
+          else
+            echo "❌ 未找到ARMv7 AAR文件。关键错误如下:"
+            grep -A 10 -B 5 -i "error\|failed\|ndk\|could not\|v21 needed" build_armv7.log | head -100
+            exit 1
+          fi
     
       - name: Merge aars and verify
         if: always() # 即使上一步有警告也继续执行
