@@ -1,15 +1,15 @@
 name: build-lib-vlc
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   SOURCE_REPO: 'https://github.com/videolan/vlc-android.git'
   SOURCE_BRANCH: 'libvlc-3.6.5'
   BUILD_DIR: 'vlc-android-source'
   GRADLE_VERSION: '8.13'
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,7 +21,7 @@ jobs:
           
       - name: Checkout ci repo
         uses: actions/checkout@main
-        
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -40,18 +40,18 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Download and setup ndk r21 for armeabi-v7a build need
+      - name: Download and setup ndk r29 for armeabi-v7a build need
         run: |
           # 1. 创建 NDK 目录
           mkdir -p $ANDROID_SDK_ROOT/ndk
-          # 2. 下载官方 NDK r21 (以 Linux 64位为例)
-          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          # 2. 下载官方 NDK r29 (以 Linux 64位为例)
+          wget -q https://dl.google.com/android/repository/android-ndk-r29-linux.zip
           # 3. 解压到 SDK 的 ndk 目录下，并重命名为固定路径
-          unzip -q android-ndk-r21e-linux-x86_64.zip -d $ANDROID_SDK_ROOT/ndk/
-          mv $ANDROID_SDK_ROOT/ndk/android-ndk-r21e $ANDROID_SDK_ROOT/ndk/21.0.0
+          unzip -q android-ndk-r29-linux.zip -d $ANDROID_SDK_ROOT/ndk/
+          mv $ANDROID_SDK_ROOT/ndk/android-ndk-r29 $ANDROID_SDK_ROOT/ndk/29.0.0
           # 4. 设置环境变量（后续步骤和 compile.sh 都需要）
-          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
-          echo "NDK_ROOT=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
+          echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/29.0.0" >> $GITHUB_ENV
+          echo "NDK_ROOT=$ANDROID_SDK_ROOT/ndk/29.0.0" >> $GITHUB_ENV
 
       - name: Install system dependencies
         run: |
@@ -216,7 +216,7 @@ jobs:
             *.aar
           draft: false
           prerelease: false
- 
+
       # - name: Push vlc aar to bv-libs repository
       #   env:
       #     TARGET_REPO: "git@github.com:zxgv5/bv-libs.git"
@@ -290,7 +290,7 @@ jobs:
       #     # 清理 SSH 密钥
       #     rm -f ~/.ssh/id_ed25519
       #     rm -f ~/.ssh/config
- 
+
       # 可选：缓存构建结果以加速后续构建
       # - name: Cache build artifacts
       #   uses: actions/cache@main
