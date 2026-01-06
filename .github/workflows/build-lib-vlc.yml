@@ -14,6 +14,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space ubuntu-latest
+        uses: BRAINSia/free-disk-space@main
+        with:
+          tool-cache: false
+          mandb: true
+          android: true
+          dotnet: true
+          haskell: true
+          
       - name: Clean runner environment
         run: |
           rm -rf ~/.gradle/caches/transforms-*
@@ -40,7 +49,7 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Download and setup ndk r29 for armeabi-v7a build need
+      - name: Download and setup ndk r29
         run: |
           # 1. 创建 NDK 目录
           mkdir -p $ANDROID_SDK_ROOT/ndk
