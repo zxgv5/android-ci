@@ -13,6 +13,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Clean runner environment
         run: |
@@ -245,7 +247,8 @@ jobs:
           tag_name: ${{env.BUILD_DATE}}-vlclib
           files: |
             libvlc-release.aar
-            *.aar
+            libvlc-arm64.aar
+            libvlc-armv7.aar
           draft: false
           prerelease: false
 
