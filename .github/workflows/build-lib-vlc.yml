@@ -14,14 +14,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Free disk space ubuntu-latest
-        uses: BRAINSia/free-disk-space@main
-        with:
-          tool-cache: false
-          mandb: true
-          dotnet: true
-          haskell: true
-          
       - name: Clean runner environment
         run: |
           rm -rf ~/.gradle/caches/transforms-*
