@@ -48,8 +48,8 @@ jobs:
 
       - name: Customize scripts
         run: |
-          chmod +x $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
-          $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
+          chmod +x $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819-simple.sh
+          $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819-simple.sh
 
       - name: Merge libraries from monorepo structure
         run: |
