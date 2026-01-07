@@ -56,3 +56,75 @@ awk '
     next
 }
 1' "$FROST819_BV_SOURCE_ASMKDABCCP_PLAYSPEEDMENU" > "${FROST819_BV_SOURCE_ASMKDABCCP_PLAYSPEEDMENU}.tmp" && mv "${FROST819_BV_SOURCE_ASMKDABCCP_PLAYSPEEDMENU}.tmp" "$FROST819_BV_SOURCE_ASMKDABCCP_PLAYSPEEDMENU"
+
+# 配合倍速设置修改
+# FROST819_BV_SOURCE_ASMRV_STRINGS="$FROST819_BV_SOURCE_ROOT/app/src/main/res/values/strings.xml"
+# 使用awk处理：找到包含播放速度字符串的区域，然后替换
+awk '
+# 定义新的播放速度字符串数组
+BEGIN {
+    new_strings[1] = "    <string name=\"play_speed_x0_25\">0.25</string>"
+    new_strings[2] = "    <string name=\"play_speed_x0_5\">0.5</string>"
+    new_strings[3] = "    <string name=\"play_speed_x0_75\">0.75</string>"
+    new_strings[4] = "    <string name=\"play_speed_x1\">1.0</string>"
+    new_strings[5] = "    <string name=\"play_speed_x1_25\">1.25</string>"
+    new_strings[6] = "    <string name=\"play_speed_x1_5\">1.5</string>"
+    new_strings[7] = "    <string name=\"play_speed_x1_75\">1.75</string>"
+    new_strings[8] = "    <string name=\"play_speed_x2\">2.0</string>"
+    new_strings[9] = "    <string name=\"play_speed_x2_25\">2.25</string>"
+    new_strings[10] = "    <string name=\"play_speed_x2_5\">2.5</string>"
+    new_strings[11] = "    <string name=\"play_speed_x2_75\">2.75</string>"
+    new_strings[12] = "    <string name=\"play_speed_x3\">3.0</string>"
+    new_strings[13] = "    <string name=\"play_speed_x3_25\">3.25</string>"
+    new_strings[14] = "    <string name=\"play_speed_x3_5\">3.5</string>"
+    new_strings[15] = "    <string name=\"play_speed_x3_75\">3.75</string>"
+    new_strings[16] = "    <string name=\"play_speed_x4\">4.0</string>"
+    new_strings[17] = "    <string name=\"play_speed_x4_25\">4.25</string>"
+    new_strings[18] = "    <string name=\"play_speed_x4_5\">4.5</string>"
+    new_strings[19] = "    <string name=\"play_speed_x4_75\">4.75</string>"
+    new_strings[20] = "    <string name=\"play_speed_x5\">5.0</string>"
+    in_play_speed_block = 0
+    play_speed_printed = 0
+}
+
+# 检测到第一个播放速度字符串时，开始标记块
+/play_speed_x0_5/ {
+    in_play_speed_block = 1
+    # 不打印原有的播放速度字符串，直接打印新的
+    for (i=1; i<=20; i++) {
+        print new_strings[i]
+    }
+    # 在播放速度字符串后添加一个空行
+    print ""
+    play_speed_printed = 1
+    next
+}
+
+# 如果在播放速度块中，跳过其他原有的播放速度字符串
+in_play_speed_block && /play_speed_x[0-9]/ {
+    next
+}
+
+# 如果遇到其他字符串，结束播放速度块标记
+/^    <string name="[^"]*">/ && !/play_speed/ {
+    in_play_speed_block = 0
+}
+
+# 打印其他所有行
+{
+    if (!in_play_speed_block) {
+        print $0
+    }
+}
+
+END {
+    # 如果文件中没有任何播放速度字符串，在文件末尾添加
+    if (!play_speed_printed) {
+        for (i=1; i<=20; i++) {
+            print new_strings[i]
+        }
+        # 在播放速度字符串后添加一个空行
+        print ""
+    }
+}
+' "$FROST819_BV_SOURCE_ASMRV_STRINGS" > "${FROST819_BV_SOURCE_ASMRV_STRINGS}.tmp" && mv "${FROST819_BV_SOURCE_ASMRV_STRINGS}.tmp" "$FROST819_BV_SOURCE_ASMRV_STRINGS"
