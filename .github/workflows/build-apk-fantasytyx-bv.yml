@@ -31,7 +31,8 @@ jobs:
       - name: Checkout source repo (fantasy-bv)
         uses: actions/checkout@main
         with:
-          repository: zxgv5/fantasy-bv
+          # repository: zxgv5/fantasy-bv
+          repository: fantasytyx/bv
           ref: develop
           path: fantasy-bv-source
           fetch-depth: 0
