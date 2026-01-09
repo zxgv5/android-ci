@@ -88,44 +88,44 @@ jobs:
             exit 1
           }
 
-      # - name: Replace config.js with secured version
-      #   run: |
-      #     echo "正在替换 utils/config.js 文件..."
-      #     
-      #     # 确保utils目录存在
-      #     if [ ! -d "utils" ]; then
-      #       mkdir -p utils
-      #       echo "创建了 utils 目录"
-      #     fi
-      #     
-      #     # 从secrets中获取base64编码的config.js内容并解码
-      #     if [ -z "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" ]; then
-      #       echo "错误: ACODE_BUILD_CONFIGJS_BASE64 secret 为空!"
-      #       exit 1
-      #     fi
-      #     
-      #     echo "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" | base64 -d > utils/config.js
-      #     
-      #     # 验证文件是否成功写入
-      #     if [ ! -f "utils/config.js" ]; then
-      #       echo "错误: 无法创建 utils/config.js 文件!"
-      #       exit 1
-      #     fi
-      #     
-      #     # 验证文件内容（检查是否是有效的JavaScript）
-      #     if ! node -c utils/config.js 2>/dev/null; then
-      #       echo "警告: utils/config.js 不是有效的JavaScript文件"
-      #       echo "文件内容预览（前10行）:"
-      #       head -10 utils/config.js
-      #     else
-      #       echo "✓ utils/config.js 是有效的JavaScript文件"
-      #     fi
-      #     
-      #     # 显示文件大小和基本信息
-      #     echo "文件信息:"
-      #     ls -la utils/config.js
-      #     echo "文件行数: $(wc -l < utils/config.js)"
-      #     echo "✓ utils/config.js 文件替换完成"
+      - name: Replace config.js with secured version
+        run: |
+          echo "正在替换 utils/config.js 文件..."
+          
+          # 确保utils目录存在
+          if [ ! -d "utils" ]; then
+            mkdir -p utils
+            echo "创建了 utils 目录"
+          fi
+          
+          # 从secrets中获取base64编码的config.js内容并解码
+          if [ -z "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" ]; then
+            echo "错误: ACODE_BUILD_CONFIGJS_BASE64 secret 为空!"
+            exit 1
+          fi
+          
+          echo "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" | base64 -d > utils/config.js
+          
+          # 验证文件是否成功写入
+          if [ ! -f "utils/config.js" ]; then
+            echo "错误: 无法创建 utils/config.js 文件!"
+            exit 1
+          fi
+          
+          # 验证文件内容（检查是否是有效的JavaScript）
+          if ! node -c utils/config.js 2>/dev/null; then
+            echo "警告: utils/config.js 不是有效的JavaScript文件"
+            echo "文件内容预览（前10行）:"
+            head -10 utils/config.js
+          else
+            echo "✓ utils/config.js 是有效的JavaScript文件"
+          fi
+          
+          # 显示文件大小和基本信息
+          echo "文件信息:"
+          ls -la utils/config.js
+          echo "文件行数: $(wc -l < utils/config.js)"
+          echo "✓ utils/config.js 文件替换完成"
 
       - name: Extract versionCode and version from config.xml
         id: extract_version
