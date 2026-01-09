@@ -250,7 +250,7 @@ jobs:
       - name: Install 7zip
         run: sudo apt-get update && sudo apt-get install -y p7zip-full
 
-      - name: Create AES256 encrypted archive with filename encryption
+      - name: Create aes256 encrypted archive with filename encryption
         run: |
           7z a \
             -p"${{ secrets.ZIP_AES256_PWD }}" \
@@ -261,9 +261,10 @@ jobs:
             -mfb=64 \
             -md=32m \
             -ms=on \
+            -mhc=on \
+            -ma=2 \
             /tmp/acode-${{ env.BUILD_DATE }}.7z \
             /tmp/acode-${{ env.BUILD_DATE }}.apk
-        shell: bash
 
       - name: Create github release & upload encrypted archive
         uses: softprops/action-gh-release@master
