@@ -36,30 +36,84 @@ jobs:
       # ========== 新增：准备bootstrap文件 ==========
       - name: Prepare bootstrap files
         run: |
-          echo "Downloading bootstrap files for Termux build"
+          echo "Downloading bootstrap files for all architectures"
           
           # 创建目录
           mkdir -p ./app/src/main/cpp/
           
-          # 下载bootstrap-aarch64.zip
-          BOOTSTRAP_URL="https://github.com/termux/termux-packages/releases/latest/download/bootstrap-aarch64.zip"
+          # 定义需要下载的bootstrap文件列表
+          # 根据Termux项目，通常有以下架构：
+          BOOTSTRAP_FILES=(
+            "bootstrap-aarch64.zip"   # arm64-v8a
+            "bootstrap-arm.zip"       # armeabi-v7a
+            "bootstrap-x86_64.zip"    # x86_64
+            "bootstrap-i686.zip"      # x86
+          )
           
-          if command -v curl >/dev/null 2>&1; then
-            curl -L -o ./app/src/main/cpp/bootstrap-aarch64.zip "$BOOTSTRAP_URL"
-          elif command -v wget >/dev/null 2>&1; then
-            wget -O ./app/src/main/cpp/bootstrap-aarch64.zip "$BOOTSTRAP_URL"
-          else
-            echo "ERROR: Neither curl nor wget is available"
-            exit 1
+          # 基础URL（GitHub Releases）
+          BASE_URL="https://github.com/termux/termux-packages/releases/latest/download"
+          
+          # 下载函数
+          download_bootstrap() {
+            local filename=$1
+            local url="${BASE_URL}/${filename}"
+            
+            echo "Downloading $filename..."
+            
+            if command -v curl >/dev/null 2>&1; then
+              if curl -L -f --retry 3 --retry-delay 2 -o "./app/src/main/cpp/${filename}" "$url"; then
+                echo "  Downloaded from GitHub Releases"
+                return 0
+              fi
+            elif command -v wget >/dev/null 2>&1; then
+              if wget -q -O "./app/src/main/cpp/${filename}" "$url"; then
+                echo "  Downloaded from GitHub Releases"
+                return 0
+              fi
+            else
+              echo "ERROR: Neither curl nor wget is available"
+              return 1
+            fi
+            
+            echo "  WARNING: Failed to download $filename"
+            return 1
+          }
+          
+          # 下载所有bootstrap文件
+          failed_downloads=()
+          for file in "${BOOTSTRAP_FILES[@]}"; do
+            if ! download_bootstrap "$file"; then
+              failed_downloads+=("$file")
+            fi
+          done
+          
+          # 检查是否至少下载了必要的文件
+          if [ ${#failed_downloads[@]} -gt 0 ]; then
+            echo "WARNING: Failed to download some bootstrap files:"
+            for file in "${failed_downloads[@]}"; do
+              echo "  - $file"
+            done
+            
+            # 检查是否至少下载了当前构建所需的文件
+            # 根据错误日志，我们需要bootstrap-aarch64.zip和bootstrap-arm.zip
+            if [ ! -f "./app/src/main/cpp/bootstrap-aarch64.zip" ] || [ ! -f "./app/src/main/cpp/bootstrap-arm.zip" ]; then
+              echo "ERROR: Missing essential bootstrap files for build"
+              exit 1
+            fi
           fi
           
-          # 验证下载
-          if [ ! -f "./app/src/main/cpp/bootstrap-aarch64.zip" ]; then
-            echo "ERROR: Failed to download bootstrap file"
-            exit 1
-          fi
+          echo "Downloaded bootstrap files:"
+          ls -lh ./app/src/main/cpp/bootstrap-*.zip
           
-          echo "Bootstrap file size: $(stat -c%s ./app/src/main/cpp/bootstrap-aarch64.zip) bytes"
+          # 验证文件大小（确保不是空文件）
+          for file in ./app/src/main/cpp/bootstrap-*.zip; do
+            if [ -f "$file" ]; then
+              size=$(stat -c%s "$file")
+              if [ "$size" -lt 1000 ]; then
+                echo "WARNING: $file is very small ($size bytes), might be corrupted"
+              fi
+            fi
+          done
       # ========== 结束新增 ==========
 
       - name: Build apk files and rename
