@@ -198,7 +198,7 @@ jobs:
           # 针对 universal 文件生成校验码
           (cd "$APK_DIR_PATH"; sha256sum "${APK_BASENAME_PREFIX}_universal.apk" > "${APK_BASENAME_PREFIX}_sha256sums")
           
-          mv "${{ env.APK_DIR_PATH }}/${{ env.APK_BASENAME_PREFIX }}_universal.apk" "${{ env.APK_DIR_PATH }}/termux-${{ env.BUILD_DATE }}.apk"
+          mv "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_universal.apk" "$APK_DIR_PATH/termux-$BUILD_DATE.apk"
 
       - name: Create github release & upload apk
         uses: softprops/action-gh-release@master
