@@ -6,7 +6,6 @@ on:
 
 env:
   SOURCE_REPO: 'https://github.com/videolan/vlc-android.git'
-  # SOURCE_BRANCH: 'libvlc-3.6.5'
   SOURCE_BRANCH: 'master'
   BUILD_DIR: 'vlc-android-source'
   GRADLE_VERSION: '8.13'
@@ -32,7 +31,6 @@ jobs:
       - name: Clone source repository
         run: |
           echo "Cloning source repository..."
-          # 使用更彻底的清理，避免残留文件导致问题
           rm -rf "${{ env.BUILD_DIR }}"
           git clone --depth 1 --branch "${{ env.SOURCE_BRANCH }}" "${{ env.SOURCE_REPO }}" "${{ env.BUILD_DIR }}"
 
@@ -57,111 +55,34 @@ jobs:
           cd "${{ env.BUILD_DIR }}"
           echo "=== 配置 Android 构建环境 ==="
           
-          # 1. 验证安装的 NDK 版本和路径
-          echo "检查 NDK 安装:"
-          if [ -n "$ANDROID_NDK_ROOT" ]; then
-            echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
-            ls -la $ANDROID_NDK_ROOT/ || echo "无法列出 NDK 目录"
-            # 检查 ndk-build 版本
-            if [ -f "$ANDROID_NDK_ROOT/ndk-build" ]; then
-              echo "NDK-Build 版本信息:"
-              $ANDROID_NDK_ROOT/ndk-build --version | head -5 || echo "无法获取 ndk-build 版本"
-            fi
-          else
-            echo "警告: ANDROID_NDK_ROOT 未设置"
-            # 尝试推断常见路径
-            if [ -d "$ANDROID_HOME/ndk" ]; then
-              export ANDROID_NDK_ROOT="$(find $ANDROID_HOME/ndk -maxdepth 1 -type d | head -2 | tail -1)"
-              echo "推断 ANDROID_NDK_ROOT 为: $ANDROID_NDK_ROOT"
-            fi
-          fi
-
-          # 2. 配置 Git 身份（解决之前的补丁应用问题）
+          # 设置Git身份
           git config --global user.email "ci@github-actions"
           git config --global user.name "GitHub Actions"
           
-          # 3. 确保脚本所需的环境变量（关键）
-          # actions/setup-android 设置的是 ANDROID_NDK_ROOT，但 VLC 脚本可能期望 ANDROID_NDK
+          # 导出编译变量
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK="$ANDROID_NDK_ROOT"
           echo "导出编译变量:"
           echo "  ANDROID_SDK=$ANDROID_SDK"
           echo "  ANDROID_NDK=$ANDROID_NDK"
           
-          # 4. 创建 Gradle 的 local.properties
+          # 创建 Gradle 的 local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=$ANDROID_NDK_ROOT" >> local.properties
           echo "✅ 创建 local.properties"
           
-          # 5. 初始化 Gradle wrapper
+          # 初始化 Gradle wrapper
           ./gradlew wrapper --gradle-version=${{ env.GRADLE_VERSION }} --distribution-type=all --quiet 2>/dev/null || true
           
           echo "✅ 环境配置完成"
 
-      - name: Modify vlc source code before building
+      - name: Modify vlc source code with correct patterns
         run: |
           cd "${{ env.BUILD_DIR }}"
           
-          echo "=== 修改VLC源代码 ==="
-          
-          # 等待VLC源代码被获取（通常在第一次构建时）
-          echo "等待VLC源代码被获取..."
-          if [ ! -d "libvlcjni/vlc" ]; then
-            echo "VLC源代码目录不存在，构建过程中会自动获取"
-            echo "将在构建后步骤中修改源代码"
-          else
-            # 修改源代码
-            echo "找到VLC源代码目录，开始修改..."
-            VLC_SRC_DIR="libvlcjni/vlc"
-            
-            # 1. 修改 /lib/core.c
-            echo "1. 修改 /lib/core.c..."
-            CORE_FILE="$VLC_SRC_DIR/lib/core.c"
-            if [ -f "$CORE_FILE" ]; then
-              sed -i 's/&& (asprintf (\&str, "%s LibVLC\/"PACKAGE_VERSION, http) != -1))/&& (asprintf (\&str, "%s abc_media_editor", http) != -1))/' "$CORE_FILE"
-              echo "✅ /lib/core.c 修改完成"
-            else
-              echo "⚠️  文件不存在: $CORE_FILE"
-            fi
-            
-            # 2. 修改 /src/libvlc.c - 第一处
-            echo "2. 修改 /src/libvlc.c - 第一处..."
-            LIBVLC_FILE="$VLC_SRC_DIR/src/libvlc.c"
-            if [ -f "$LIBVLC_FILE" ]; then
-              sed -i 's/"VLC media player (LibVLC "VERSION")"/"abc media editor"/' "$LIBVLC_FILE"
-              echo "✅ /src/libvlc.c 第一处修改完成"
-            else
-              echo "⚠️  文件不存在: $LIBVLC_FILE"
-            fi
-            
-            # 3. 修改 /src/libvlc.c - 第二处
-            echo "3. 修改 /src/libvlc.c - 第二处..."
-            if [ -f "$LIBVLC_FILE" ]; then
-              sed -i 's/"VLC\/"PACKAGE_VERSION" LibVLC\/"PACKAGE_VERSION/"abc\/abc_media_editor\/"/' "$LIBVLC_FILE"
-              echo "✅ /src/libvlc.c 第二处修改完成"
-            fi
-            
-            # 4. 修改 /modules/access/live555.cpp
-            echo "4. 修改 /modules/access/live555.cpp..."
-            LIVE555_FILE="$VLC_SRC_DIR/modules/access/live555.cpp"
-            if [ -f "$LIVE555_FILE" ]; then
-              sed -i 's/"LibVLC\/" VERSION/"abc_media_editor"/' "$LIVE555_FILE"
-              echo "✅ /modules/access/live555.cpp 修改完成"
-            else
-              echo "⚠️  文件不存在: $LIVE555_FILE"
-            fi
-            
-            # 验证修改
-            echo "=== 修改验证 ==="
-            for file in "$CORE_FILE" "$LIBVLC_FILE" "$LIVE555_FILE"; do
-              if [ -f "$file" ]; then
-                echo "文件: $(basename "$file")"
-                grep -n "abc_media_editor\|abc media editor" "$file" | head -2 || echo "  未找到修改"
-              fi
-            done
-            
-            echo "✅ VLC源代码修改完成"
-          fi
+          echo "=== 等待VLC源代码被获取 ==="
+          echo "注意：VLC源代码将在第一次构建时自动获取"
+          echo "我们将在构建后修改源代码"
 
       # 为每个架构构建
       - name: Build libvlc for arm64-v8a
@@ -172,29 +93,65 @@ jobs:
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK="$ANDROID_NDK_ROOT"
           
-          # 首次构建时，使用 -t 参数尝试使用预构建的贡献库以节省大量时间
-          # 如果预构建库不存在，脚本会自动回退到源码编译
-          # 使用 -b 参数跳过VLC源码检查（因为我们已经手动修改了）
-          time ./buildsystem/compile.sh -l -a arm64 --release -t -b 2>&1 | tee build_arm64.log
+          # 首次构建，获取VLC源代码
+          time ./buildsystem/compile.sh -l -a arm64 --release -t 2>&1 | tee build_arm64.log
           
-          # 构建完成后检查VLC源代码是否存在，如果不存在则再次修改
-          echo "检查构建后的VLC源代码..."
+          # 构建完成后修改源代码
+          echo "构建完成，开始修改VLC源代码..."
+          
           if [ -d "libvlcjni/vlc" ]; then
-            echo "构建后VLC源代码存在，确保修改已应用..."
             VLC_SRC_DIR="libvlcjni/vlc"
+            echo "找到VLC源代码目录: $VLC_SRC_DIR"
             
-            # 快速检查修改
-            if grep -q "abc_media_editor" "$VLC_SRC_DIR/lib/core.c" 2>/dev/null; then
-              echo "✅ VLC源代码修改已应用"
-            else
-              echo "⚠️  VLC源代码修改可能未应用，重新修改..."
-              # 重新应用修改
-              sed -i 's/&& (asprintf (\&str, "%s LibVLC\/"PACKAGE_VERSION, http) != -1))/&& (asprintf (\&str, "%s abc_media_editor", http) != -1))/' "$VLC_SRC_DIR/lib/core.c"
-              sed -i 's/"VLC media player (LibVLC "VERSION")"/"abc media editor"/' "$VLC_SRC_DIR/src/libvlc.c"
-              sed -i 's/"VLC\/"PACKAGE_VERSION" LibVLC\/"PACKAGE_VERSION/"abc\/abc_media_editor\/"/' "$VLC_SRC_DIR/src/libvlc.c"
-              sed -i 's/"LibVLC\/" VERSION/"abc_media_editor"/' "$VLC_SRC_DIR/modules/access/live555.cpp"
-              echo "✅ VLC源代码重新修改完成"
+            # 1. 修改 /lib/core.c - 使用正确的替换模式
+            echo "1. 修改 /lib/core.c..."
+            CORE_FILE="$VLC_SRC_DIR/lib/core.c"
+            if [ -f "$CORE_FILE" ]; then
+              # 备份原文件
+              cp "$CORE_FILE" "${CORE_FILE}.backup"
+              # 使用正确的sed模式 - 只替换部分内容，保持格式正确
+              sed -i 's/LibVLC\/"PACKAGE_VERSION/abc_media_editor/' "$CORE_FILE"
+              echo "✅ /lib/core.c 修改完成"
+              
+              # 验证修改
+              echo "修改验证:"
+              grep -n "abc_media_editor" "$CORE_FILE" || echo "未找到修改"
             fi
+            
+            # 2. 修改 /src/libvlc.c - 第一处
+            echo "2. 修改 /src/libvlc.c - 第一处..."
+            LIBVLC_FILE="$VLC_SRC_DIR/src/libvlc.c"
+            if [ -f "$LIBVLC_FILE" ]; then
+              cp "$LIBVLC_FILE" "${LIBVLC_FILE}.backup"
+              sed -i 's/"VLC media player (LibVLC "VERSION")"/"abc media editor"/' "$LIBVLC_FILE"
+              echo "✅ /src/libvlc.c 第一处修改完成"
+            fi
+            
+            # 3. 修改 /src/libvlc.c - 第二处
+            echo "3. 修改 /src/libvlc.c - 第二处..."
+            if [ -f "$LIBVLC_FILE" ]; then
+              # 注意：这里有两个连续的双引号，需要正确转义
+              sed -i 's/"VLC\/"PACKAGE_VERSION" LibVLC\/"PACKAGE_VERSION/"abc\/abc_media_editor\/"/' "$LIBVLC_FILE"
+              echo "✅ /src/libvlc.c 第二处修改完成"
+            fi
+            
+            # 4. 修改 /modules/access/live555.cpp
+            echo "4. 修改 /modules/access/live555.cpp..."
+            LIVE555_FILE="$VLC_SRC_DIR/modules/access/live555.cpp"
+            if [ -f "$LIVE555_FILE" ]; then
+              cp "$LIVE555_FILE" "${LIVE555_FILE}.backup"
+              sed -i 's/"LibVLC\/" VERSION/"abc_media_editor"/' "$LIVE555_FILE"
+              echo "✅ /modules/access/live555.cpp 修改完成"
+            fi
+            
+            # 最终验证
+            echo "=== 最终修改验证 ==="
+            for file in "$CORE_FILE" "$LIBVLC_FILE" "$LIVE555_FILE"; do
+              if [ -f "$file" ]; then
+                echo "文件: $(basename "$file")"
+                grep -n "abc_media_editor\|abc media editor" "$file" | head -2 || echo "  未找到修改"
+              fi
+            done
           fi
           
           # 检查构建结果
@@ -204,19 +161,19 @@ jobs:
           else
             echo "⚠️  未找到ARM64 AAR文件。查看构建日志末尾:"
             tail -100 build_arm64.log
-            exit 1 # 使步骤失败
+            exit 1
           fi
 
       - name: Download and setup ndk r21 for armeabi-v7a build need
         run: |
-          # 1. 创建 NDK 目录
+          # 创建 NDK 目录
           mkdir -p $ANDROID_SDK_ROOT/ndk
-          # 2. 下载官方 NDK r21 (以 Linux 64位为例)
+          # 下载官方 NDK r21
           wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
-          # 3. 解压到 SDK 的 ndk 目录下，并重命名为固定路径
+          # 解压到 SDK 的 ndk 目录下
           unzip -q android-ndk-r21e-linux-x86_64.zip -d $ANDROID_SDK_ROOT/ndk/
           mv $ANDROID_SDK_ROOT/ndk/android-ndk-r21e $ANDROID_SDK_ROOT/ndk/21.0.0
-          # 4. 设置环境变量（后续步骤和 compile.sh 都需要）
+          # 设置环境变量
           echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
 
@@ -233,7 +190,7 @@ jobs:
             mv "$ANDROID_SDK_ROOT/ndk-bundle" "$ANDROID_SDK_ROOT/ndk-bundle.backup"
           fi
 
-          # 设置正确的环境变量 - 这是关键！
+          # 设置正确的环境变量
           export ANDROID_NDK="${{ env.ANDROID_NDK }}"
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK_ROOT="${{ env.ANDROID_NDK }}"
@@ -264,7 +221,20 @@ jobs:
           # 给脚本添加执行权限
           chmod +x ./buildsystem/compile.sh
     
-          # 在命令行中直接传递环境变量
+          # 在构建前验证源代码修改
+          echo "验证源代码修改..."
+          if [ -d "libvlcjni/vlc" ]; then
+            VLC_SRC_DIR="libvlcjni/vlc"
+            echo "检查VLC源代码修改:"
+            for file in "$VLC_SRC_DIR/lib/core.c" "$VLC_SRC_DIR/src/libvlc.c" "$VLC_SRC_DIR/modules/access/live555.cpp"; do
+              if [ -f "$file" ]; then
+                echo "文件: $(basename "$file")"
+                grep -n "abc_media_editor\|abc media editor" "$file" | head -1 || echo "  未找到修改"
+              fi
+            done
+          fi
+    
+          # 使用-b参数跳过源码检查
           time ANDROID_NDK="$ANDROID_NDK" ANDROID_SDK="$ANDROID_SDK" \
               ./buildsystem/compile.sh -l -a arm --release -t -b 2>&1 | tee build_armv7.log
 
@@ -278,7 +248,7 @@ jobs:
           fi
 
       - name: Merge aars and verify
-        if: always() # 即使上一步有警告也继续执行
+        if: always()
         run: |
           echo "准备合并AAR文件..."
           cd "${{ env.BUILD_DIR }}"
@@ -412,16 +382,3 @@ jobs:
           # 清理 SSH 密钥
           rm -f ~/.ssh/id_ed25519
           rm -f ~/.ssh/config
-
-      # 可选：缓存构建结果以加速后续构建
-      # - name: Cache build artifacts
-      #   uses: actions/cache@main
-      #   with:
-      #     path: |
-      #       ~/.gradle/caches
-      #       ~/.gradle/wrapper
-      #       vlc-android/.gradle
-      #       vlc-android/libvlcjni/vlc/contrib
-      #     key: ${{ runner.os }}-vlc-build-${{ hashFiles('vlc-android/compile.sh', 'vlc-android/build.gradle') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-vlc-build-
