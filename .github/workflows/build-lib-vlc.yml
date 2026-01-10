@@ -6,7 +6,6 @@ on:
 
 env:
   SOURCE_REPO: 'https://github.com/videolan/vlc-android.git'
-  # SOURCE_BRANCH: 'libvlc-3.6.5'
   SOURCE_BRANCH: 'master'
   BUILD_DIR: 'vlc-android-source'
   GRADLE_VERSION: '8.13'

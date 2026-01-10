@@ -9,6 +9,7 @@ env:
   SOURCE_BRANCH: 'master'
   BUILD_DIR: 'vlc-android-source'
   GRADLE_VERSION: '8.13'
+  VLC_CORE_REPO: 'https://code.videolan.org/videolan/vlc.git'
 
 jobs:
   build:
@@ -17,18 +18,14 @@ jobs:
       contents: write
     
     steps:
-      - name: Checkout ci repo
-        uses: actions/checkout@main
-
-      - name: Setup build environment
+      - name: Setup environment
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           
-          # 设置NDK r27环境变量
-          echo "ANDROID_NDK=/opt/android-ndk-r27b" >> $GITHUB_ENV
-          echo "ANDROID_NDK_ROOT=/opt/android-ndk-r27b" >> $GITHUB_ENV
+      - name: Checkout ci repo
+        uses: actions/checkout@main
 
-      - name: Clone vlc android source
+      - name: Clone vlc Android source
         run: |
           rm -rf "${{ env.BUILD_DIR }}"
           git clone --depth 1 --branch "${{ env.SOURCE_BRANCH }}" \
@@ -50,19 +47,181 @@ jobs:
             flex python3 python3-pip wget ninja-build meson nasm yasm \
             libssl-dev protobuf-compiler gettext
 
-      - name: Setup ndk r27
+      - name: Setup NDK r27 for vlc
         run: |
-          # 下载并设置NDK r27（VLC要求版本）
+          # 下载 NDK r27b（VLC构建脚本要求的版本）
           wget -q https://dl.google.com/android/repository/android-ndk-r27b-linux.zip
           unzip -q android-ndk-r27b-linux.zip -d /opt/
           
-          echo "NDK r27已安装到: /opt/android-ndk-r27b"
-          echo "验证版本:"
+          echo "NDK版本信息:"
           grep 'Pkg.Revision' /opt/android-ndk-r27b/source.properties
-
-      - name: Configure project
+          
+          # 设置环境变量
+          echo "ANDROID_NDK=/opt/android-ndk-r27b" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=/opt/android-ndk-r27b" >> $GITHUB_ENV
+          
+      - name: Initialize project structure
         run: |
           cd "${{ env.BUILD_DIR }}"
+          
+          echo "=== 项目结构 ==="
+          ls -la
+          
+          # 检查gradlew文件
+          if [ ! -f "gradlew" ]; then
+            echo "警告: gradlew不存在，可能项目结构不同"
+            echo "查找gradlew..."
+            find . -name "gradlew" -type f | head -5
+          else
+            chmod +x gradlew
+          fi
+          
+          # 设置环境变量
+          export ANDROID_SDK="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK="${{ env.ANDROID_NDK }}"
+          export ANDROID_NDK_ROOT="${{ env.ANDROID_NDK }}"
+          
+          # 创建local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "ndk.dir=$ANDROID_NDK" >> local.properties
+
+      - name: Get and modify vlc core source
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          
+          echo "=== 获取并修改VLC核心代码 ==="
+          
+          # 1. 首先检查项目结构，找到正确的目录
+          VLC_ANDROID_DIR="."
+          
+          # 查找libvlcjni目录
+          if [ -d "libvlcjni" ]; then
+            VLC_ANDROID_DIR="./libvlcjni"
+          fi
+          
+          echo "工作目录: $VLC_ANDROID_DIR"
+          cd "$VLC_ANDROID_DIR"
+          
+          # 2. 修改get-vlc.sh脚本，使用最新VLC核心
+          GET_VLC_SCRIPT="buildsystem/get-vlc.sh"
+          if [ -f "$GET_VLC_SCRIPT" ]; then
+            echo "修改 $GET_VLC_SCRIPT 使用最新VLC代码"
+            
+            # 备份原脚本
+            cp "$GET_VLC_SCRIPT" "${GET_VLC_SCRIPT}.backup"
+            
+            # 修改脚本：
+            # a) 注释掉重置到特定哈希的行
+            # b) 修改克隆命令，确保使用最新代码
+            sed -i 's/git clone "${VLC_REPOSITORY}" vlc -b ${VLC_BRANCH} --single-branch/git clone "${VLC_REPOSITORY}" vlc/' "$GET_VLC_SCRIPT"
+            sed -i 's/git reset --hard ${VLC_TESTED_HASH}/# & # 已禁用，使用最新代码/' "$GET_VLC_SCRIPT"
+            sed -i 's/check_patch_is_applied/# & # 已禁用，使用最新代码/' "$GET_VLC_SCRIPT"
+            
+            echo "✅ get-vlc.sh 已修改"
+          fi
+          
+          # 3. 获取VLC核心代码
+          echo "获取VLC核心代码..."
+          if [ -f "buildsystem/get-vlc.sh" ]; then
+            chmod +x buildsystem/get-vlc.sh
+            ./buildsystem/get-vlc.sh -b  # 使用-b参数跳过检查
+          else
+            echo "手动克隆VLC核心代码..."
+            rm -rf vlc
+            git clone "${{ env.VLC_CORE_REPO }}" vlc
+          fi
+          
+          # 4. 确保我们使用最新的master分支
+          echo "更新到最新master分支..."
+          if [ -d "vlc" ]; then
+            cd vlc
+            git checkout master
+            git pull origin master
+            
+            # 获取最新提交信息
+            echo "当前VLC版本:"
+            git log --oneline -1 || echo "无法获取git信息"
+            
+            cd ..
+          else
+            echo "错误: VLC目录不存在"
+            exit 1
+          fi
+          
+          # 5. 应用自定义修改
+          echo "应用自定义修改到VLC源代码..."
+          VLC_SRC="vlc"
+          
+          if [ ! -d "$VLC_SRC" ]; then
+            echo "错误: VLC源代码目录不存在"
+            exit 1
+          fi
+          
+          # 创建修改脚本
+          cat > modify_vlc.sh << 'EOF'
+                                 #!/bin/bash
+                                 set -e
+                                 
+                                 VLC_SRC="$1"
+                                 echo "修改VLC源代码目录: $VLC_SRC"
+                                 
+                                 # 1. 修改 /lib/core.c
+                                 echo "1. 修改 /lib/core.c..."
+                                 CORE_FILE="$VLC_SRC/lib/core.c"
+                                 if [ -f "$CORE_FILE" ]; then
+                                   sed -i 's/&& (asprintf (\&str, "%s LibVLC\/"PACKAGE_VERSION, http) != -1))/&& (asprintf (\&str, "%s abc_media_editor", http) != -1))/' "$CORE_FILE"
+                                   echo "✅ /lib/core.c 已修改"
+                                 fi
+                                 
+                                 # 2. 修改 /src/libvlc.c - 第一处
+                                 echo "2. 修改 /src/libvlc.c - 第一处..."
+                                 LIBVLC_FILE="$VLC_SRC/src/libvlc.c"
+                                 if [ -f "$LIBVLC_FILE" ]; then
+                                   sed -i 's/"VLC media player (LibVLC "VERSION")"/"abc media editor"/' "$LIBVLC_FILE"
+                                   echo "✅ /src/libvlc.c 第一处已修改"
+                                 fi
+                                 
+                                 # 3. 修改 /src/libvlc.c - 第二处
+                                 echo "3. 修改 /src/libvlc.c - 第二处..."
+                                 if [ -f "$LIBVLC_FILE" ]; then
+                                   sed -i 's/"VLC\/"PACKAGE_VERSION" LibVLC\/"PACKAGE_VERSION/"abc\/abc_media_editor\/"/' "$LIBVLC_FILE"
+                                   echo "✅ /src/libvlc.c 第二处已修改"
+                                 fi
+                                 
+                                 # 4. 修改 /modules/access/live555.cpp
+                                 echo "4. 修改 /modules/access/live555.cpp..."
+                                 LIVE555_FILE="$VLC_SRC/modules/access/live555.cpp"
+                                 if [ -f "$LIVE555_FILE" ]; then
+                                   sed -i 's/"LibVLC\/" VERSION/"abc_media_editor"/' "$LIVE555_FILE"
+                                   echo "✅ /modules/access/live555.cpp 已修改"
+                                 fi
+                                 
+                                 # 验证修改
+                                 echo "=== 修改验证 ==="
+                                 for file in "$CORE_FILE" "$LIBVLC_FILE" "$LIVE555_FILE"; do
+                                   if [ -f "$file" ]; then
+                                     echo "文件: $(basename "$file")"
+                                     grep -n "abc_media_editor\|abc media editor" "$file" | head -2 || echo "  未找到修改"
+                                   fi
+                                 done
+                                 
+                                 echo "✅ VLC源代码修改完成"
+                                 EOF
+          chmod +x modify_vlc.sh
+          ./modify_vlc.sh "$VLC_SRC"
+          
+          echo "✅ VLC核心代码获取和修改完成"
+
+      - name: Build for arm64-v8a
+        run: |
+          cd "${{ env.BUILD_DIR }}"
+          
+          # 找到正确的项目目录
+          if [ -d "libvlcjni" ]; then
+            cd libvlcjni
+          fi
+          
+          echo "=== 构建 arm64-v8a ==="
           
           # 设置环境变量
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
@@ -70,131 +229,141 @@ jobs:
           export ANDROID_NDK_ROOT="${{ env.ANDROID_NDK }}"
           
           echo "构建环境:"
-          echo "  SDK: $ANDROID_SDK"
-          echo "  NDK: $ANDROID_NDK"
+          echo "  ANDROID_NDK: $ANDROID_NDK"
           
-          # 创建配置文件
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          echo "ndk.dir=$ANDROID_NDK" >> local.properties
-          
-          # 初始化Gradle
-          ./gradlew wrapper --gradle-version=${{ env.GRADLE_VERSION }} --quiet
-
-      - name: Initialize and modify vlc source
-        run: |
-          cd "${{ env.BUILD_DIR }}"
-          
-          echo "初始化VLC源码..."
-          
-          # 获取VLC核心代码
-          if [ -f "libvlcjni/buildsystem/get-vlc.sh" ]; then
-            (cd libvlcjni && ./buildsystem/get-vlc.sh -b)
-          else
-            echo "使用备用方法获取VLC源码..."
-            git clone https://code.videolan.org/videolan/vlc.git libvlcjni/vlc
+          # 确保local.properties存在
+          if [ ! -f "local.properties" ]; then
+            echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+            echo "ndk.dir=$ANDROID_NDK" >> local.properties
           fi
           
-          # 应用自定义修改
-          echo "应用自定义修改..."
-          VLC_SRC="libvlcjni/vlc"
+          # 清理之前的构建
+          rm -rf libvlc/build/outputs/aar/*.aar 2>/dev/null || true
           
-          # 修改文件
-          sed -i 's/&& (asprintf (\&str, "%s LibVLC\/"PACKAGE_VERSION, http) != -1))/&& (asprintf (\&str, "%s abc_media_editor", http) != -1))/' "$VLC_SRC/lib/core.c"
-          sed -i 's/"VLC media player (LibVLC "VERSION")"/"abc media editor"/' "$VLC_SRC/src/libvlc.c"
-          sed -i 's/"VLC\/"PACKAGE_VERSION" LibVLC\/"PACKAGE_VERSION/"abc\/abc_media_editor\/"/' "$VLC_SRC/src/libvlc.c"
-          sed -i 's/"LibVLC\/" VERSION/"abc_media_editor"/' "$VLC_SRC/modules/access/live555.cpp"
+          # 开始构建
+          echo "开始构建..."
+          if [ -f "buildsystem/compile.sh" ]; then
+            chmod +x buildsystem/compile.sh
+            # 使用-b参数跳过源码检查，因为我们已经修改了源码
+            time ./buildsystem/compile.sh -l -a arm64 --release -t -b 2>&1 | tee build_arm64.log
+          else
+            echo "错误: compile.sh 不存在"
+            find . -name "*.sh" -type f | head -10
+            exit 1
+          fi
+          
+          # 检查结果
+          if ls libvlc/build/outputs/aar/*.aar 1>/dev/null 2>&1; then
+            AAR_FILE=$(ls libvlc/build/outputs/aar/*.aar | head -1)
+            cp "$AAR_FILE" "../../libvlc-arm64.aar"
+            echo "✅ arm64-v8a 构建成功"
+          else
+            echo "❌ arm64-v8a 构建失败"
+            echo "最后50行日志:"
+            tail -50 build_arm64.log
+            exit 1
+          fi
 
-      - name: Build all architectures
+      - name: Build for armeabi-v7a
         run: |
           cd "${{ env.BUILD_DIR }}"
           
+          # 找到正确的项目目录
+          if [ -d "libvlcjni" ]; then
+            cd libvlcjni
+          fi
+          
+          echo "=== 构建 armeabi-v7a ==="
+          
+          # 设置环境变量（使用相同的NDK r27）
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK="${{ env.ANDROID_NDK }}"
           export ANDROID_NDK_ROOT="${{ env.ANDROID_NDK }}"
           
-          # 构建函数
-          build_arch() {
-            local arch=$1
-            local log_file="build_$arch.log"
-            
-            echo "=== 开始构建 $arch ==="
-            
-            # 清理
-            rm -rf libvlcjni/libvlc/build/outputs/aar/*.aar 2>/dev/null || true
-            
-            # 构建
-            if ! ./buildsystem/compile.sh -l -a $arch --release -t -b 2>&1 | tee "$log_file"; then
-              echo "❌ $arch 构建失败"
-              tail -100 "$log_file"
-              return 1
-            fi
-            
-            # 检查结果
-            if ls libvlcjni/libvlc/build/outputs/aar/*.aar 1>/dev/null 2>&1; then
-              local aar_file=$(ls libvlcjni/libvlc/build/outputs/aar/*.aar | head -1)
-              cp "$aar_file" "../libvlc-$arch.aar"
-              echo "✅ $arch 构建成功"
-              return 0
-            else
-              echo "❌ $arch 构建失败：未生成AAR文件"
-              return 1
-            fi
-          }
+          # 清理之前的构建
+          rm -rf libvlc/build/outputs/aar/*.aar 2>/dev/null || true
+          rm -rf vlc/build-android-* 2>/dev/null || true
           
-          # 构建所有架构
-          build_arch "arm64" || exit 1
-          build_arch "arm" || exit 1
+          # 开始构建
+          echo "开始构建..."
+          time ./buildsystem/compile.sh -l -a arm --release -t -b 2>&1 | tee build_armv7.log
+          
+          # 检查结果
+          if ls libvlc/build/outputs/aar/*.aar 1>/dev/null 2>&1; then
+            AAR_FILE=$(ls libvlc/build/outputs/aar/*.aar | head -1)
+            cp "$AAR_FILE" "../../libvlc-armv7.aar"
+            echo "✅ armeabi-v7a 构建成功"
+          else
+            echo "❌ armeabi-v7a 构建失败"
+            echo "最后50行日志:"
+            tail -50 build_armv7.log
+            exit 1
+          fi
 
-      - name: Merge and package
+      - name: Merge aar files
         run: |
           cd "${{ env.BUILD_DIR }}"
           
-          echo "合并AAR文件..."
+          echo "=== 合并AAR文件 ==="
           
-          # 收集所有AAR
-          aar_files=(../libvlc-*.aar)
-          if [ ${#aar_files[@]} -eq 0 ]; then
-            echo "错误：未找到AAR文件"
+          # 检查生成的AAR文件
+          AAR_FILES=($(find . -name "libvlc-*.aar" -type f))
+          if [ ${#AAR_FILES[@]} -eq 0 ]; then
+            echo "错误: 未找到AAR文件"
+            echo "当前目录: $(pwd)"
+            find . -name "*.aar" -type f
             exit 1
           fi
           
-          echo "找到的AAR文件: ${aar_files[@]}"
+          echo "找到的AAR文件:"
+          for aar in "${AAR_FILES[@]}"; do
+            echo "  - $aar"
+          done
           
-          # 创建合并目录
-          mkdir -p merged
-          unzip -q "${aar_files[0]}" -d merged
+          # 创建临时目录进行合并
+          mkdir -p merged-aar
+          
+          # 使用第一个AAR作为基础
+          BASE_AAR="${AAR_FILES[0]}"
+          echo "使用 $BASE_AAR 作为基础"
+          unzip -q "$BASE_AAR" -d merged-aar
           
           # 合并其他AAR的jni库
-          for aar in "${aar_files[@]:1}"; do
-            echo "合并: $(basename $aar)"
-            temp_dir=$(mktemp -d)
-            unzip -q "$aar" -d "$temp_dir"
+          for aar in "${AAR_FILES[@]:1}"; do
+            echo "合并: $aar"
+            TEMP_DIR=$(mktemp -d)
+            unzip -q "$aar" -d "$TEMP_DIR"
             
             # 复制jni目录
-            if [ -d "$temp_dir/jni" ]; then
-              cp -r "$temp_dir/jni"/* merged/jni/ 2>/dev/null || true
+            if [ -d "$TEMP_DIR/jni" ]; then
+              echo "  添加jni架构库"
+              cp -r "$TEMP_DIR/jni"/* merged-aar/jni/ 2>/dev/null || true
             fi
             
-            rm -rf "$temp_dir"
+            rm -rf "$TEMP_DIR"
           done
           
           # 重新打包
-          cd merged
+          cd merged-aar
           zip -qr ../libvlc-release.aar .
           
-          # 重命名
+          echo "✅ AAR合并完成"
+          echo "生成的文件:"
+          ls -la ../*.aar
           
-          echo "✅ 合并完成"
-          echo "最终产物: libvlc-release.aar"
-          echo "包含架构:"
-          ls -la jni/ 2>/dev/null | grep -v "^total"
+          echo "libvlc-release.aar 包含的架构:"
+          if [ -d "jni" ]; then
+            ls -la jni/
+          else
+            echo "警告: jni目录不存在"
+          fi
 
-      - name: Create release
+      - name: Create github release
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-vlclib
           files: |
-            libvlc-release.aar
+            ${{ env.BUILD_DIR }}/libvlc-release.aar
             libvlc-arm64.aar
             libvlc-armv7.aar
           draft: false
@@ -238,7 +407,7 @@ jobs:
           git checkout main
           
           # 复制新的 AAR 文件到目标位置
-          SOURCE_AAR="$GITHUB_WORKSPACE/libvlc-release.aar"
+          SOURCE_AAR="$GITHUB_WORKSPACE/${{ env.BUILD_DIR }}/libvlc-release.aar"
           TARGET_DIR="libVLC"
           
           # 检查 AAR 文件是否存在
