@@ -9,7 +9,7 @@ env:
   ARTIFACT_DIR: artifacts
 
 jobs:
-  # ´®ĞĞ¹¹½¨Ã¿¸öAPK
+  # ä¸²è¡Œæ„å»ºæ¯ä¸ªAPK
   build-apks:
     runs-on: ubuntu-latest
     strategy:
@@ -30,13 +30,13 @@ jobs:
             workflow: build-termux.yml
           - app: xed-editor
             workflow: build-xed-editor.yml
-      max-parallel: 1  # ¹Ø¼ü£ºÈ·±£´®ĞĞÖ´ĞĞ
-      fail-fast: false  # ¼´Ê¹Ä³¸ö¹¹½¨Ê§°Ü£¬¼ÌĞøÖ´ĞĞÆäËû¹¹½¨
+      max-parallel: 1  # å…³é”®ï¼šç¡®ä¿ä¸²è¡Œæ‰§è¡Œ
+      fail-fast: false  # å³ä½¿æŸä¸ªæ„å»ºå¤±è´¥ï¼Œç»§ç»­æ‰§è¡Œå…¶ä»–æ„å»º
 
     steps:
       - name: Clean runner environment
         run: |
-          # ÇåÀí¿ÉÄÜ´æÔÚµÄÈ«¾Ö»º´æÎÄ¼ş
+          # æ¸…ç†å¯èƒ½å­˜åœ¨çš„å…¨å±€ç¼“å­˜æ–‡ä»¶
           rm -rf ~/.gradle/caches/transforms-*
           rm -rf ~/.android/build-cache/
 
