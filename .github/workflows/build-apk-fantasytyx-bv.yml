@@ -164,6 +164,13 @@ jobs:
           echo "Gradle 版本信息:"
           ./gradlew --version
 
+      # ========== 新增步骤：编译 player.tv 模块 ==========
+      - name: Build player.tv module
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 编译 player.tv 模块，验证 TV 依赖 ==="
+          ./gradlew :player:tv:assembleRelease --refresh-dependencies --no-daemon
+
       - name: Decode and write release keystore
         working-directory: ./fantasy-bv-source
         run: |
