@@ -4,7 +4,7 @@
 # 尝试解决libvlc中vlc内核代码在http的user agent中添加"LibVLC/xxx"独特字段的问题
 # 该独特字段可能被b站block
 
-VLC_SOURCE_ROOT="$GITHUB_WORKSPACE/libvlcjni/vlc"
+VLC_SOURCE_ROOT="$GITHUB_WORKSPACE/vlc-android-source/libvlcjni/vlc"
 
 VLC_SOURCE_LIB_COREC="$VLC_SOURCE_ROOT/lib/core.c"
 VLC_SOURCE_SRC_LIBVLCC="$VLC_SOURCE_ROOT/src/libvlc.c"
