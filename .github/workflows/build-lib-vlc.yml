@@ -9,38 +9,44 @@ env:
   SOURCE_BRANCH: 'master'
   BUILD_DIR: 'vlc-android-source'
   GRADLE_VERSION: '8.13'
+  # 添加环境变量，强制从源码构建
+  VLC_FORCE_SOURCE: '1'
+  VLC_SKIP_PREBUILT: '1'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    
     steps:
       - name: Clean runner environment
         run: |
           rm -rf ~/.gradle/caches/transforms-*
           rm -rf ~/.android/build-cache/
-          
+      
       - name: Checkout ci repo
         uses: actions/checkout@main
-
+      
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+      
       - name: Clone source repository
         run: |
           echo "Cloning source repository..."
           rm -rf "${{ env.BUILD_DIR }}"
+          # 使用特定分支，避免master分支的问题
+          git clone --depth 1 --branch "3.5.0" "${{ env.SOURCE_REPO }}" "${{ env.BUILD_DIR }}" || \
           git clone --depth 1 --branch "${{ env.SOURCE_BRANCH }}" "${{ env.SOURCE_REPO }}" "${{ env.BUILD_DIR }}"
-
+      
       - name: Setup java 17
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
           java-version: '17'
           cache: 'gradle'
-
+      
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -48,23 +54,33 @@ jobs:
             automake autopoint cmake build-essential libtool \
             patch pkg-config ragel subversion unzip git \
             flex python3 python3-pip wget ninja-build meson nasm yasm \
-            libssl-dev protobuf-compiler gettext
-
+            libssl-dev protobuf-compiler gettext \
+            texinfo gawk bison re2c gperf help2man \
+            binutils-multiarch gcc-multilib g++-multilib \
+            autoconf pkg-config libtool-bin \
+            # 确保有gas汇编器
+            gas binutils \
+            # 其他可能需要的
+            libfuse2 rsync
+      
       - name: Configure android environment and project
         run: |
           cd "${{ env.BUILD_DIR }}"
           echo "=== 配置 Android 构建环境 ==="
-          
           # 设置Git身份
           git config --global user.email "ci@github-actions"
           git config --global user.name "GitHub Actions"
-          
           # 导出编译变量
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK="$ANDROID_NDK_ROOT"
+          # 强制从源码编译
+          export VLC_FORCE_SOURCE=1
+          export VLC_SKIP_PREBUILT=1
+          
           echo "导出编译变量:"
-          echo "  ANDROID_SDK=$ANDROID_SDK"
-          echo "  ANDROID_NDK=$ANDROID_NDK"
+          echo " ANDROID_SDK=$ANDROID_SDK"
+          echo " ANDROID_NDK=$ANDROID_NDK"
+          echo " VLC_FORCE_SOURCE=$VLC_FORCE_SOURCE"
           
           # 创建 Gradle 的 local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
@@ -73,7 +89,6 @@ jobs:
           
           # 初始化 Gradle wrapper
           ./gradlew wrapper --gradle-version=${{ env.GRADLE_VERSION }} --distribution-type=all --quiet 2>/dev/null || true
-          
           echo "✅ 环境配置完成"
 
       # 替换修改源代码的步骤
@@ -240,23 +255,31 @@ jobs:
         run: |
           cd "${{ env.BUILD_DIR }}"
           echo "开始构建 ARM64 (arm64-v8a) 架构..."
-          
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK="$ANDROID_NDK_ROOT"
+          # 强制从源码编译
+          export VLC_FORCE_SOURCE=1
+          export VLC_SKIP_PREBUILT=1
           
           # 清理之前的构建缓存，确保使用修改后的代码
           echo "清理构建缓存..."
           rm -rf libvlcjni/vlc/build-android-aarch64-linux-android 2>/dev/null || true
           
-          # 使用-b参数跳过源码检查
-          time ./buildsystem/compile.sh -l -a arm64 --release -t -b 2>&1 | tee build_arm64.log
+          # 构建工具链（如果需要）
+          echo "构建工具链..."
+          cd libvlcjni/vlc/extras/tools
+          make .buildgas .gas 2>/dev/null || echo "跳过gas构建"
+          cd ../../..
+          
+          # 使用--disable-prebuilt选项
+          time ./buildsystem/compile.sh -l -a arm64 --release -t -b --disable-prebuilt 2>&1 | tee build_arm64.log
           
           # 检查构建结果
           if ls libvlcjni/libvlc/build/outputs/aar/*.aar 1> /dev/null 2>&1; then
             echo "✅ ARM64 AAR 构建成功！"
             cp libvlcjni/libvlc/build/outputs/aar/*.aar ../libvlc-arm64.aar
           else
-            echo "⚠️  未找到ARM64 AAR文件。查看构建日志末尾:"
+            echo "⚠️ 未找到ARM64 AAR文件。查看构建日志末尾:"
             tail -100 build_arm64.log
             exit 1
           fi
@@ -274,56 +297,41 @@ jobs:
           echo "ANDROID_NDK=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
           echo "NDK_ROOT=$ANDROID_SDK_ROOT/ndk/21.0.0" >> $GITHUB_ENV
 
-      # 修改armv7构建步骤
+      # armeabi-v7a构建步骤也需要添加相同的环境变量
       - name: Build libvlc for armeabi-v7a
         run: |
           cd "${{ env.BUILD_DIR }}"
           echo "清理前一次构建的中间产物..."
-          
           # 只清理aar文件，不清理源代码
           rm -rf libvlcjni/libvlc/build/outputs/aar/*.aar 2>/dev/null || true
           # 清理armeabi-v7a的构建目录
           rm -rf libvlcjni/vlc/build-android-arm-linux-androideabi 2>/dev/null || true
-      
+          
           echo "检查当前 NDK 环境..."
-          # 备份并移除可能冲突的 NDK
-          if [ -d "$ANDROID_SDK_ROOT/ndk-bundle" ]; then
-            echo "发现 ndk-bundle，可能引起冲突，重命名..."
-            mv "$ANDROID_SDK_ROOT/ndk-bundle" "$ANDROID_SDK_ROOT/ndk-bundle.backup"
-          fi
-      
           # 设置正确的环境变量
           export ANDROID_NDK="${{ env.ANDROID_NDK }}"
           export ANDROID_SDK="$ANDROID_SDK_ROOT"
           export ANDROID_NDK_ROOT="${{ env.ANDROID_NDK }}"
           export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
-          
-          # 构建前验证源代码
-          echo "验证源代码修改..."
-          if [ -d "libvlcjni/vlc" ]; then
-            VLC_SRC_DIR="libvlcjni/vlc"
-            echo "检查core.c修改:"
-            if grep -q '"%s abc_media_editor"' "$VLC_SRC_DIR/lib/core.c"; then
-              echo "✅ core.c已正确修改"
-              # 显示修改的内容
-              grep -n '"%s abc_media_editor"' "$VLC_SRC_DIR/lib/core.c"
-            else
-              echo "❌ core.c未正确修改"
-              # 显示问题行
-              grep -n 'asprintf.*&str' "$VLC_SRC_DIR/lib/core.c" | head -5
-            fi
-          fi
+          # 强制从源码编译
+          export VLC_FORCE_SOURCE=1
+          export VLC_SKIP_PREBUILT=1
           
           # 更新 local.properties
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           echo "ndk.dir=$ANDROID_NDK" >> local.properties
-      
-          echo "开始构建 ARMv7 (armeabi-v7a) 架构..."
           
-          # 使用-b参数跳过源码检查
+          echo "开始构建 ARMv7 (armeabi-v7a) 架构..."
+          # 构建工具链（如果需要）
+          echo "构建工具链..."
+          cd libvlcjni/vlc/extras/tools
+          make .buildgas .gas 2>/dev/null || echo "跳过gas构建"
+          cd ../../..
+          
+          # 使用--disable-prebuilt选项
           time ANDROID_NDK="$ANDROID_NDK" ANDROID_SDK="$ANDROID_SDK" \
-              ./buildsystem/compile.sh -l -a arm --release -t -b 2>&1 | tee build_armv7.log
-      
+            ./buildsystem/compile.sh -l -a arm --release -t -b --disable-prebuilt 2>&1 | tee build_armv7.log
+          
           if ls libvlcjni/libvlc/build/outputs/aar/*.aar 1> /dev/null 2>&1; then
             echo "✅ ARMv7 AAR 构建成功！"
             cp libvlcjni/libvlc/build/outputs/aar/*.aar ../libvlc-armv7.aar
