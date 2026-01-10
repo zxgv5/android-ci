@@ -26,7 +26,9 @@ sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV R8 Test.*<\/string
 # 尝试修复“动态”页面长按下方向键焦点左移出视频选择区的问题
 FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
 sed -i \
-  -e '/import androidx.compose.ui.focus.onFocusChanged/a\import androidx.compose.ui.focus.FocusRestriction' \
+  # 1. 在 onFocusChanged 导入后添加 TV 库的 FocusRestriction 正确导入
+  -e '/import androidx.compose.ui.focus.onFocusChanged/a\import androidx.tv.foundation.focus.FocusRestriction' \
+  # 2. 为 LazyVerticalGrid 的 modifier 添加 focusRestrict 修饰符
   -e 's/modifier = modifier\.fillMaxSize()/modifier = modifier.fillMaxSize().focusRestrict(FocusRestriction.Scrollable)/' \
   "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
 
