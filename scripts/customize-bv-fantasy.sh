@@ -24,23 +24,44 @@ FANTASY_BV_SOURCE_ASSRRV_STRINGS="$FANTASY_BV_SOURCE_ROOT/app/shared/src/r8Test/
 sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV R8 Test.*<\/string>/<string name="app_name">fantasy R8 Test<\/string>/' "$FANTASY_BV_SOURCE_ASSRRV_STRINGS"
 
 # 尝试修复“动态”页面长按下方向键焦点左移出视频选择区的问题
+# FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
+# sed -i \
+#   # 1. 在 onFocusChanged 导入后添加 TV 库的 FocusRestriction 正确导入
+#   -e '/import androidx.compose.ui.focus.onFocusChanged/a\import androidx.tv.foundation.focus.FocusRestriction' \
+#   # 2. 为 LazyVerticalGrid 的 modifier 添加 focusRestrict 修饰符
+#   -e 's/modifier = modifier\.fillMaxSize()/modifier = modifier.fillMaxSize().focusRestrict(FocusRestriction.Scrollable)/' \
+#   "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
+# sed -i \
+#   # 1. 添加焦点请求器和列数常量导入/定义
+#   -e '/import androidx.compose.runtime.rememberCoroutineScope/a\import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.input.key.KeyDirectionLeft' \
+#   -e '/val scope = rememberCoroutineScope()/a\    val gridFocusRequester = remember { FocusRequester() }\n    val gridColumns = 4 // Grid的固定列数' \
+#   # 2. 增强onPreviewKeyEvent：拦截左方向键+锁定焦点
+#   -e '/onPreviewKeyEvent {/a\        // 拦截左方向键，阻止焦点向左逃逸到侧边栏\n        if(it.type == KeyEventType.KeyDown && it.key == KeyDirectionLeft) {\n            // 计算当前焦点项所在列：index % 列数 == 0 表示第一列\n            val isFirstColumn = currentFocusedIndex >= 0 && (currentFocusedIndex % gridColumns) == 0\n            if(isFirstColumn) {\n                // 第一列时强制保留焦点在Grid内\n                gridFocusRequester.requestFocus()\n                return@onPreviewKeyEvent true\n            }\n        }\n        // 强制焦点始终留在Grid（防止快速滚动时焦点丢失）\n        if(!lazyGridState.isScrollInProgress && it.type == KeyEventType.KeyUp) {\n            gridFocusRequester.requestFocus()\n        }' \
+#   # 3. 给Grid添加focusRequester，确保焦点锁定
+#   -e 's/\.focusRestrict(FocusRestriction.Scrollable)/\.focusRestrict(FocusRestriction.Scrollable).focusRequester(gridFocusRequester)/' \
+#   "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
+# sed -i \
+#   -e '/ProvideListBringIntoViewSpec {/a\    Box(modifier = Modifier.focusRequester(gridFocusRequester).focusable()) {' \
+#   -e '/ProvideListBringIntoViewSpec {/!b' -e ':a' -e 'N' -e '/        }\n    } else {/!ba' -e 's/\n        }/\n        }\n    }/' \
+#   "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
+
+# 尝试修复“动态”页面长按下方向键焦点左移出视频选择区的问题
+# ========== 整合后的 DynamicsScreen.kt 完整修改逻辑 ==========
 FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
 sed -i \
-  # 1. 在 onFocusChanged 导入后添加 TV 库的 FocusRestriction 正确导入
+  # 1. 基础：添加 FocusRestriction 导入（原第一部分脚本）
   -e '/import androidx.compose.ui.focus.onFocusChanged/a\import androidx.tv.foundation.focus.FocusRestriction' \
-  # 2. 为 LazyVerticalGrid 的 modifier 添加 focusRestrict 修饰符
+  # 2. 基础：给 Grid 加 focusRestrict 修饰符（原第一部分脚本）
   -e 's/modifier = modifier\.fillMaxSize()/modifier = modifier.fillMaxSize().focusRestrict(FocusRestriction.Scrollable)/' \
-  "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
-sed -i \
-  # 1. 添加焦点请求器和列数常量导入/定义
-  -e '/import androidx.compose.runtime.rememberCoroutineScope/a\import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.input.key.KeyDirectionLeft' \
-  -e '/val scope = rememberCoroutineScope()/a\    val gridFocusRequester = remember { FocusRequester() }\n    val gridColumns = 4 // Grid的固定列数' \
-  # 2. 增强onPreviewKeyEvent：拦截左方向键+锁定焦点
+  # 3. 补全：添加所有焦点相关导入（含原第二部分漏的 focusRequester 修饰符）
+  -e '/import androidx.tv.foundation.focus.FocusRestriction/a\import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.input.key.KeyDirectionLeft' \
+  # 4. 核心：定义焦点变量（修正位置，确保使用前初始化）
+  -e '/val scope = rememberCoroutineScope()/a\    val gridFocusRequester = remember { FocusRequester() }\n    val gridColumns = 4 // Grid固定列数' \
+  # 5. 核心：增强 onPreviewKeyEvent 拦截左方向键（原第二部分脚本）
   -e '/onPreviewKeyEvent {/a\        // 拦截左方向键，阻止焦点向左逃逸到侧边栏\n        if(it.type == KeyEventType.KeyDown && it.key == KeyDirectionLeft) {\n            // 计算当前焦点项所在列：index % 列数 == 0 表示第一列\n            val isFirstColumn = currentFocusedIndex >= 0 && (currentFocusedIndex % gridColumns) == 0\n            if(isFirstColumn) {\n                // 第一列时强制保留焦点在Grid内\n                gridFocusRequester.requestFocus()\n                return@onPreviewKeyEvent true\n            }\n        }\n        // 强制焦点始终留在Grid（防止快速滚动时焦点丢失）\n        if(!lazyGridState.isScrollInProgress && it.type == KeyEventType.KeyUp) {\n            gridFocusRequester.requestFocus()\n        }' \
-  # 3. 给Grid添加focusRequester，确保焦点锁定
+  # 6. 核心：给 Grid 绑定 focusRequester（修复编译报错）
   -e 's/\.focusRestrict(FocusRestriction.Scrollable)/\.focusRestrict(FocusRestriction.Scrollable).focusRequester(gridFocusRequester)/' \
-  "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
-sed -i \
+  # 7. 可选：外层 Box 加焦点容器（原第三部分脚本，增强稳定性）
   -e '/ProvideListBringIntoViewSpec {/a\    Box(modifier = Modifier.focusRequester(gridFocusRequester).focusable()) {' \
   -e '/ProvideListBringIntoViewSpec {/!b' -e ':a' -e 'N' -e '/        }\n    } else {/!ba' -e 's/\n        }/\n        }\n    }/' \
   "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
