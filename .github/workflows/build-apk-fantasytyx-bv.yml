@@ -232,17 +232,38 @@ jobs:
       #       fantasy-bv-source/libs/
       #     retention-days: 7
 
+      - name: Remove keystore
+        working-directory: ./fantasy-bv-source
+        run: |
+          rm -f "keystore.p12"
+          echo "Keystore and build.json removed successfully."
+
+      - name: Install 7zip
+        run: sudo apt-get update && sudo apt-get install -y p7zip-full
+
+      - name: Create aes256 encrypted archive with filename encryption
+        working-directory: ./fantasy-bv-source/app/build/outputs/apk/default/release
+        run: |
+          7z a \
+            -p"${{ secrets.ZIP_AES256_PWD }}" \
+            -mhe=on \
+            -t7z \
+            -m0=lzma2 \
+            -mx=5 \
+            -mfb=64 \
+            -md=32m \
+            -ms=on \
+            -mhc=on \
+            -ma=2 \
+            ./fantasybv-${{ env.BUILD_DATE }}.7z \
+            ./fantasybv-${{ env.BUILD_DATE }}.apk
+
       - name: Create github release & upload apk
+        working-directory: ./fantasy-bv-source/app/build/outputs/apk/default/release
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-fantasybv
-          # tag_name: latest-release
-          # 要附加到此次发布的文件列表
           files: |
-            fantasy-bv-source/app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk
-            # fantasy-bv-source/akdanmaku/build/outputs/aar/**/*release*.aar
-            # fantasy-bv-source/app/build/outputs/apk/default/release/*.apk
-          # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
+            ./fantasybv-${{ env.BUILD_DATE }}.7z
           draft: false
-          # 是否为预发布版本
           prerelease: false

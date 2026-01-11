@@ -31,6 +31,19 @@ sed -i \
   # 2. 为 LazyVerticalGrid 的 modifier 添加 focusRestrict 修饰符
   -e 's/modifier = modifier\.fillMaxSize()/modifier = modifier.fillMaxSize().focusRestrict(FocusRestriction.Scrollable)/' \
   "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
+sed -i \
+  # 1. 添加焦点请求器和列数常量导入/定义
+  -e '/import androidx.compose.runtime.rememberCoroutineScope/a\import androidx.compose.ui.focus.FocusRequester\nimport androidx.compose.ui.focus.focusRequester\nimport androidx.compose.ui.input.key.KeyDirectionLeft' \
+  -e '/val scope = rememberCoroutineScope()/a\    val gridFocusRequester = remember { FocusRequester() }\n    val gridColumns = 4 // Grid的固定列数' \
+  # 2. 增强onPreviewKeyEvent：拦截左方向键+锁定焦点
+  -e '/onPreviewKeyEvent {/a\        // 拦截左方向键，阻止焦点向左逃逸到侧边栏\n        if(it.type == KeyEventType.KeyDown && it.key == KeyDirectionLeft) {\n            // 计算当前焦点项所在列：index % 列数 == 0 表示第一列\n            val isFirstColumn = currentFocusedIndex >= 0 && (currentFocusedIndex % gridColumns) == 0\n            if(isFirstColumn) {\n                // 第一列时强制保留焦点在Grid内\n                gridFocusRequester.requestFocus()\n                return@onPreviewKeyEvent true\n            }\n        }\n        // 强制焦点始终留在Grid（防止快速滚动时焦点丢失）\n        if(!lazyGridState.isScrollInProgress && it.type == KeyEventType.KeyUp) {\n            gridFocusRequester.requestFocus()\n        }' \
+  # 3. 给Grid添加focusRequester，确保焦点锁定
+  -e 's/\.focusRestrict(FocusRestriction.Scrollable)/\.focusRestrict(FocusRestriction.Scrollable).focusRequester(gridFocusRequester)/' \
+  "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
+sed -i \
+  -e '/ProvideListBringIntoViewSpec {/a\    Box(modifier = Modifier.focusRequester(gridFocusRequester).focusable()) {' \
+  -e '/ProvideListBringIntoViewSpec {/!b' -e ':a' -e 'N' -e '/        }\n    } else {/!ba' -e 's/\n        }/\n        }\n    }/' \
+  "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
 
 FANTASY_BV_SOURCE_GRADLE_LVT="$FANTASY_BV_SOURCE_ROOT/gradle/libs.versions.toml"
 sed -i \
