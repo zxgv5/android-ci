@@ -322,7 +322,5 @@ jobs:
           TARGET_NAME: "libvlc"
           TARGET_DIR: "libVLC"
           TARGET_AAR: "libvlc-release.aar"
-          BUILD_DATE: "${{ steps.init-vars.outputs.BUILD_DATE }}"
-          # BUILD_DATE: "${{ steps.init-vars.outputs.BUILD_DATE }}"
-        secrets:
-          BV_LIBS_DEPLOY_KEY: "${{ secrets.BV_LIBS_DEPLOY_KEY }}"
+          BUILD_DATE: "${{ steps.init-vars.outputs.BUILD_DATE }}"  # 从step outputs读取
+          BV_LIBS_DEPLOY_KEY: "${{ secrets.BV_LIBS_DEPLOY_KEY }}"  # 密钥通过with传递

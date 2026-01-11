@@ -2,7 +2,7 @@ name: 'Push aar to bv-libs'
 description: '推送aar到bv-libs仓库的可重用action'
 inputs:
   SOURCE_AAR:
-    description: '源AAR文件的完整路径'
+    description: '源aar文件的完整路径'
     required: true
     type: string
   TARGET_NAME:
@@ -14,7 +14,7 @@ inputs:
     required: true
     type: string
   TARGET_AAR:
-    description: '目标AAR文件名'
+    description: '目标aar文件名'
     required: true
     type: string
   BUILD_DATE:
@@ -22,14 +22,14 @@ inputs:
     required: true
     type: string
   TARGET_REPO:
-    description: '目标仓库SSH地址'
+    description: '目标仓库ssh地址'
     required: false
     type: string
     default: 'git@github.com:zxgv5/bv-libs.git'
-secrets:
-  BV_LIBS_DEPLOY_KEY:
-    description: '推送bv-libs的SSH私钥'
+  BV_LIBS_DEPLOY_KEY:  # 关键修正：将密钥改为input参数
+    description: '推送bv-libs的ssh私钥'
     required: true
+    type: string
 
 runs:
   using: 'composite'
@@ -42,22 +42,22 @@ runs:
         TARGET_DIR: ${{ inputs.TARGET_DIR }}
         TARGET_AAR: ${{ inputs.TARGET_AAR }}
         BUILD_DATE: ${{ inputs.BUILD_DATE }}
-        BV_LIBS_DEPLOY_KEY: ${{ secrets.BV_LIBS_DEPLOY_KEY }}
+        BV_LIBS_DEPLOY_KEY: ${{ inputs.BV_LIBS_DEPLOY_KEY }}  # 读取input传入的密钥
       run: |
-        # 设置 SSH 密钥和配置
-        echo "Setting up SSH configuration..."
+        # 设置 ssh 密钥和配置
+        echo "Setting up ssh configuration..."
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
         # 写入私钥
         echo "${BV_LIBS_DEPLOY_KEY}" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
-        # 配置 SSH 不验证主机
+        # 配置 ssh 不验证主机
         echo "Host github.com" >> ~/.ssh/config
         echo "  StrictHostKeyChecking no" >> ~/.ssh/config
         echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
         chmod 600 ~/.ssh/config
-        # 测试 SSH 连接
-        echo "Testing SSH connection to GitHub..."
+        # 测试 ssh 连接
+        echo "Testing ssh connection to GitHub..."
         ssh -T git@github.com 2>&1 | grep -v "successfully authenticated" || true
         # 设置 Git 配置
         git config --global user.name "GitHub Actions"
@@ -94,7 +94,7 @@ runs:
           echo "✗ Error: aar file not found at $SOURCE_AAR"
           exit 1
         fi
-        # 清理 SSH 密钥
+        # 清理 ssh 密钥
         rm -f ~/.ssh/id_ed25519
         rm -f ~/.ssh/config
       shell: bash
