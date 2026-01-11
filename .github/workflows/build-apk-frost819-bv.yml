@@ -48,11 +48,8 @@ jobs:
 
       - name: Customize scripts
         run: |
-          # chmod +x $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
-          # $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
-          
-          chmod +x $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819-simple.sh
-          $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819-simple.sh
+          chmod +x $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
+          $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
 
       - name: Merge libraries from monorepo structure
         run: |
@@ -143,13 +140,6 @@ jobs:
             echo "❌ 无法访问 Gradle 插件门户"
           fi
 
-      # - name: Setup android sdk (minimal)
-      #   uses: android-actions/setup-android@main
-      #   with:
-      #     api-level: ${{ env.ANDROID_COMPILE_SDK }}
-      #     build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
-      #     accept-android-sdk-licenses: true
-
       - name: Prepare gradle environment
         working-directory: ./frost819-bv-source
         run: |
@@ -196,16 +186,38 @@ jobs:
           
           mv ./app/build/outputs/apk/default/release/BV_*.release_default_universal.apk ./app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk
           # mv ./app/build/outputs/apk/lite/release/BV_*.release_lite_universal.apk ./app/build/outputs/apk/lite/release/f819bv-lite-${{ env.BUILD_DATE }}.apk
- 
+
+      - name: Remove keystore
+        working-directory: ./frost819-bv-source
+        run: |
+          rm -f "keystore.p12"
+          echo "Keystore removed successfully."
+
+      - name: Install 7zip
+        run: sudo apt-get update && sudo apt-get install -y p7zip-full
+
+      - name: Create aes256 encrypted archive with filename encryption
+        working-directory: ./frost819-bv-source/app/build/outputs/apk/default/release
+        run: |
+          7z a \
+            -p"${{ secrets.ZIP_AES256_PWD }}" \
+            -mhe=on \
+            -t7z \
+            -m0=lzma2 \
+            -mx=5 \
+            -mfb=64 \
+            -md=32m \
+            -ms=on \
+            -mhc=on \
+            -ma=2 \
+            ./f819bv-${{ env.BUILD_DATE }}.7z \
+            ./f819bv-${{ env.BUILD_DATE }}.apk
+
       - name: Create github release & upload apk
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.BUILD_DATE}}-f819bv
-          # tag_name: latest-release
-          # 要附加到此次发布的文件列表
           files: |
-            frost819-bv-source/app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk
-            # frost819-bv-source/app/build/outputs/apk/lite/release/f819bv-lite-${{ env.BUILD_DATE }}.apk
-          # 设置为 true 则每次运行覆盖同名草稿，适用于持续集成测试版
+            frost819-bv-source/app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.7z
           draft: false
           prerelease: false

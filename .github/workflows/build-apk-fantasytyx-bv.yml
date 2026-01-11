@@ -118,20 +118,6 @@ jobs:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
-      # 应用项目特定配置
-      # - name: Fix app version calculation
-      #   working-directory: ./fantasy-bv-source
-      #   run: |
-      #     config_file="buildSrc/src/main/kotlin/AppConfiguration.kt"
-      #     if [ -f "$config_file" ]; then
-      #       echo "正在修改版本号计算规则 (git commit计数 + 1)..."
-      #       sed -i.bak 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' "$config_file"
-      #       echo "修改后 versionCode 定义:"
-      #       grep -A2 -B2 "versionCode.*by lazy" "$config_file"
-      #     else
-      #       echo "警告: 未找到 $config_file，跳过版本修改。"
-      #     fi
- 
       # 验证与准备构建
       - name: Validate final project structure
         working-directory: ./fantasy-bv-source
@@ -209,34 +195,11 @@ jobs:
           
           mv ./app/build/outputs/apk/default/release/*.apk ./app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk
  
-      # 收集与上传结果
-      # - name: Upload APK Artifacts
-      #   if: success()
-      #   uses: actions/upload-artifact@main
-      #   with:
-      #     name: release-apks
-      #     path: |
-      #       fantasy-bv-source/app/build/outputs/apk/**/*release*.apk
-      #       fantasy-bv-source/akdanmaku/build/outputs/aar/**/*release*.aar
-      #     if-no-files-found: error
-      #     retention-days: 30
-
-      # - name: Upload Build Logs for Debugging
-      #   if: always()
-      #   uses: actions/upload-artifact@main
-      #   with:
-      #     name: build-reports-and-libs
-      #     path: |
-      #       fantasy-bv-source/**/build/reports/
-      #       # 上传复制后的libs目录结构以供验证
-      #       fantasy-bv-source/libs/
-      #     retention-days: 7
-
       - name: Remove keystore
         working-directory: ./fantasy-bv-source
         run: |
           rm -f "keystore.p12"
-          echo "Keystore and build.json removed successfully."
+          echo "Keystore removed successfully."
 
       - name: Install 7zip
         run: sudo apt-get update && sudo apt-get install -y p7zip-full
