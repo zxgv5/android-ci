@@ -315,13 +315,20 @@ jobs:
       #     rm -f ~/.ssh/id_ed25519
       #     rm -f ~/.ssh/config
 
-      - name: Push aar to bv-libs repository
-        uses: ./.github/workflows/reusable-push-aar-to-bv-libs.yml # 复用工作流的路径（同仓库）
-        with:
-          SOURCE_AAR: "${{ github.workspace }}/libvlc-release.aar" # 源aar路径
-          TARGET_NAME: "libvlc" # 自定义目标名称，用于信息显示
-          TARGET_DIR: "libVLC" # 自定义目标目录，本aar文件在bv-libs仓库中所在目录
-          TARGET_AAR: "libvlc-release.aar" # 自定义目标文件名
-          BUILD_DATE: "${{ env.BUILD_DATE }}" # 可选：自定义构建日期
-        secrets:
-          BV_LIBS_DEPLOY_KEY: "${{ secrets.BV_LIBS_DEPLOY_KEY }}" # 传递密钥
+  push-to-bv-libs:
+    needs: build  # 依赖build Job完成，确保AAR已生成
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write  # 如需SSH认证，可保留此权限
+    # 调用复用工作流（Job级别）
+    uses: ./.github/workflows/reusable-push-aar-to-bv-libs.yml # 复用工作流的路径（同仓库）
+    with:
+      SOURCE_AAR: "${{ github.workspace }}/libvlc-release.aar" # 源aar路径
+      TARGET_NAME: "libvlc" # 自定义目标名称，用于信息显示
+      TARGET_DIR: "libVLC" # 自定义目标目录，本aar文件在bv-libs仓库中所在目录
+      TARGET_AAR: "libvlc-release.aar" # 自定义目标文件名
+      BUILD_DATE: "${{ needs.build.outputs.BUILD_DATE }}" # 从build Job继承BUILD_DATE
+    secrets:
+      BV_LIBS_DEPLOY_KEY: "${{ secrets.BV_LIBS_DEPLOY_KEY }}" # 传递密钥
+      
