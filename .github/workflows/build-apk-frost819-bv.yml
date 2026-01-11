@@ -39,6 +39,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: zxgv5/bv-libs
+          token: ${{ secrets.BV_LIBS_ACCESS_TOKEN }}
           ref: main
           path: bv-libs-source
 
