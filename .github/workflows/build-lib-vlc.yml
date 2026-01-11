@@ -315,6 +315,7 @@ jobs:
       #     rm -f ~/.ssh/id_ed25519
       #     rm -f ~/.ssh/config
 
+      # 前面checkout ci仓库时指定的检出路径为android-ci-source
       - name: Push aar to bv-libs repository
         uses: ./android-ci-source/.github/actions/push-aar-to-bv-libs/
         with:
