@@ -44,29 +44,29 @@ if [ $? -ne 0 ]; then
 fi
 echo "[3/10] DynamicsScreen.kt 修改完成"
 
-# ========== 4. 精准修改 libs.versions.toml（核心修正） ==========
+# ========== 4. 核心修正：libs.versions.toml（版本号改为1.0.0） ==========
 FANTASY_BV_SOURCE_GRADLE_LVT="$FANTASY_BV_SOURCE_ROOT/gradle/libs.versions.toml"
 if [ ! -f "$FANTASY_BV_SOURCE_GRADLE_LVT" ]; then
     echo "错误：libs.versions.toml 文件不存在！"
     exit 1
 fi
 
-# 4.1 追加版本变量到 [versions] 块末尾（不依赖任何行）
-sed -i '/^\[versions\]/a\androidxComposeBom = "2025.12.00"\nandroidxTvFoundation = "1.1.0"' "$FANTASY_BV_SOURCE_GRADLE_LVT"
-# 4.2 追加依赖库条目到 [libraries] 块末尾（不依赖任何行）
+# 4.1 追加版本变量到 [versions] 块末尾（关键：版本改为1.0.0）
+sed -i '/^\[versions\]/a\androidxComposeBom = "2025.12.00"\nandroidxTvFoundation = "1.0.0"' "$FANTASY_BV_SOURCE_GRADLE_LVT"
+# 4.2 追加依赖库条目到 [libraries] 块末尾
 sed -i '/^\[libraries\]/a\androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidxComposeBom" }\nandroidx-tv-foundation = { module = "androidx.tv:tv-foundation", version.ref = "androidxTvFoundation" }' "$FANTASY_BV_SOURCE_GRADLE_LVT"
-echo "[4/10] libs.versions.toml 配置完成"
+echo "[4/10] libs.versions.toml 配置完成（版本修正为1.0.0）"
 
-# ========== 5. 精准修改 player/tv/build.gradle.kts（核心修正） ==========
+# ========== 5. 修正 player/tv/build.gradle.kts ==========
 FANTASY_BV_SOURCE_PT_BGK="$FANTASY_BV_SOURCE_ROOT/player/tv/build.gradle.kts"
 if [ ! -f "$FANTASY_BV_SOURCE_PT_BGK" ]; then
     echo "错误：player/tv/build.gradle.kts 文件不存在！"
     exit 1
 fi
 
-# 5.1 在 dependencies 块首行添加 Compose BOM（优先级最高）
+# 5.1 在 dependencies 块首行添加 Compose BOM
 sed -i '/dependencies {/a\    val composeBom = platform(libs.androidx.compose.bom)\n    implementation(composeBom)' "$FANTASY_BV_SOURCE_PT_BGK"
-# 5.2 替换原有硬编码依赖为 libs 引用（不删除其他 Compose 依赖）
+# 5.2 替换原有硬编码依赖为 libs 引用
 sed -i 's/implementation(androidx.compose.tv.foundation)/implementation(libs.androidx.tv.foundation)/' "$FANTASY_BV_SOURCE_PT_BGK"
 echo "[5/10] player/tv/build.gradle.kts 配置完成"
 
@@ -181,4 +181,4 @@ sed -i \
   "$FANTASY_BV_SOURCE_ATSMKDABTSM_HOMECONTENT"
 echo "[10/10] HomeContent.kt 修改完成"
 
-echo "===== 所有脚本修改完成！适配原始文件结构 ====="
+echo "===== 所有脚本修改完成！版本号已修正为1.0.0 ====="
