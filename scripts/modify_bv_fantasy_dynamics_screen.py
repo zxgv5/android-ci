@@ -34,17 +34,22 @@ def write_file(file_path, content):
         sys.exit(1)
 
 def add_focus_imports(content):
-    """添加焦点相关导入（缩进无关）"""
+    """添加焦点相关导入（补充所有缺失API，缩进无关）"""
     pattern = re.compile(r'(import androidx\.compose\.ui\.focus\.onFocusChanged\n)')
+    # 核心修改：补充 focus/focusable/focusRestrict/KeyDirectionDown 导入
     new_imports = """import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.focus.focus
+import androidx.compose.foundation.focus.focusable
+import androidx.compose.foundation.focus.focusRestrict
 import androidx.tv.foundation.focus.FocusRestriction
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.KeyDirectionLeft
+import androidx.compose.ui.focus.KeyDirectionLeft
+import androidx.compose.ui.focus.KeyDirectionDown
 """
     if pattern.search(content):
         content = pattern.sub(new_imports, content)
-        print("[SUCCESS] 已添加焦点相关导入")
+        print("[SUCCESS] 已添加焦点相关导入（含缺失API）")
     else:
         print("[ERROR] 未找到onFocusChanged导入行", file=sys.stderr)
         sys.exit(1)
@@ -168,19 +173,24 @@ def add_loading_tip_focus(content):
     return new_content
 
 def verify_modifications(file_path):
-    """验证修改结果（含缩进检查）"""
+    """验证修改结果（含缩进检查+新增缺失API验证）"""
     print("\n[INFO] 开始验证修改结果...")
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # 基础验证项
+    # 基础验证项 + 新增缺失API验证项
     checks = [
         ("焦点导入", "import androidx.tv.foundation.focus.FocusRestriction"),
         ("焦点变量", "val gridFocusRequester = remember { FocusRequester() }"),
         ("Grid焦点修饰符", ".focusRestrict(FocusRestriction.Scrollable)"),
         ("KeyEvent逻辑", "isGridLoadingOrEmpty && it.type == KeyEventType.KeyDown"),
         ("LoadingTip焦点-1", ".focusRequester(gridFocusRequester)"),
-        ("LoadingTip焦点-2", ".focusable()")
+        ("LoadingTip焦点-2", ".focusable()"),
+        # 新增验证项：确保缺失的API导入成功
+        ("focus API导入", "import androidx.compose.foundation.focus.focus"),
+        ("focusable API导入", "import androidx.compose.foundation.focus.focusable"),
+        ("focusRestrict API导入", "import androidx.compose.foundation.focus.focusRestrict"),
+        ("KeyDirectionDown导入", "import androidx.compose.ui.focus.KeyDirectionDown")
     ]
     
     all_passed = True
