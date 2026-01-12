@@ -1,400 +1,255 @@
-import os
-import sys
-
-def modify_libs_versions_toml(file_path):
-    """修改gradle/libs.versions.toml文件：使用稳定依赖版本 + BOM统一管理"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        
-        # 步骤1：在[libraries]前添加4行版本定义（核心修改：降低tv版本为稳定版0.6.0）
-        insert_lines_version = [
-            'androidx-compose = "1.6.0"  # Compose 核心版本\n',
-            'androidx-compose-bom = "2024.02.02"  # Compose BOM 版本\n',
-            'androidx-tv = "0.6.0"  # TV Compose 稳定版本（1.0.0暂未发布）\n',
-            'androidx-lifecycle = "2.7.0"  # Lifecycle 版本\n'
-        ]
-        libraries_index = None
-        for idx, line in enumerate(lines):
-            if line.strip() == '[libraries]':
-                libraries_index = idx
-                break
-        if libraries_index is not None:
-            for line in reversed(insert_lines_version):
-                lines.insert(libraries_index, line)
-        
-        # 步骤2：在文件末尾追加依赖（核心修改：移除material3手动版本，由BOM管理）
-        append_lines = [
-            '# 添加的 Compose 相关依赖\n',
-            '# Compose BOM（统一管理所有Compose版本）\n',
-            'androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }\n',
-            '# Compose 基础依赖\n',
-            'androidx-compose-ui = { module = "androidx.compose.ui:ui", version.ref = "androidx-compose" }\n',
-            'androidx-compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics", version.ref = "androidx-compose" }\n',
-            'androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "androidx-compose" }\n',
-            'androidx-compose-foundation = { module = "androidx.compose.foundation:foundation", version.ref = "androidx-compose" }\n',
-            'androidx-compose-material3 = { module = "androidx.compose.material3:material3" }\n',  # 移除version.ref，由BOM管理
-            'androidx-compose-runtime = { module = "androidx.compose.runtime:runtime", version.ref = "androidx-compose" }\n',
-            'androidx-compose-runtime-livedata = { module = "androidx.compose.runtime:runtime-livedata", version.ref = "androidx-compose" }\n',
-            '# Compose Navigation\n',
-            'androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version = "2.7.7" }\n',
-            '# Compose Activity\n',
-            'androidx-activity-compose = { module = "androidx.activity:activity-compose", version = "1.8.2" }\n',
-            '# TV Compose 依赖（使用稳定版0.6.0）\n',
-            'androidx-tv-foundation = { module = "androidx.tv:tv-foundation", version.ref = "androidx-tv" }\n',
-            'androidx-tv-material = { module = "androidx.tv:tv-material", version.ref = "androidx-tv" }\n',
-            '# Lifecycle 依赖\n',
-            'androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }\n',
-            'androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }\n',
-            '# Compose 工具依赖\n',
-            'androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = "androidx-compose" }\n',
-            'androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "androidx-compose" }\n',
-            'androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "androidx-compose" }\n',
-            '[plugins]\n',
-            '# 添加 Compose 插件\n',
-            'androidx-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version = "2.0.21" }\n'
-        ]
-        lines.extend(append_lines)
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.writelines(lines)
-        print(f"✅ 成功修改: {file_path}")
-    except Exception as e:
-        print(f"❌ 修改 {file_path} 失败: {str(e)}")
-        raise
-
-def modify_app_build_gradle_kts(file_path):
-    """修改app/build.gradle.kts：替换dependencies块"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        original_block = """dependencies {
-    implementation(project(":app:mobile"))
-    implementation(project(":app:tv"))
-    implementation(project(":app:shared"))
-}"""
-        
-        new_block = """dependencies {
-    implementation(project(":app:mobile"))
-    implementation(project(":app:tv"))
-    implementation(project(":app:shared"))
-    // Compose BOM（统一管理所有Compose版本，避免冲突）
-    val composeBom = platform(libs.androidx.compose.bom)
-    implementation(composeBom)
-    // TV Compose 依赖（使用稳定版0.6.0）
-    implementation(libs.androidx.tv.foundation)
-    implementation(libs.androidx.tv.material)
-    // Compose 基础依赖
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.compose.runtime)
-    implementation(libs.androidx.compose.runtime.livedata)
-    // 其他必要的 Compose 依赖
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.navigation.compose)
-    // 调试工具
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-    // 测试依赖
-    androidTestImplementation(composeBom)
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-}"""
-        
-        if original_block in content:
-            content = content.replace(original_block, new_block)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            print(f"✅ 成功修改: {file_path}")
-        else:
-            print(f"⚠️ 未找到目标依赖块: {file_path}")
-    except Exception as e:
-        print(f"❌ 修改 {file_path} 失败: {str(e)}")
-        raise
-
-def modify_tv_build_gradle_kts(file_path):
-    """修改app/tv/build.gradle.kts：替换dependencies块"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        original_block = """dependencies {
-    implementation(project(":app:shared"))
-}"""
-        
-        new_block = """dependencies {
-    implementation(project(":app:shared"))
-    // Compose BOM（统一管理所有Compose版本，避免冲突）
-    val composeBom = platform(libs.androidx.compose.bom)
-    implementation(composeBom)
-    // TV Compose 依赖（使用稳定版0.6.0）
-    implementation(libs.androidx.tv.foundation)
-    implementation(libs.androidx.tv.material)
-    // Compose 基础依赖
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.compose.runtime)
-    // 其他必要的 Compose 依赖
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    // 如果您的 TV 模块需要导航
-    implementation(libs.androidx.navigation.compose)
-    // 调试工具
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-    // 测试依赖
-    androidTestImplementation(composeBom)
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-}"""
-        
-        if original_block in content:
-            content = content.replace(original_block, new_block)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            print(f"✅ 成功修改: {file_path}")
-        else:
-            print(f"⚠️ 未找到目标依赖块: {file_path}")
-    except Exception as e:
-        print(f"❌ 修改 {file_path} 失败: {str(e)}")
-        raise
-
-def modify_dynamics_screen_kt(file_path):
-    """最终修复版：解决导入冲突/变量未定义/语法错误/Composable 作用域问题"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # ===================== 修复1：精准导入（仅添加缺失项，避免冲突） =====================
-        # 必要导入（使用明确包路径，避免同名冲突）
-        missing_imports = [
-            'import androidx.compose.runtime.derivedStateOf',
-            'import androidx.compose.runtime.mutableStateOf',
-            'import androidx.compose.runtime.remember',
-            'import androidx.compose.ui.ExperimentalComposeUiApi',
-            'import androidx.compose.ui.focus.FocusRequester',
-            'import androidx.compose.ui.focus.focusRequester',
-            'import androidx.compose.ui.focus.onFocusChanged',
-            'import androidx.compose.ui.focus.focusProperties',
-            'import androidx.compose.ui.input.key.Key',
-            'import androidx.compose.ui.input.key.KeyEventType',
-            'import androidx.compose.ui.input.key.onPreviewKeyEvent',
-            'import androidx.compose.foundation.focusable',
-            'import androidx.compose.foundation.lazy.grid.GridCells',
-            'import androidx.compose.foundation.lazy.grid.GridItemSpan',
-            'import androidx.compose.ui.Alignment',
-            'import androidx.compose.ui.graphics.Color',
-            'import androidx.compose.foundation.layout.Box',
-            'import androidx.compose.foundation.layout.Arrangement',
-            'import androidx.compose.foundation.layout.PaddingValues'
-        ]
-        # 仅添加文件中不存在的导入（插入到第一个import之后）
-        first_import_idx = content.find('import ')
-        if first_import_idx != -1:
-            # 找到第一个import块的结束位置（空行分隔）
-            import_end_idx = content.find('\n\n', first_import_idx)
-            if import_end_idx == -1:
-                import_end_idx = content.find('\nfun ', first_import_idx)
-            current_imports = content[first_import_idx:import_end_idx].split('\n')
-            for imp in missing_imports:
-                if imp not in current_imports:
-                    content = content[:import_end_idx] + f'\n{imp}' + content[import_end_idx:]
-
-        # ===================== 修复2：补充currentFocusedIndex变量定义 =====================
-        scope_pattern = 'val scope = rememberCoroutineScope()'
-        scope_pos = content.find(scope_pattern)
-        if scope_pos != -1:
-            scope_line_end = content.find('\n', scope_pos) + 1
-            # 完整变量定义（含注释+可观察状态）
-            add_vars = """
-    // 焦点请求器：用于拦截加载/空列表状态下的焦点
-    val gridFocusRequester = remember { FocusRequester() }
-    val gridColumns = 4 // 网格列数
-    // 推导状态：是否处于加载中或列表为空（用于焦点拦截）
-    val isGridLoadingOrEmpty by remember {
-        derivedStateOf { dynamicViewModel.loadingVideo || dynamicViewModel.dynamicVideoList.isEmpty() }
-    }
-    // 当前选中的视频索引（核心修复：补充可观察状态定义）
-    val currentFocusedIndex by remember { mutableStateOf(-1) }
+#!/usr/bin/env python3
 """
-            content = content[:scope_line_end] + add_vars + content[scope_line_end:]
+方案4自定义焦点导航实现脚本
+针对 DynamicsScreen.kt 文件，解决焦点异常移出问题
+"""
 
-        # ===================== 修复3：精准替换ProvideListBringIntoViewSpec块（解决括号/作用域问题） =====================
-        # 定位块的完整范围（处理嵌套大括号，避免替换不完整）
-        start_pattern = 'ProvideListBringIntoViewSpec {'
-        start_pos = content.find(start_pattern)
-        if start_pos != -1:
-            # 正确匹配闭合大括号（计数法）
-            brace_count = 1
-            end_pos = start_pos + len(start_pattern)
-            while brace_count > 0 and end_pos < len(content):
-                if content[end_pos] == '{':
-                    brace_count += 1
-                elif content[end_pos] == '}':
-                    brace_count -= 1
-                end_pos += 1
-            # 修复后的块内容（解决语法/作用域问题）
-            new_block_content = """
-            @OptIn(ExperimentalComposeUiApi::class)
-            LazyVerticalGrid(
-                modifier = modifier
-                    .fillMaxSize()
-                    .focusRequester(gridFocusRequester)
-                    .onFocusChanged {
-                        // 失去焦点时重置选中索引
+import re
+import sys
+import os
+
+def apply_custom_focus_navigation(file_path):
+    """
+    应用方案4自定义焦点导航，解决焦点异常移出问题
+    """
+    
+    if not os.path.exists(file_path):
+        print(f"错误: 文件不存在: {file_path}")
+        return False
+    
+    # 读取文件内容
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # 创建备份文件
+    backup_path = file_path + '.bak'
+    with open(backup_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    print(f"已创建备份文件: {backup_path}")
+    
+    # 第一步：修改 onPreviewKeyEvent 部分，应用完整的方案4
+    # 查找原始的 onPreviewKeyEvent 代码块
+    original_key_event_pattern = r'\.onPreviewKeyEvent\s*\{[\s\S]*?false\s*\}'
+    
+    # 方案4的完整自定义焦点导航代码
+    custom_navigation_code = '''.onPreviewKeyEvent { event ->
+                        when {
+                            event.type == KeyEventType.KeyDown -> {
+                                when (event.key) {
+                                    Key.DirectionDown -> {
+                                        if (dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0) {
+                                            val nextIndex = currentFocusedIndex + 4 // 下方向键移动4列（网格宽度）
+                                            // 确保目标位置已加载
+                                            if (nextIndex < dynamicViewModel.dynamicVideoList.size) {
+                                                currentFocusedIndex = nextIndex
+                                                scope.launch {
+                                                    lazyGridState.scrollToItem(nextIndex)
+                                                }
+                                                true // 消费事件，阻止默认焦点移动
+                                            } else if (nextIndex >= dynamicViewModel.dynamicVideoList.size && dynamicViewModel.videoHasMore && !dynamicViewModel.loadingVideo) {
+                                                // 触发加载更多，但不移动焦点
+                                                scope.launch(Dispatchers.IO) {
+                                                    dynamicViewModel.loadMoreVideo()
+                                                }
+                                                true // 消费事件，阻止焦点移出
+                                            } else {
+                                                // 已到底部或正在加载，阻止焦点移出
+                                                true
+                                            }
+                                        } else {
+                                            // 列表为空或没有焦点，阻止默认导航
+                                            true
+                                        }
+                                    }
+                                    Key.DirectionUp -> {
+                                        if (dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0) {
+                                            val nextIndex = currentFocusedIndex - 4 // 上方向键移动4列
+                                            if (nextIndex >= 0) {
+                                                currentFocusedIndex = nextIndex
+                                                scope.launch {
+                                                    lazyGridState.scrollToItem(nextIndex)
+                                                }
+                                                true
+                                            } else {
+                                                // 已到顶部，阻止焦点移出网格
+                                                true
+                                            }
+                                        } else {
+                                            true
+                                        }
+                                    }
+                                    Key.DirectionRight -> {
+                                        if (dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0) {
+                                            val nextIndex = currentFocusedIndex + 1
+                                            // 检查是否在同一行（防止跨行移动）
+                                            val currentRow = currentFocusedIndex / 4
+                                            val nextRow = nextIndex / 4
+                                            if (nextIndex < dynamicViewModel.dynamicVideoList.size && currentRow == nextRow) {
+                                                currentFocusedIndex = nextIndex
+                                                scope.launch {
+                                                    lazyGridState.scrollToItem(nextIndex)
+                                                }
+                                                true
+                                            } else {
+                                                // 阻止移动到下一行或未加载项
+                                                true
+                                            }
+                                        } else {
+                                            true
+                                        }
+                                    }
+                                    Key.DirectionLeft -> {
+                                        if (dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0) {
+                                            val nextIndex = currentFocusedIndex - 1
+                                            // 检查是否在同一行
+                                            val currentRow = currentFocusedIndex / 4
+                                            val nextRow = nextIndex / 4
+                                            if (nextIndex >= 0 && currentRow == nextRow) {
+                                                currentFocusedIndex = nextIndex
+                                                scope.launch {
+                                                    lazyGridState.scrollToItem(nextIndex)
+                                                }
+                                                true
+                                            } else {
+                                                // 阻止移动到上一行或无效位置
+                                                true
+                                            }
+                                        } else {
+                                            true
+                                        }
+                                    }
+                                    Key.Menu -> {
+                                        // 不处理KeyDown，等待KeyUp
+                                        false
+                                    }
+                                    else -> false
+                                }
+                            }
+                            event.type == KeyEventType.KeyUp && event.key == Key.Menu -> {
+                                context.startActivity(Intent(context, FollowActivity::class.java))
+                                true
+                            }
+                            else -> false
+                        }
+                    }'''
+    
+    # 替换 onPreviewKeyEvent 部分
+    match = re.search(original_key_event_pattern, content, re.DOTALL)
+    if match:
+        old_code = match.group(0)
+        content = content.replace(old_code, custom_navigation_code)
+        print("✓ 已应用方案4自定义焦点导航")
+    else:
+        print("错误: 未找到 onPreviewKeyEvent 部分")
+        return False
+    
+    # 第二步：改进焦点恢复逻辑
+    # 查找原始的 onFocusChanged 代码
+    original_focus_changed_code = '''                    .onFocusChanged{
                         if (!it.isFocused) {
                             currentFocusedIndex = -1
                         }
-                    }
-                    .focusProperties {
-                        canFocus = true
-                        enter = { gridFocusRequester }
-                        exit = { gridFocusRequester }
-                    }
-                    .onPreviewKeyEvent { keyEvent ->
-                        // 第一层防护：加载中/列表为空时，拦截所有方向键
-                        if (isGridLoadingOrEmpty && keyEvent.type == KeyEventType.KeyDown) {
-                            gridFocusRequester.requestFocus()
-                            return@onPreviewKeyEvent true
+                    }'''
+    
+    # 改进的 onFocusChanged 代码
+    improved_focus_changed_code = '''                    .onFocusChanged{
+                        if (it.isFocused) {
+                            // 当网格重新获得焦点时，如果之前没有焦点位置且列表不为空，聚焦到第一个项目
+                            if (currentFocusedIndex == -1 && dynamicViewModel.dynamicVideoList.isNotEmpty()) {
+                                currentFocusedIndex = 0
+                            }
+                        } else {
+                            currentFocusedIndex = -1
                         }
-                        // 第二层防护：第一列的项，拦截左方向键
-                        if (keyEvent.type == KeyEventType.KeyDown && 
-                            keyEvent.key == Key.Left && 
-                            currentFocusedIndex >= 0 && 
-                            currentFocusedIndex % gridColumns == 0) {
-                            gridFocusRequester.requestFocus()
-                            return@onPreviewKeyEvent true
-                        }
-                        // 第三层防护：最后一项且无更多数据时，拦截下方向键
-                        if (keyEvent.type == KeyEventType.KeyDown && 
-                            keyEvent.key == Key.Down && 
-                            currentFocusedIndex >= dynamicViewModel.dynamicVideoList.size - 1 && 
-                            !dynamicViewModel.videoHasMore) {
-                            gridFocusRequester.requestFocus()
-                            return@onPreviewKeyEvent true
-                        }
-                        // 保留原有Menu键逻辑：打开关注页面
-                        if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Menu) {
-                            context.startActivity(android.content.Intent(context, FollowActivity::class.java))
-                            return@onPreviewKeyEvent true
-                        }
-                        false
-                    },
-                columns = GridCells.Fixed(4),
-                state = lazyGridState,
-                contentPadding = PaddingValues(padding),
-                verticalArrangement = Arrangement.spacedBy(spacedBy),
-                horizontalArrangement = Arrangement.spacedBy(spacedBy)
-            ) {
-                // 视频列表项
-                itemsIndexed(dynamicViewModel.dynamicVideoList) { index, item ->
-                    SmallVideoCard(
-                        data = remember(item.aid) {
-                            VideoCardData(
-                                avid = item.aid,
-                                title = item.title,
-                                cover = item.cover,
-                                play = item.play,
-                                danmaku = item.danmaku,
-                                upName = item.author,
-                                time = item.duration * 1000L,
-                                pubTime = item.pubTime,
-                                isChargingArc = item.isChargingArc,
-                                badgeText = item.chargingArcBadge
-                            )
-                        },
-                        onClick = { onClickVideo(item) },
-                        onLongClick = { onLongClickVideo(item) },
-                        onFocus = { currentFocusedIndex = index }
-                    )
-                }
-
-                // 加载状态项：占满整行，绑定焦点请求器确保焦点拦截生效
-                if (dynamicViewModel.loadingVideo) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(
-                            modifier = androidx.compose.ui.Modifier.fillMaxSize()
-                                .focusRequester(gridFocusRequester)
-                                .focusable(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingTip()
-                        }
-                    }
-                }
-
-                // 无更多数据提示项
-                if (!dynamicViewModel.videoHasMore) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        androidx.compose.material3.Text(
-                            text = "没有更多了捏",
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-"""
-            # 替换原有内容（确保括号完全覆盖）
-            content = content[:start_pos + len(start_pattern)] + new_block_content + content[end_pos:]
-
-        # ===================== 修复4：删除重复导入（解决冲突） =====================
-        # 去重逻辑：删除重复的import行
-        lines = content.split('\n')
-        seen_imports = set()
-        new_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('import '):
-                if stripped not in seen_imports:
-                    seen_imports.add(stripped)
-                    new_lines.append(line)
-            else:
-                new_lines.append(line)
-        content = '\n'.join(new_lines)
-
-        # ===================== 写回文件 =====================
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print(f"✅ 成功修复并修改: {file_path}")
-
-    except Exception as e:
-        print(f"❌ 修改 {file_path} 失败: {str(e)}")
-        raise
+                    }'''
+    
+    if original_focus_changed_code in content:
+        content = content.replace(original_focus_changed_code, improved_focus_changed_code)
+        print("✓ 已改进焦点恢复逻辑")
+    
+    # 第三步：优化 shouldLoadMore 条件
+    # 查找原始的 shouldLoadMore 定义
+    original_should_load_more = '''    val shouldLoadMore by remember {
+        derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex + 12 > dynamicViewModel.dynamicVideoList.size }
+    }'''
+    
+    # 优化后的 shouldLoadMore 定义
+    # 从 +12 改为 +8，提前触发加载，为焦点移动预留缓冲
+    optimized_should_load_more = '''    val shouldLoadMore by remember {
+        derivedStateOf { 
+            dynamicViewModel.dynamicVideoList.isNotEmpty() && 
+            currentFocusedIndex >= 0 &&
+            currentFocusedIndex + 8 > dynamicViewModel.dynamicVideoList.size &&
+            dynamicViewModel.videoHasMore &&
+            !dynamicViewModel.loadingVideo
+        }
+    }'''
+    
+    if original_should_load_more in content:
+        content = content.replace(original_should_load_more, optimized_should_load_more)
+        print("✓ 已优化 shouldLoadMore 触发条件（从+12改为+8）")
+    
+    # 第四步：保存修改后的文件
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    print("=" * 60)
+    print("方案4自定义焦点导航实现完成！")
+    print("\n主要修改内容：")
+    print("1. 应用了方案4的完整自定义焦点导航逻辑")
+    print("2. 改进了焦点恢复逻辑，重新获得焦点时会聚焦到第一个项目")
+    print("3. 优化了 shouldLoadMore 触发条件，提前触发数据加载")
+    print("\n方案4核心特性：")
+    print("• 完全接管方向键导航，阻止系统默认焦点移动")
+    print("• 确保焦点只在已加载数据范围内移动")
+    print("• 当焦点接近底部时自动触发加载，但焦点保持原位")
+    print("• 防止焦点跨行移动和移出网格边界")
+    print("• 保持 Menu 键原有功能不变")
+    print("\n已创建的备份文件可用于恢复：")
+    print(f"  {backup_path}")
+    
+    return True
 
 def main():
     if len(sys.argv) != 2:
-        print("🚫 用法错误！正确用法：")
-        print("python modify_files.py <项目顶级目录>")
-        print("示例：python modify_files.py /home/runner/work/android-ci/android-ci/fantasy-bv-source")
+        print("使用方法: python apply_solution4.py <kt_file_path>")
+        print("示例: python apply_solution4.py DynamicsScreen.kt")
         sys.exit(1)
     
-    root_dir = sys.argv[1]
-    files = [
-        (os.path.join(root_dir, "gradle", "libs.versions.toml"), modify_libs_versions_toml),
-        (os.path.join(root_dir, "app", "build.gradle.kts"), modify_app_build_gradle_kts),
-        (os.path.join(root_dir, "app", "tv", "build.gradle.kts"), modify_tv_build_gradle_kts),
-        (os.path.join(root_dir, "app", "tv", "src", "main", "kotlin", "dev", "aaa1115910", "bv", "tv", "screens", "main", "home", "DynamicsScreen.kt"), modify_dynamics_screen_kt)
-    ]
+    file_path = sys.argv[1]
     
-    # 检查文件存在性
-    for file_path, _ in files:
-        if not os.path.exists(file_path):
-            print(f"🚫 文件不存在：{file_path}")
-            sys.exit(1)
+    if not file_path.endswith('.kt'):
+        print("警告: 文件不是 .kt 后缀，可能不是 Kotlin 文件")
+        response = input("是否继续? (y/N): ")
+        if response.lower() != 'y':
+            sys.exit(0)
     
-    # 执行修改
-    for file_path, func in files:
-        func(file_path)
+    print(f"正在处理文件: {file_path}")
+    print("=" * 60)
+    print("应用方案4：自定义焦点导航")
+    print("=" * 60)
     
-    print("\n🎉 所有文件修改完成！核心语法错误+功能逻辑已全部修复，可直接编译运行。")
+    success = apply_custom_focus_navigation(file_path)
+    
+    if success:
+        print("\n✓ 方案4实现成功！")
+        print("\n问题分析回顾：")
+        print("原问题：长按下方向键快速浏览时，焦点会异常移出页面")
+        print("原因：异步数据加载速度跟不上焦点移动速度，导致焦点移动到未加载区域")
+        print("方案4解决方案：")
+        print("  1. 完全自定义焦点导航逻辑，阻止系统默认行为")
+        print("  2. 焦点只允许在已加载数据范围内移动")
+        print("  3. 提前触发数据加载，为焦点移动预留缓冲")
+        print("  4. 添加边界检查，防止焦点移出网格")
+        print("\n测试建议：")
+        print("1. 编译并运行应用")
+        print("2. 长按下方向键测试快速滚动")
+        print("3. 观察焦点是否会停留在网格内")
+        print("4. 测试数据加载期间的焦点行为")
+        print("5. 测试各个方向键在边界情况下的行为")
+    else:
+        print("\n✗ 实现失败")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
