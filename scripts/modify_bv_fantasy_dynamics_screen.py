@@ -168,61 +168,52 @@ def modify_tv_build_gradle_kts(file_path):
         raise
 
 def modify_dynamics_screen_kt(file_path):
-    """重新实现：严格按要求修改DynamicsScreen.kt文件
-    核心修改点：
-    1. 在scope变量后添加焦点请求器/网格列数/加载空状态推导/选中索引注释
-    2. 在ProvideListBringIntoViewSpec {}后添加ExperimentalComposeUiApi注解
-    3. 完整替换ProvideListBringIntoViewSpec块内的所有内容为指定逻辑
-    """
+    """最终修复版：解决导入冲突/变量未定义/语法错误/Composable 作用域问题"""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # ===================== 步骤1：添加必要的导入语句 =====================
-        # 需要的导入集合（去重添加）
-        required_imports = [
+        # ===================== 修复1：精准导入（仅添加缺失项，避免冲突） =====================
+        # 必要导入（使用明确包路径，避免同名冲突）
+        missing_imports = [
             'import androidx.compose.runtime.derivedStateOf',
+            'import androidx.compose.runtime.mutableStateOf',
+            'import androidx.compose.runtime.remember',
             'import androidx.compose.ui.ExperimentalComposeUiApi',
             'import androidx.compose.ui.focus.FocusRequester',
             'import androidx.compose.ui.focus.focusRequester',
             'import androidx.compose.ui.focus.onFocusChanged',
             'import androidx.compose.ui.focus.focusProperties',
-            'import androidx.compose.ui.input.key.KeyEventType',
             'import androidx.compose.ui.input.key.Key',
+            'import androidx.compose.ui.input.key.KeyEventType',
             'import androidx.compose.ui.input.key.onPreviewKeyEvent',
             'import androidx.compose.foundation.focusable',
             'import androidx.compose.foundation.lazy.grid.GridCells',
-            'import androidx.compose.foundation.lazy.grid.LazyVerticalGrid',
-            'import androidx.compose.foundation.lazy.grid.itemsIndexed',
             'import androidx.compose.foundation.lazy.grid.GridItemSpan',
             'import androidx.compose.ui.Alignment',
-            'import androidx.compose.ui.Modifier',
             'import androidx.compose.ui.graphics.Color',
             'import androidx.compose.foundation.layout.Box',
-            'import androidx.compose.foundation.layout.PaddingValues',
             'import androidx.compose.foundation.layout.Arrangement',
-            'import androidx.compose.material3.Text',
-            'import android.content.Intent'
+            'import androidx.compose.foundation.layout.PaddingValues'
         ]
+        # 仅添加文件中不存在的导入（插入到第一个import之后）
+        first_import_idx = content.find('import ')
+        if first_import_idx != -1:
+            # 找到第一个import块的结束位置（空行分隔）
+            import_end_idx = content.find('\n\n', first_import_idx)
+            if import_end_idx == -1:
+                import_end_idx = content.find('\nfun ', first_import_idx)
+            current_imports = content[first_import_idx:import_end_idx].split('\n')
+            for imp in missing_imports:
+                if imp not in current_imports:
+                    content = content[:import_end_idx] + f'\n{imp}' + content[import_end_idx:]
 
-        # 找到文件中第一个import位置，插入缺失的导入（去重）
-        import_end_idx = content.find('\n\n')  # 导入块通常以空行结束
-        if import_end_idx == -1:
-            import_end_idx = content.find('fun')  # 找不到空行则找函数开始位置
-        import_block = content[:import_end_idx]
-        for imp in required_imports:
-            if imp not in import_block:
-                # 插入到import块末尾
-                content = content[:import_end_idx] + f'\n{imp}' + content[import_end_idx:]
-
-        # ===================== 步骤2：在scope行后添加指定变量 =====================
-        # 定位scope变量行
+        # ===================== 修复2：补充currentFocusedIndex变量定义 =====================
         scope_pattern = 'val scope = rememberCoroutineScope()'
         scope_pos = content.find(scope_pattern)
         if scope_pos != -1:
-            # 找到scope行的结束位置
             scope_line_end = content.find('\n', scope_pos) + 1
-            # 要添加的变量代码（严格按要求）
+            # 完整变量定义（含注释+可观察状态）
             add_vars = """
     // 焦点请求器：用于拦截加载/空列表状态下的焦点
     val gridFocusRequester = remember { FocusRequester() }
@@ -231,30 +222,27 @@ def modify_dynamics_screen_kt(file_path):
     val isGridLoadingOrEmpty by remember {
         derivedStateOf { dynamicViewModel.loadingVideo || dynamicViewModel.dynamicVideoList.isEmpty() }
     }
-    // 当前选中的视频索引
+    // 当前选中的视频索引（核心修复：补充可观察状态定义）
+    val currentFocusedIndex by remember { mutableStateOf(-1) }
 """
-            # 插入变量
             content = content[:scope_line_end] + add_vars + content[scope_line_end:]
 
-        # ===================== 步骤3：定位并修改ProvideListBringIntoViewSpec块 =====================
-        # 定位ProvideListBringIntoViewSpec的开始和结束位置
+        # ===================== 修复3：精准替换ProvideListBringIntoViewSpec块（解决括号/作用域问题） =====================
+        # 定位块的完整范围（处理嵌套大括号，避免替换不完整）
         start_pattern = 'ProvideListBringIntoViewSpec {'
-        end_pattern = '}'  # 匹配对应的闭合大括号（处理嵌套）
         start_pos = content.find(start_pattern)
         if start_pos != -1:
-            # 找到ProvideListBringIntoViewSpec块的完整闭合括号
-            start_brace = start_pos + len(start_pattern)
+            # 正确匹配闭合大括号（计数法）
             brace_count = 1
-            end_pos = start_brace
+            end_pos = start_pos + len(start_pattern)
             while brace_count > 0 and end_pos < len(content):
                 if content[end_pos] == '{':
                     brace_count += 1
                 elif content[end_pos] == '}':
                     brace_count -= 1
                 end_pos += 1
-
-            # 构建新的ProvideListBringIntoViewSpec块内容（严格按要求）
-            new_provide_content = """
+            # 修复后的块内容（解决语法/作用域问题）
+            new_block_content = """
             @OptIn(ExperimentalComposeUiApi::class)
             LazyVerticalGrid(
                 modifier = modifier
@@ -267,7 +255,6 @@ def modify_dynamics_screen_kt(file_path):
                         }
                     }
                     .focusProperties {
-                        // 配置焦点属性，确保焦点请求器生效
                         canFocus = true
                         enter = { gridFocusRequester }
                         exit = { gridFocusRequester }
@@ -296,10 +283,9 @@ def modify_dynamics_screen_kt(file_path):
                         }
                         // 保留原有Menu键逻辑：打开关注页面
                         if (keyEvent.type == KeyEventType.KeyUp && keyEvent.key == Key.Menu) {
-                            context.startActivity(Intent(context, FollowActivity::class.java))
+                            context.startActivity(android.content.Intent(context, FollowActivity::class.java))
                             return@onPreviewKeyEvent true
                         }
-                        // 其他按键不拦截
                         false
                     },
                 columns = GridCells.Fixed(4),
@@ -335,9 +321,9 @@ def modify_dynamics_screen_kt(file_path):
                 if (dynamicViewModel.loadingVideo) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
-                            modifier = Modifier.fillMaxSize()
-                                .focusRequester(gridFocusRequester) // 绑定焦点请求器
-                                .focusable(), // 启用焦点能力
+                            modifier = androidx.compose.ui.Modifier.fillMaxSize()
+                                .focusRequester(gridFocusRequester)
+                                .focusable(),
                             contentAlignment = Alignment.Center
                         ) {
                             LoadingTip()
@@ -348,7 +334,7 @@ def modify_dynamics_screen_kt(file_path):
                 // 无更多数据提示项
                 if (!dynamicViewModel.videoHasMore) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
+                        androidx.compose.material3.Text(
                             text = "没有更多了捏",
                             color = Color.White
                         )
@@ -356,13 +342,28 @@ def modify_dynamics_screen_kt(file_path):
                 }
             }
 """
-            # 替换原有内容
-            content = content[:start_pos + len(start_pattern)] + new_provide_content + content[end_pos:]
+            # 替换原有内容（确保括号完全覆盖）
+            content = content[:start_pos + len(start_pattern)] + new_block_content + content[end_pos:]
 
-        # ===================== 写回修改后的内容 =====================
+        # ===================== 修复4：删除重复导入（解决冲突） =====================
+        # 去重逻辑：删除重复的import行
+        lines = content.split('\n')
+        seen_imports = set()
+        new_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('import '):
+                if stripped not in seen_imports:
+                    seen_imports.add(stripped)
+                    new_lines.append(line)
+            else:
+                new_lines.append(line)
+        content = '\n'.join(new_lines)
+
+        # ===================== 写回文件 =====================
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        print(f"✅ 成功修改: {file_path}")
+        print(f"✅ 成功修复并修改: {file_path}")
 
     except Exception as e:
         print(f"❌ 修改 {file_path} 失败: {str(e)}")
