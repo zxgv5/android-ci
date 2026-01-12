@@ -1,6 +1,8 @@
 #!/bin/bash
 # customize-bv-frost819.sh
- 
+
+set -e  # 遇到错误立即退出，避免CI静默失败
+
 FROST819_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/frost819-bv-source"
  
 # 修改 AppConfiguration.kt 中的配置项

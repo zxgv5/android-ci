@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@main
         with:
           # 指定一个子目录放ci仓库，避免与源仓库混淆
-          path: android-ci-source
+          path: ci-source
 
       - name: Checkout source repo (frost819-bv)
         uses: actions/checkout@main
@@ -49,8 +49,8 @@ jobs:
 
       - name: Customize scripts
         run: |
-          chmod +x $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
-          $GITHUB_WORKSPACE/android-ci-source/scripts/customize-bv-frost819.sh
+          chmod +x $GITHUB_WORKSPACE/ci-source/scripts/customize-bv-frost819.sh
+          $GITHUB_WORKSPACE/ci-source/scripts/customize-bv-frost819.sh
 
       - name: Merge libraries from monorepo structure
         run: |

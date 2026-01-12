@@ -1,0 +1,90 @@
+name: 'Erase keystore zip with aes256 and release'
+description: '擦除签名用key，安装7zip，将构建生成物打包为.7z(启用aes256加密，及文件名加密)，并发布的可重用action'
+
+# 定义外部输入参数（必填）
+inputs:
+  P12_KEYSTORE_PATH:
+    description: '签名用P12私钥文件的路径，用于删除该文件'
+    required: true
+    type: string
+  ZIP_AES256_PWD:
+    description: '7z压缩包的AES256加密口令（注意保密，建议用secrets传递）'
+    required: true
+    type: string
+  BUILD_ARTIFACT_PATH:
+    description: '构建生成物的文件路径（不含.7z后缀），用于打包'
+    required: true
+    type: string
+  RELEASE_TAG_NAME:
+    description: 'GitHub Release对应的Tag名称'
+    required: true
+    type: string
+
+# 定义Action的运行步骤
+runs:
+  using: "composite"  # 声明为复合步骤Action（支持多shell命令）
+  steps:
+    - name: Remove keystore
+      shell: bash
+      working-directory: ${{ github.workspace }}  # 固定工作目录为仓库根目录
+      run: |
+        set -e  # 命令出错时立即退出，避免继续执行
+        # 删除私钥文件并校验结果
+        rm -f "${{ inputs.P12_KEYSTORE_PATH }}"
+        if [ ! -f "${{ inputs.P12_KEYSTORE_PATH }}" ]; then
+          echo "✅ 私钥文件 '${{ inputs.P12_KEYSTORE_PATH }}' 已成功删除"
+        else
+          echo "❌ 私钥文件删除失败"
+          exit 1
+        fi
+
+    - name: Install 7zip
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -e
+        # 更新包源并安装7zip（精简安装，避免冗余）
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends p7zip-full
+        # 校验7zip安装结果
+        if command -v 7z &> /dev/null; then
+          echo "✅ 7zip安装成功，版本：$(7z --version | head -n1)"
+        else
+          echo "❌ 7zip安装失败"
+          exit 1
+        fi
+
+    - name: Create aes256 archive with filename encryption
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -e
+        # 打包并加密（参数说明：-mhe=on启用文件名加密，-mx=5中等压缩级别）
+        7z a \
+          -p"${{ inputs.ZIP_AES256_PWD }}" \
+          -mhe=on \
+          -t7z \
+          -m0=lzma2 \
+          -mx=5 \
+          -mfb=64 \
+          -md=32m \
+          -ms=on \
+          -mhc=on \
+          -ma=2 \
+          "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" \
+          "${{ inputs.BUILD_ARTIFACT_PATH }}"
+        # 校验压缩包生成结果
+        if [ -f "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" ]; then
+          echo "✅ 加密压缩包已生成：${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
+        else
+          echo "❌ 压缩包生成失败"
+          exit 1
+        fi
+
+    - name: Create github release
+      uses: softprops/action-gh-release@master
+      with:
+        tag_name: ${{ inputs.RELEASE_TAG_NAME }}
+        draft: false
+        prerelease: false
+        files: ${{ inputs.BUILD_ARTIFACT_PATH }}.7z

@@ -1,6 +1,8 @@
 #!/bin/bash
 # customize-vlc.sh
 
+set -e  # 遇到错误立即退出，避免CI静默失败
+
 # 尝试解决libvlc中vlc内核代码在http的user agent中添加"LibVLC/xxx"独特字段的问题
 # 该独特字段可能被b站block
 
