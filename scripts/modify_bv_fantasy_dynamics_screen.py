@@ -168,10 +168,23 @@ def modify_tv_build_gradle_kts(file_path):
         raise
 
 def modify_dynamics_screen_kt(file_path):
-    """修改DynamicsScreen.kt：修复类型不匹配 + 补充Key导入"""
+    """修改DynamicsScreen.kt：修复类型不匹配 + 避免重复导入Key"""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
+        
+        # 先清理重复的Key导入（如果存在）
+        cleaned_lines = []
+        key_import = 'import androidx.compose.ui.input.key.Key\n'
+        has_key_import = False
+        for line in lines:
+            if line == key_import:
+                if not has_key_import:
+                    cleaned_lines.append(line)
+                    has_key_import = True
+            else:
+                cleaned_lines.append(line)
+        lines = cleaned_lines
         
         # 1. import android.content.Intent 后插入
         target1 = 'import android.content.Intent\n'
@@ -181,19 +194,20 @@ def modify_dynamics_screen_kt(file_path):
                 lines.insert(idx+1, insert1)
                 break
         
-        # 2. import androidx.compose.ui.Modifier 后插入5行（新增 Key 导入）
+        # 2. import androidx.compose.ui.Modifier 后插入4行（不再新增Key导入，因为原文件已有）
         target2 = 'import androidx.compose.ui.Modifier\n'
         insert2 = [
             'import androidx.compose.ui.focus.FocusDirection\n',
             'import androidx.compose.ui.focus.FocusRequester\n',
             'import androidx.compose.ui.focus.focusProperties\n',
-            'import androidx.compose.ui.focus.focusRequester\n',
-            'import androidx.compose.ui.input.key.Key\n'  # 新增：解决 Key.Left/Key.Down 未解析
+            'import androidx.compose.ui.focus.focusRequester\n'
         ]
         for idx, line in enumerate(lines):
             if line == target2:
-                for l in reversed(insert2):
-                    lines.insert(idx+1, l)
+                # 检查是否已存在这些导入，避免重复
+                for insert_line in reversed(insert2):
+                    if insert_line not in lines:
+                        lines.insert(idx+1, insert_line)
                 break
         
         # 3. val scope = rememberCoroutineScope() 后插入3行
