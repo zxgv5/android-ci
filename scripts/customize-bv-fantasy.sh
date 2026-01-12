@@ -60,18 +60,30 @@ else
     exit 1
 fi
 
-# ========== 核心修复：处理 libs.versions.toml（添加文件校验+移除行内注释） ==========
+# ========== 最终修复：处理 libs.versions.toml（增强调试+强化校验+固化sed参数） ==========
 FANTASY_BV_SOURCE_GRADLE_LVT="$FANTASY_BV_SOURCE_ROOT/gradle/libs.versions.toml"
-# 新增：校验变量非空 + 文件存在
-if [ -z "$FANTASY_BV_SOURCE_GRADLE_LVT" ] || [ ! -f "$FANTASY_BV_SOURCE_GRADLE_LVT" ]; then
-    echo "错误：libs.versions.toml 文件路径无效或不存在！路径：$FANTASY_BV_SOURCE_GRADLE_LVT"
+# 新增：调试输出，确认变量和路径（关键！）
+echo "===== 调试 libs.versions.toml 路径 ====="
+echo "FANTASY_BV_SOURCE_ROOT: $FANTASY_BV_SOURCE_ROOT"
+echo "目标文件路径: $FANTASY_BV_SOURCE_GRADLE_LVT"
+# 强化校验：确保变量非空且文件存在
+if [ -z "$FANTASY_BV_SOURCE_GRADLE_LVT" ]; then
+    echo "错误：FANTASY_BV_SOURCE_GRADLE_LVT 变量为空！"
     exit 1
 fi
-# 移除行内注释，避免参数解析干扰
+if [ ! -f "$FANTASY_BV_SOURCE_GRADLE_LVT" ]; then
+    echo "错误：libs.versions.toml 文件不存在！"
+    # 新增：打印目录结构，排查源码是否拉取成功
+    echo "===== 打印 fantasy-bv-source/gradle 目录结构 ====="
+    ls -l "$FANTASY_BV_SOURCE_ROOT/gradle/" || echo "gradle 目录不存在！"
+    exit 1
+fi
+# 固化sed命令：确保续行符后无空格，表达式格式正确
 sed -i \
-  -e '/zxing = "3.5.3"/a\androidxComposeBom = "2025.12.00"\nandroidxTvFoundation = "1.1.0"' \
-  -e '/zxing = { module = "com.google.zxing:core", version.ref = "zxing" }/a\\n# Compose BOM\androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidxComposeBom" }\n# AndroidX TV Foundation\androidx-tv-foundation = { module = "androidx.tv:tv-foundation", version.ref = "androidxTvFoundation" }' \
-  "$FANTASY_BV_SOURCE_GRADLE_LVT"
+-e '/zxing = "3.5.3"/a\androidxComposeBom = "2025.12.00"\nandroidxTvFoundation = "1.1.0"' \
+-e '/zxing = { module = "com.google.zxing:core", version.ref = "zxing" }/a\\n# Compose BOM\androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidxComposeBom" }\n# AndroidX TV Foundation\androidx-tv-foundation = { module = "androidx.tv:tv-foundation", version.ref = "androidxTvFoundation" }' \
+"$FANTASY_BV_SOURCE_GRADLE_LVT"
+echo "===== libs.versions.toml sed 处理成功 ====="
 
 FANTASY_BV_SOURCE_PT_BGK="$FANTASY_BV_SOURCE_ROOT/player/tv/build.gradle.kts"
 sed -i \
