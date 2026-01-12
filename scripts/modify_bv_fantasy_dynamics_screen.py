@@ -1,241 +1,328 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-修改DynamicsScreen.kt，实现焦点锁定功能
-使用方式：python3 modify_bv_fantasy_dynamics_screen.py /path/to/DynamicsScreen.kt
-"""
-import sys
 import os
-import re
+import sys
 
-def validate_file(file_path):
-    if not os.path.exists(file_path):
-        print(f"[ERROR] 文件不存在：{file_path}", file=sys.stderr)
-        sys.exit(1)
-    if not os.access(file_path, os.R_OK):
-        print(f"[ERROR] 文件无读取权限：{file_path}", file=sys.stderr)
-        sys.exit(1)
-
-def read_file(file_path):
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return f.read()
-
-def write_file(file_path, content):
-    temp_file = f"{file_path}.tmp"
+def modify_libs_versions_toml(file_path):
+    """修改gradle/libs.versions.toml文件：在[libraries]前插入版本定义，末尾追加依赖配置"""
     try:
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            f.write(content)
-        os.replace(temp_file, file_path)
-        print(f"[SUCCESS] 文件已写入：{file_path}")
+        # 读取文件内容
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        # 步骤1：在[libraries]前添加4行版本定义
+        insert_lines_version = [
+            'androidx-compose = "1.6.0"  # Compose 核心版本\n',
+            'androidx-compose-bom = "2024.02.02"  # Compose BOM 版本\n',
+            'androidx-tv = "1.0.0"  # TV Compose 版本\n',
+            'androidx-lifecycle = "2.7.0"  # Lifecycle 版本\n'
+        ]
+        libraries_index = None
+        for idx, line in enumerate(lines):
+            if line.strip() == '[libraries]':
+                libraries_index = idx
+                break
+        if libraries_index is not None:
+            # 逆序插入保证顺序正确
+            for line in reversed(insert_lines_version):
+                lines.insert(libraries_index, line)
+        
+        # 步骤2：在文件末尾追加依赖和插件配置
+        append_lines = [
+            '# 添加的 Compose 相关依赖\n',
+            '# Compose BOM\n',
+            'androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "androidx-compose-bom" }\n',
+            '# Compose 基础依赖\n',
+            'androidx-compose-ui = { module = "androidx.compose.ui", name = "ui" }\n',
+            'androidx-compose-ui-graphics = { module = "androidx.compose.ui", name = "ui-graphics" }\n',
+            'androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui", name = "ui-tooling-preview" }\n',
+            'androidx-compose-foundation = { module = "androidx.compose.foundation", name = "foundation" }\n',
+            'androidx-compose-material3 = { module = "androidx.compose.material3", name = "material3" }\n',
+            'androidx-compose-runtime = { module = "androidx.compose.runtime", name = "runtime" }\n',
+            'androidx-compose-runtime-livedata = { module = "androidx.compose.runtime", name = "runtime-livedata" }\n',
+            '# Compose Navigation\n',
+            'androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version = "2.7.7" }\n',
+            '# Compose Activity\n',
+            'androidx-activity-compose = { module = "androidx.activity:activity-compose", version = "1.8.2" }\n',
+            '# TV Compose 依赖\n',
+            'androidx-tv-foundation = { module = "androidx.tv", name = "tv-foundation", version.ref = "androidx-tv" }\n',
+            'androidx-tv-material = { module = "androidx.tv", name = "tv-material", version.ref = "androidx-tv" }\n',
+            '# Lifecycle 依赖\n',
+            'androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }\n',
+            'androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }\n',
+            '# Compose 工具依赖\n',
+            'androidx-compose-ui-tooling = { module = "androidx.compose.ui", name = "ui-tooling" }\n',
+            'androidx-compose-ui-test-manifest = { module = "androidx.compose.ui", name = "ui-test-manifest" }\n',
+            '[plugins]\n',
+            '# 添加 Compose 插件\n',
+            'androidx-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version = "2.0.21" }\n'
+        ]
+        lines.extend(append_lines)
+        
+        # 写回文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        print(f"✅ 成功修改: {file_path}")
     except Exception as e:
-        print(f"[ERROR] 写入文件失败：{e}", file=sys.stderr)
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        sys.exit(1)
+        print(f"❌ 修改 {file_path} 失败: {str(e)}")
+        raise
 
-def add_focus_imports(content):
-    """核心修复：修正导入包路径+扩展函数导入方式"""
-    pattern = re.compile(r'(import androidx\.compose\.ui\.focus\.onFocusChanged\n)')
-    # 关键修改：
-    # 1. 用通配符导入focus扩展函数（解决focus/focusable/focusRestrict未解析）
-    # 2. KeyDirection枚举移到正确的input.key包
-    new_imports = """import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.focus.*
-import androidx.tv.foundation.focus.FocusRestriction
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.KeyDirectionLeft
-import androidx.compose.ui.input.key.KeyDirectionDown
-"""
-    if pattern.search(content):
-        content = pattern.sub(new_imports, content)
-        print("[SUCCESS] 已添加焦点相关导入（修正包路径+扩展导入）")
-    else:
-        print("[ERROR] 未找到onFocusChanged导入行", file=sys.stderr)
-        sys.exit(1)
-    return content
-
-def add_focus_variables(content):
-    """添加焦点控制变量（严格4空格缩进）"""
-    pattern = re.compile(r'(val scope = rememberCoroutineScope\(\)\n)')
-    # 严格4空格缩进，匹配原文件层级
-    new_vars = """val scope = rememberCoroutineScope()
-    val gridFocusRequester = remember { FocusRequester() }
-    val gridColumns = 4 // Grid固定列数
-    val isGridLoadingOrEmpty by remember { derivedStateOf { dynamicViewModel.loadingVideo || dynamicViewModel.dynamicVideoList.isEmpty() } }
-"""
-    if pattern.search(content):
-        content = pattern.sub(new_vars, content)
-        print("[SUCCESS] 已添加焦点控制变量")
-    else:
-        print("[ERROR] 未找到scope变量行", file=sys.stderr)
-        sys.exit(1)
-    return content
-
-def add_grid_focus_modifiers(content):
-    """添加Grid焦点修饰符（严格对齐缩进）"""
-    pattern = re.compile(r'(                    \.fillMaxSize\(\)\n)')
-    # LazyVerticalGrid内的modifier链式调用，缩进16空格（4*4）
-    new_modifiers = """                    .fillMaxSize()
-                    .focusRestrict(FocusRestriction.Scrollable)
-                    .focusRequester(gridFocusRequester)
-"""
-    if pattern.search(content):
-        content = pattern.sub(new_modifiers, content)
-        print("[SUCCESS] 已添加Grid焦点锁定修饰符")
-    else:
-        print("[ERROR] 未找到LazyVerticalGrid的fillMaxSize行", file=sys.stderr)
-        sys.exit(1)
-    return content
-
-def replace_preview_key_event(content):
-    """替换onPreviewKeyEvent逻辑（严格4空格缩进）"""
-    old_key_event = r"""                    .onPreviewKeyEvent {
-                        if\(it\.type == KeyEventType\.KeyUp && it\.key == Key\.Menu\) {
-                            context\.startActivity\(Intent\(context, FollowActivity::class\.java\)\)
-                            return@onPreviewKeyEvent true
-                        }
-                        false
-                    },"""
-    # 严格遵循4空格缩进层级：
-    # .onPreviewKeyEvent { → 16空格
-    # 内部逻辑 → 20空格（16+4）
-    new_key_event = """                    .onPreviewKeyEvent {
-                        // 第一层防护：加载/空列表拦截所有方向键
-                        if (isGridLoadingOrEmpty && it.type == KeyEventType.KeyDown) {
-                            gridFocusRequester.requestFocus()
-                            return@onPreviewKeyEvent true
-                        }
-                        // 第二层防护：第一列拦截左方向键
-                        if (it.type == KeyEventType.KeyDown && it.key == KeyDirectionLeft) {
-                            val isFirstColumn = currentFocusedIndex >= 0 && (currentFocusedIndex % gridColumns == 0)
-                            if (isFirstColumn) {
-                                gridFocusRequester.requestFocus()
-                                return@onPreviewKeyEvent true
-                            }
-                        }
-                        // 第三层防护：到底部拦截下方向键
-                        if (it.type == KeyEventType.KeyDown && it.key == KeyDirectionDown) {
-                            val isLastItem = currentFocusedIndex >= dynamicViewModel.dynamicVideoList.size - 1
-                            if (isLastItem && !dynamicViewModel.videoHasMore) {
-                                gridFocusRequester.requestFocus()
-                                return@onPreviewKeyEvent true
-                            }
-                        }
-                        // 保留原有Menu键逻辑
-                        if (it.type == KeyEventType.KeyUp && it.key == Key.Menu) {
-                            context.startActivity(Intent(context, FollowActivity::class.java))
-                            return@onPreviewKeyEvent true
-                        }
-                        false
-                    },"""
-    pattern = re.compile(old_key_event, re.DOTALL)
-    if pattern.search(content):
-        content = pattern.sub(new_key_event, content)
-        print("[SUCCESS] 已替换onPreviewKeyEvent逻辑")
-    else:
-        print("[ERROR] 未找到原有onPreviewKeyEvent块", file=sys.stderr)
-        sys.exit(1)
-    return content
-
-def add_loading_tip_focus(content):
-    """核心修复：替换LoadingTip块为缩进完美版本"""
-    # 匹配整个loadingVideo块（忽略原有缩进）
-    loading_pattern = re.compile(
-        r'(if \(dynamicViewModel.loadingVideo\) \{.*?\}\s*\}\s*\})',
-        re.DOTALL
-    )
-    
-    # 严格4空格缩进的LoadingTip块（固定格式，100%规范）
-    perfect_loading_block = """if (dynamicViewModel.loadingVideo) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(
-                            modifier = Modifier.fillMaxSize()
-                                .focusRequester(gridFocusRequester)
-                                .focusable(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingTip()
-                        }
-                    }
-                }"""
-    
-    # 执行替换
-    new_content, count = loading_pattern.subn(perfect_loading_block, content)
-    if count == 0:
-        print("[ERROR] 未找到LoadingTip所在的代码块", file=sys.stderr)
-        sys.exit(1)
-    
-    # 调试输出替换后的块
-    # print("[DEBUG] 替换后的LoadingTip块（缩进完美）：")
-    # print(perfect_loading_block)
-    # print("[SUCCESS] 已给LoadingTip添加焦点能力（缩进完美）")
-    return new_content
-
-def verify_modifications(file_path):
-    """验证修改结果（更新导入验证项）"""
-    print("\n[INFO] 开始验证修改结果...")
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # 基础验证项 + 修正后的导入验证
-    checks = [
-        ("焦点扩展导入", "import androidx.compose.foundation.focus.*"),
-        ("FocusRestriction导入", "import androidx.tv.foundation.focus.FocusRestriction"),
-        ("焦点变量", "val gridFocusRequester = remember { FocusRequester() }"),
-        ("Grid焦点修饰符", ".focusRestrict(FocusRestriction.Scrollable)"),
-        ("KeyEvent逻辑", "isGridLoadingOrEmpty && it.type == KeyEventType.KeyDown"),
-        ("LoadingTip焦点-1", ".focusRequester(gridFocusRequester)"),
-        ("LoadingTip焦点-2", ".focusable()"),
-        # 验证KeyDirection的包是否正确
-        ("KeyDirectionLeft正确包", "import androidx.compose.ui.input.key.KeyDirectionLeft"),
-        ("KeyDirectionDown正确包", "import androidx.compose.ui.input.key.KeyDirectionDown")
-    ]
-    
-    all_passed = True
-    for check_name, check_str in checks:
-        if check_str in content:
-            print(f"[SUCCESS] {check_name} 验证通过")
+def modify_app_build_gradle_kts(file_path):
+    """修改app/build.gradle.kts：替换dependencies块"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 原依赖块（精确匹配）
+        original_block = """dependencies {
+    implementation(project(":app:mobile"))
+    implementation(project(":app:tv"))
+    implementation(project(":app:shared"))
+}"""
+        
+        # 新依赖块
+        new_block = """dependencies {
+    implementation(project(":app:mobile"))
+    implementation(project(":app:tv"))
+    implementation(project(":app:shared"))
+    // Compose BOM
+    val composeBom = platform(libs.androidx.compose.bom)
+    implementation(composeBom)
+    // TV Compose 依赖（必须）
+    implementation(libs.androidx.tv.foundation)
+    implementation(libs.androidx.tv.material)
+    // Compose 基础依赖
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.runtime)
+    implementation(libs.androidx.compose.runtime.livedata)
+    // 其他必要的 Compose 依赖
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    // 调试工具
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    // 测试依赖
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+}"""
+        
+        if original_block in content:
+            content = content.replace(original_block, new_block)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"✅ 成功修改: {file_path}")
         else:
-            print(f"[ERROR] {check_name} 验证失败（未找到：{check_str}）", file=sys.stderr)
-            all_passed = False
-    
-    # 缩进合规性检查（关键）
-    loading_block = re.search(r'if \(dynamicViewModel.loadingVideo\) \{.*?\}\s*\}\s*\}', content, re.DOTALL)
-    if loading_block:
-        block_content = loading_block.group(0)
-        # 检查核心缩进点
-        if "                    item(span = { GridItemSpan(maxLineSpan) }) {" in block_content and \
-           "                        Box(" in block_content and \
-           "                            modifier = Modifier.fillMaxSize()" in block_content and \
-           "                                .focusRequester(gridFocusRequester)" in block_content and \
-           "                            LoadingTip()" in block_content:
-            print(f"[SUCCESS] LoadingTip块缩进 验证通过（符合4空格规范）")
+            print(f"⚠️ 未找到目标依赖块: {file_path}")
+    except Exception as e:
+        print(f"❌ 修改 {file_path} 失败: {str(e)}")
+        raise
+
+def modify_tv_build_gradle_kts(file_path):
+    """修改app/tv/build.gradle.kts：替换dependencies块"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # 原依赖块（精确匹配）
+        original_block = """dependencies {
+    implementation(project(":app:shared"))
+}"""
+        
+        # 新依赖块
+        new_block = """dependencies {
+    implementation(project(":app:shared"))
+    // Compose BOM
+    val composeBom = platform(libs.androidx.compose.bom)
+    implementation(composeBom)
+    // TV Compose 依赖（必须）
+    implementation(libs.androidx.tv.foundation)
+    implementation(libs.androidx.tv.material)
+    // Compose 基础依赖
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.runtime)
+    // 其他必要的 Compose 依赖
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // 如果您的 TV 模块需要导航
+    implementation(libs.androidx.navigation.compose)
+    // 调试工具
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    // 测试依赖
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+}"""
+        
+        if original_block in content:
+            content = content.replace(original_block, new_block)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"✅ 成功修改: {file_path}")
         else:
-            print(f"[WARNING] LoadingTip块缩进可能不规范，但功能不受影响", file=sys.stderr)
-    
-    if not all_passed:
-        sys.exit(1)
-    print("[SUCCESS] 所有修改验证通过！")
+            print(f"⚠️ 未找到目标依赖块: {file_path}")
+    except Exception as e:
+        print(f"❌ 修改 {file_path} 失败: {str(e)}")
+        raise
+
+def modify_dynamics_screen_kt(file_path):
+    """修改DynamicsScreen.kt：在指定行后插入对应的Kotlin代码"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        # 1. import android.content.Intent 后插入
+        target1 = 'import android.content.Intent\n'
+        insert1 = 'import androidx.compose.foundation.focusable\n'
+        for idx, line in enumerate(lines):
+            if line == target1:
+                lines.insert(idx+1, insert1)
+                break
+        
+        # 2. import androidx.compose.ui.Modifier 后插入4行
+        target2 = 'import androidx.compose.ui.Modifier\n'
+        insert2 = [
+            'import androidx.compose.ui.focus.FocusDirection\n',
+            'import androidx.compose.ui.focus.FocusRequester\n',
+            'import androidx.compose.ui.focus.focusProperties\n',
+            'import androidx.compose.ui.focus.focusRequester\n'
+        ]
+        for idx, line in enumerate(lines):
+            if line == target2:
+                for l in reversed(insert2):
+                    lines.insert(idx+1, l)
+                break
+        
+        # 3. val scope = rememberCoroutineScope() 后插入3行
+        target3 = '    val scope = rememberCoroutineScope()\n'
+        insert3 = [
+            '    val gridFocusRequester = remember { FocusRequester() }\n',
+            '    val gridColumns = 4 // Grid固定列数\n',
+            '    val isGridLoadingOrEmpty by remember { derivedStateOf { dynamicViewModel.loadingVideo || dynamicViewModel.dynamicVideoList.isEmpty() } }\n'
+        ]
+        for idx, line in enumerate(lines):
+            if line == target3:
+                for l in reversed(insert3):
+                    lines.insert(idx+1, l)
+                break
+        
+        # 4. .fillMaxSize() 后插入6行
+        target4 = '                    .fillMaxSize()\n'
+        insert4 = [
+            '                    .focusProperties {\n',
+            '                        canFocus = true\n',
+            '                        enter = { FocusDirection.Next }\n',
+            '                        exit = { FocusDirection.Previous }\n',
+            '                    }\n',
+            '                    .focusRequester(gridFocusRequester)\n'
+        ]
+        for idx, line in enumerate(lines):
+            if line == target4:
+                for l in reversed(insert4):
+                    lines.insert(idx+1, l)
+                break
+        
+        # 5. .onPreviewKeyEvent { 后插入22行
+        target5 = '                    .onPreviewKeyEvent {\n'
+        insert5 = [
+            '                        // 第一层防护：加载/空列表拦截所有方向键\n',
+            '                        if (isGridLoadingOrEmpty && it.type == KeyEventType.KeyDown) {\n',
+            '                            gridFocusRequester.requestFocus()\n',
+            '                            return@onPreviewKeyEvent true\n',
+            '                        }\n',
+            '                        // 第二层防护：第一列拦截左方向键\n',
+            '                        if (it.type == KeyEventType.KeyDown && it.key == Key.Left) {\n',
+            '                            val isFirstColumn = currentFocusedIndex >= 0 && (currentFocusedIndex % gridColumns == 0)\n',
+            '                            if (isFirstColumn) {\n',
+            '                                gridFocusRequester.requestFocus()\n',
+            '                                return@onPreviewKeyEvent true\n',
+            '                            }\n',
+            '                        }\n',
+            '                        // 第三层防护：到底部拦截下方向键\n',
+            '                        if (it.type == KeyEventType.KeyDown && it.key == Key.Down) {\n',
+            '                            val isLastItem = currentFocusedIndex >= dynamicViewModel.dynamicVideoList.size - 1\n',
+            '                            if (isLastItem && !dynamicViewModel.videoHasMore) {\n',
+            '                                gridFocusRequester.requestFocus()\n',
+            '                                return@onPreviewKeyEvent true\n',
+            '                            }\n',
+            '                        }\n',
+            '                        // 保留原有Menu键逻辑\n'
+        ]
+        for idx, line in enumerate(lines):
+            if line == target5:
+                for l in reversed(insert5):
+                    lines.insert(idx+1, l)
+                break
+        
+        # 6. 修正：匹配Box中的 modifier = Modifier.fillMaxSize(), 行（去掉末尾逗号匹配更通用）
+        # 兼容有无逗号的情况，先匹配无逗号的核心行，再处理插入
+        target6_idx = -1
+        for idx, line in enumerate(lines):
+            # 精确匹配核心内容，忽略末尾逗号/换行
+            stripped_line = line.strip()
+            if stripped_line == 'modifier = Modifier.fillMaxSize()' or stripped_line == 'modifier = Modifier.fillMaxSize(),':
+                target6_idx = idx
+                break
+        
+        if target6_idx != -1:
+            # 先移除原行末尾的逗号（如果有），再插入新内容
+            original_line = lines[target6_idx]
+            # 去掉末尾的逗号（保留缩进和换行）
+            if original_line.strip().endswith(','):
+                lines[target6_idx] = original_line.replace(',\n', '\n').rstrip(',') + '\n'
+            
+            # 插入两行焦点相关代码
+            insert6 = [
+                '                                .focusRequester(gridFocusRequester)\n',
+                '                                .focusable(),\n'
+            ]
+            for l in reversed(insert6):
+                lines.insert(target6_idx + 1, l)
+        
+        # 写回文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        print(f"✅ 成功修改: {file_path}")
+    except Exception as e:
+        print(f"❌ 修改 {file_path} 失败: {str(e)}")
+        raise
 
 def main():
+    # 检查命令行参数
     if len(sys.argv) != 2:
-        print(f"使用方式：{sys.argv[0]} <DynamicsScreen.kt绝对路径>", file=sys.stderr)
+        print("🚫 用法错误！正确用法：")
+        print("python modify_files.py <顶级目录>")
+        print("示例：python modify_files.py /xxx")
         sys.exit(1)
     
-    file_path = sys.argv[1]
-    validate_file(file_path)
-    content = read_file(file_path)
+    root_dir = sys.argv[1]
+    # 拼接所有文件路径
+    files = [
+        (os.path.join(root_dir, "gradle", "libs.versions.toml"), modify_libs_versions_toml),
+        (os.path.join(root_dir, "app", "build.gradle.kts"), modify_app_build_gradle_kts),
+        (os.path.join(root_dir, "app", "tv", "build.gradle.kts"), modify_tv_build_gradle_kts),
+        (os.path.join(root_dir, "app", "tv", "src", "main", "kotlin", "dev", "aaa1115910", "bv", "tv", "screens", "main", "home", "DynamicsScreen.kt"), modify_dynamics_screen_kt)
+    ]
     
-    # 执行所有修改（缩进严格控制）
-    content = add_focus_imports(content)
-    content = add_focus_variables(content)
-    content = add_grid_focus_modifiers(content)
-    content = replace_preview_key_event(content)
-    content = add_loading_tip_focus(content)
+    # 检查文件是否存在
+    for file_path, _ in files:
+        if not os.path.exists(file_path):
+            print(f"🚫 文件不存在：{file_path}")
+            sys.exit(1)
     
-    write_file(file_path, content)
-    verify_modifications(file_path)
+    # 执行修改
+    for file_path, modify_func in files:
+        modify_func(file_path)
+    
+    print("\n🎉 所有文件修改完成！")
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,7 @@
 #!/bin/bash
 # customize-bv-fantasy.sh
 
-set -e  # 遇到错误立即退出，避免CI静默失败
+set -e  # 遇到错误立即退出，避免ci静默失败
 
 FANTASY_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/fantasy-bv-source"
 
@@ -25,38 +25,19 @@ sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV.*<\/string>/<strin
 FANTASY_BV_SOURCE_ASSRRV_STRINGS="$FANTASY_BV_SOURCE_ROOT/app/shared/src/r8Test/res/values/strings.xml"
 sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV R8 Test.*<\/string>/<string name="app_name">fantasy R8 Test<\/string>/' "$FANTASY_BV_SOURCE_ASSRRV_STRINGS"
 
-# 尝试修复“动态”页面长按下方向键焦点左移出视频选择区的问题
-# 先修改DynamicsScreen.kt源代码
+# 尝试使用python修复“动态”页长按下方向键焦点左移出区问题
+# 需要对如下四个文件进行修改
+# /gradle/libs.versions.toml、/app/build.gradle.kts、/app/tv/build.gradle.kts 和 /app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt
 FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
 CI_CUSTOMIZE_SCRIPTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN_PYTHON_SCRIPT="$CI_CUSTOMIZE_SCRIPTS_DIR/modify_bv_fantasy_dynamics_screen.py"
-echo "脚本所在目录：$CI_CUSTOMIZE_SCRIPTS_DIR"
-# 1. 检查python环境（确保ci已安装python3）
-echo "===== 检查python环境 ====="
-if ! command -v python3 &> /dev/null; then
-    echo "错误：未找到python3，请检查ci流程中的python安装步骤！"
-    exit 1
-fi
-python3 --version  # 输出版本，便于调试
-echo "===== 准备执行python脚本：$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN_PYTHON_SCRIPT ====="
-# 2. 检查python脚本是否存在
-if [ ! -f "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN_PYTHON_SCRIPT" ]; then
-    echo "错误：python脚本 $FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN_PYTHON_SCRIPT 不存在！"
-    exit 1
-fi
-# 3. 检查目标kotlin文件是否存在
-if [ ! -f "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN" ]; then
-    echo "错误：目标文件 $FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN 不存在！"
-    exit 1
-fi
-# 4. 执行python脚本（传递目标文件路径作为【位置参数】，去掉--target-file）
-echo "===== 执行python脚本处理DynamicsScreen.kt ====="
-python3 "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN_PYTHON_SCRIPT" "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN"
+echo "尝试使用python修复“动态”页长按下方向键焦点左移出区问题"
+python3 "$FANTASY_BV_SOURCE_PTSMKDABPTCP_ATSMKDABTSMH_DYNAMICSSCREEN_PYTHON_SCRIPT" "$FANTASY_BV_SOURCE_ROOT"
 # 5. 校验python脚本执行结果
 if [ $? -eq 0 ]; then
-    echo "===== python脚本执行成功 ====="
+    echo "python脚本执行成功"
 else
-    echo "错误：python脚本执行失败！"
+    echo "python脚本执行失败！"
     exit 1
 fi
 
@@ -88,7 +69,7 @@ sed -i \
 
 # 配合上面隐藏两个导航标签的修改
 FANTASY_BV_SOURCE_ATSMKDABTSM_HOMECONTENT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
-# 使用perl一次性处理6个多行替换
+# 使用perl一次性处理6个多行替换 
 perl -i -0777 -pe '
   # 1. 替换第一个FollowingSeason代码块（已有部分注释）
   s{                HomeTopNavItem\.FollowingSeason -> \{
