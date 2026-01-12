@@ -34,22 +34,22 @@ def write_file(file_path, content):
         sys.exit(1)
 
 def add_focus_imports(content):
-    """添加焦点相关导入（补充所有缺失API，缩进无关）"""
+    """核心修复：修正导入包路径+扩展函数导入方式"""
     pattern = re.compile(r'(import androidx\.compose\.ui\.focus\.onFocusChanged\n)')
-    # 核心修改：补充 focus/focusable/focusRestrict/KeyDirectionDown 导入
+    # 关键修改：
+    # 1. 用通配符导入focus扩展函数（解决focus/focusable/focusRestrict未解析）
+    # 2. KeyDirection枚举移到正确的input.key包
     new_imports = """import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.foundation.focus.focus
-import androidx.compose.foundation.focus.focusable
-import androidx.compose.foundation.focus.focusRestrict
+import androidx.compose.foundation.focus.*
 import androidx.tv.foundation.focus.FocusRestriction
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.KeyDirectionLeft
-import androidx.compose.ui.focus.KeyDirectionDown
+import androidx.compose.ui.input.key.KeyDirectionLeft
+import androidx.compose.ui.input.key.KeyDirectionDown
 """
     if pattern.search(content):
         content = pattern.sub(new_imports, content)
-        print("[SUCCESS] 已添加焦点相关导入（含缺失API）")
+        print("[SUCCESS] 已添加焦点相关导入（修正包路径+扩展导入）")
     else:
         print("[ERROR] 未找到onFocusChanged导入行", file=sys.stderr)
         sys.exit(1)
@@ -167,30 +167,29 @@ def add_loading_tip_focus(content):
         sys.exit(1)
     
     # 调试输出替换后的块
-    print("[DEBUG] 替换后的LoadingTip块（缩进完美）：")
-    print(perfect_loading_block)
-    print("[SUCCESS] 已给LoadingTip添加焦点能力（缩进完美）")
+    # print("[DEBUG] 替换后的LoadingTip块（缩进完美）：")
+    # print(perfect_loading_block)
+    # print("[SUCCESS] 已给LoadingTip添加焦点能力（缩进完美）")
     return new_content
 
 def verify_modifications(file_path):
-    """验证修改结果（含缩进检查+新增缺失API验证）"""
+    """验证修改结果（更新导入验证项）"""
     print("\n[INFO] 开始验证修改结果...")
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # 基础验证项 + 新增缺失API验证项
+    # 基础验证项 + 修正后的导入验证
     checks = [
-        ("焦点导入", "import androidx.tv.foundation.focus.FocusRestriction"),
+        ("焦点扩展导入", "import androidx.compose.foundation.focus.*"),
+        ("FocusRestriction导入", "import androidx.tv.foundation.focus.FocusRestriction"),
         ("焦点变量", "val gridFocusRequester = remember { FocusRequester() }"),
         ("Grid焦点修饰符", ".focusRestrict(FocusRestriction.Scrollable)"),
         ("KeyEvent逻辑", "isGridLoadingOrEmpty && it.type == KeyEventType.KeyDown"),
         ("LoadingTip焦点-1", ".focusRequester(gridFocusRequester)"),
         ("LoadingTip焦点-2", ".focusable()"),
-        # 新增验证项：确保缺失的API导入成功
-        ("focus API导入", "import androidx.compose.foundation.focus.focus"),
-        ("focusable API导入", "import androidx.compose.foundation.focus.focusable"),
-        ("focusRestrict API导入", "import androidx.compose.foundation.focus.focusRestrict"),
-        ("KeyDirectionDown导入", "import androidx.compose.ui.focus.KeyDirectionDown")
+        # 验证KeyDirection的包是否正确
+        ("KeyDirectionLeft正确包", "import androidx.compose.ui.input.key.KeyDirectionLeft"),
+        ("KeyDirectionDown正确包", "import androidx.compose.ui.input.key.KeyDirectionDown")
     ]
     
     all_passed = True
