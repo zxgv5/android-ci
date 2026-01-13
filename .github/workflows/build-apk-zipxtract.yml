@@ -22,7 +22,8 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: WirelessAlien/ZipXtract
-          ref: master
+          # ref: master
+          ref: v7.0
           path: zipxtract_source
           fetch-depth: 0
 
