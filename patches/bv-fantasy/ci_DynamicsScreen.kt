@@ -1,6 +1,7 @@
 package dev.aaa1115910.bv.tv.screens.main.home
 
 import android.content.Intent
+import android.view.View
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,8 +25,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusState
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -33,7 +37,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -54,6 +57,8 @@ import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.ui.focus.FocusStateImpl
+import android.view.FocusFinder
 
 @Composable
 fun DynamicsScreen(
@@ -64,21 +69,35 @@ fun DynamicsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var currentFocusedIndex by remember { mutableIntStateOf(-1) }
-    // 优化加载触发时机，提前6项开始加载（原12项，减少数据滞后）
-    val shouldLoadMore by remember {
-        derivedStateOf { 
-            dynamicViewModel.dynamicVideoList.isNotEmpty() && 
-            currentFocusedIndex + 6 > dynamicViewModel.dynamicVideoList.size &&
-            !dynamicViewModel.loadingVideo // 避免重复加载
+
+    // 新增：获取LazyGrid当前可见item的索引范围（解决“item已添加但未渲染”问题）
+    val visibleItemIndices by remember(lazyGridState.layoutInfo) {
+        derivedStateOf {
+            val layoutInfo = lazyGridState.layoutInfo
+            layoutInfo.visibleItemsInfo.map { it.index }.toSet()
         }
     }
+
+    // 优化加载触发时机，提前6项开始加载+避免重复加载
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            dynamicViewModel.dynamicVideoList.isNotEmpty() &&
+                    currentFocusedIndex + 6 > dynamicViewModel.dynamicVideoList.size &&
+                    !dynamicViewModel.loadingVideo
+        }
+    }
+
     val showTip by remember {
         derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0 }
     }
+
     // 新增：获取列表最大有效索引
     val maxValidIndex by remember {
         derivedStateOf { dynamicViewModel.dynamicVideoList.size - 1 }
     }
+
+    // 新增：Grid焦点请求器，用于焦点管理
+    val gridFocusRequester = remember { FocusRequester() }
 
     val onClickVideo: (DynamicVideo) -> Unit = { dynamic ->
         VideoInfoActivity.actionStart(
@@ -87,6 +106,7 @@ fun DynamicsScreen(
             proxyArea = ProxyArea.checkProxyArea(dynamic.title)
         )
     }
+
     val onLongClickVideo: (DynamicVideo) -> Unit = { dynamic ->
         UpInfoActivity.actionStart(
             context,
@@ -96,6 +116,7 @@ fun DynamicsScreen(
         )
     }
 
+    // 加载更多逻辑（原有逻辑保留）
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
             scope.launch(Dispatchers.IO) {
@@ -107,6 +128,7 @@ fun DynamicsScreen(
     if (dynamicViewModel.isLogin) {
         val padding = dimensionResource(R.dimen.grid_padding)
         val spacedBy = dimensionResource(R.dimen.grid_spacedBy)
+
         if (showTip) {
             Text(
                 modifier = Modifier.fillMaxWidth().offset(x = (-20).dp, y = (-8).dp),
@@ -116,33 +138,61 @@ fun DynamicsScreen(
                 textAlign = TextAlign.End
             )
         }
+
         ProvideListBringIntoViewSpec {
             LazyVerticalGrid(
                 modifier = modifier
                     .fillMaxSize()
-                    .onFocusChanged{
+                    .focusRequester(gridFocusRequester)
+                    .onFocusChanged {
                         if (!it.isFocused) {
                             currentFocusedIndex = -1
                         }
                     }
-                    // 新增：拦截下键，避免无数据时焦点溢出
+                    // 核心优化1：拦截下键所有事件（KeyDown + KeyRepeat），阻止焦点溢出
                     .onPreviewKeyEvent { event ->
-                        // 处理菜单键（原有逻辑保留）
-                        if(event.type == KeyEventType.KeyUp && event.key == Key.Menu) {
+                        // 菜单键原有逻辑保留
+                        if (event.type == KeyEventType.KeyUp && event.key == Key.Menu) {
                             context.startActivity(Intent(context, FollowActivity::class.java))
                             return@onPreviewKeyEvent true
                         }
-                        // 新增：拦截向下键（当已到最后一项且无更多数据/加载中）
-                        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
-                            val isLastItem = currentFocusedIndex == maxValidIndex
-                            val noMoreData = !dynamicViewModel.videoHasMore
-                            val isLoading = dynamicViewModel.loadingVideo
-                            // 已到末尾且无更多/加载中，拦截下键
-                            if (isLastItem && (noMoreData || isLoading)) {
-                                return@onPreviewKeyEvent true
+
+                        // 拦截向下方向键的KeyDown和KeyRepeat（覆盖长按连续事件）
+                        val isDownKey = event.key == Key.DirectionDown
+                        val isDownEventType = event.type == KeyEventType.KeyDown || event.type == KeyEventType.KeyRepeat
+                        val isLastValidIndex = currentFocusedIndex == maxValidIndex
+                        val nextItemNotVisible = currentFocusedIndex + 1 <= maxValidIndex && !visibleItemIndices.contains(currentFocusedIndex + 1)
+
+                        // 满足“下键+（已到最后一项/下一项未渲染）”则拦截
+                        if (isDownKey && isDownEventType && (isLastValidIndex || nextItemNotVisible)) {
+                            return@onPreviewKeyEvent true
+                        }
+
+                        false
+                    }
+                    // 核心优化2：重写focusSearch，限定焦点仅在Grid内部流转
+                    .onFocusEvent { focusState ->
+                        if (focusState.isFocused) {
+                            (focusState as? FocusStateImpl)?.let { state ->
+                                state.focusSearch = { focusedView, direction ->
+                                    when (direction) {
+                                        // 仅允许向下搜索，且必须是已渲染的item
+                                        View.FOCUS_DOWN -> {
+                                            val nextIndex = currentFocusedIndex + 1
+                                            if (nextIndex <= maxValidIndex && visibleItemIndices.contains(nextIndex)) {
+                                                focusedView.findViewWithTag<View>("VideoCard_$nextIndex") ?: focusedView
+                                            } else {
+                                                focusedView // 下一项不可用，保持当前焦点
+                                            }
+                                        }
+                                        // 其他方向（左/上/右）按原有规则处理（保证正常退出逻辑）
+                                        else -> {
+                                            FocusFinder.getInstance().findNextFocus(state.host, focusedView, direction)
+                                        }
+                                    }
+                                }
                             }
                         }
-                        false
                     },
                 columns = GridCells.Fixed(4),
                 state = lazyGridState,
@@ -152,6 +202,7 @@ fun DynamicsScreen(
             ) {
                 itemsIndexed(dynamicViewModel.dynamicVideoList) { index, item ->
                     SmallVideoCard(
+                        modifier = Modifier.tag("VideoCard_$index"), // 新增：给item打唯一Tag，用于focusSearch定位
                         data = remember(item.aid) {
                             VideoCardData(
                                 avid = item.aid,
@@ -168,31 +219,44 @@ fun DynamicsScreen(
                         },
                         onClick = { onClickVideo(item) },
                         onLongClick = { onLongClickVideo(item) },
-                        // 新增：索引边界校验，避免焦点越界
-                        onFocus = { 
-                            if (index <= maxValidIndex) {
-                                currentFocusedIndex = index 
+                        // 核心优化3：强化焦点索引校验，仅允许可见且有效索引更新焦点
+                        onFocus = {
+                            if (index <= maxValidIndex && visibleItemIndices.contains(index)) {
+                                currentFocusedIndex = index
                             }
                         }
                     )
                 }
-                // 加载中和无更多数据的item（原有逻辑保留）
+
+                // 加载中提示（原有逻辑保留）
                 if (dynamicViewModel.loadingVideo) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             LoadingTip()
                         }
                     }
                 }
+
+                // 无更多数据提示（原有逻辑保留）
                 if (!dynamicViewModel.videoHasMore) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(text = "没有更多了捏", color = Color.White)
+                        Text(
+                            text = "没有更多了捏",
+                            color = Color.White
+                        )
                     }
                 }
             }
         }
     } else {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // 未登录提示（原有逻辑保留）
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
             Text(text = "请先登录")
         }
     }
