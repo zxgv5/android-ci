@@ -131,5 +131,5 @@ jobs:
         with:
           P12_KEYSTORE_PATH: "${{ env.KEYSTORE_PATH }}"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: ${{ env.RENAMED_APK }}"
+          BUILD_ARTIFACT_PATH: "${{ env.RENAMED_APK }}"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-gh4a"
