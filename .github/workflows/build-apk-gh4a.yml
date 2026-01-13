@@ -40,9 +40,6 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Setup android sdk
-        uses: android-actions/setup-android@main
-
       - name: Initialize build environment
         id: init
         run: |
