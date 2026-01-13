@@ -88,11 +88,11 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew assembleRelease
 
-      - name: Create github release & upload apk
-        uses: softprops/action-gh-release@master
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci-source/.github/actions/erase-aes256pac-release/
         with:
-          tag_name: ${{env.BUILD_DATE}}-xxx
-          files: |
-            xxx-${{ env.BUILD_DATE }}.apk
-          draft: false
-          prerelease: false
+          # 私钥文件路径（基于github.workspace的绝对路径）
+          P12_KEYSTORE_PATH: "./xxx/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./xxx/release/xxx-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-xxx"
