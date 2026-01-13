@@ -91,7 +91,8 @@ jobs:
             echo "Found release APK: $RELEASE_APK"
             echo "RELEASE_APK=$RELEASE_APK" >> $GITHUB_ENV
             echo "apk_path=$RELEASE_APK" >> $GITHUB_OUTPUT
-            # mv "${{ env.RELEASE_APK }}" ""
+            # 核心命令：重命名文件（-f 强制覆盖同名文件，避免冲突）
+            mv -f "${{ env.RELEASE_APK }}" "${{ dirname(env.RELEASE_APK) }}/gh4a-${{ env.BUILD_DATE }}.apk"
           else
             echo "No release APK found"
             exit 1
