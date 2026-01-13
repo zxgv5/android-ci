@@ -1,0 +1,112 @@
+name: build-apk-gh4a
+
+on:
+  workflow_dispatch:
+
+env:
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_MIN_SDK: '23'
+  ANDROID_TARGET_SDK: '33'
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  KEYSTORE_PATH: "$GITHUB_WORKSPACE/gh4a_source/keystore.p12"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: slapperwan/gh4a
+          ref: master
+          path: gh4a_source
+          fetch-depth: 0
+
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci-source
+
+      - name: Setup jdk
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+
+      - name: Setup android sdk
+        uses: android-actions/setup-android@main
+
+      - name: Initialize build environment
+        id: init
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Decode keystore file
+        working-directory: ./gh4a_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ env.KEYSTORE_PATH }}
+
+      - name: Create signing properties
+        working-directory: ./gh4a_source
+        run: |
+          cat > signing.properties << EOF
+          STORE_FILE=${{ env.KEYSTORE_PATH }}
+          STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: Create client properties
+        working-directory: ./gh4a_source
+        run: |
+          cat > client.properties << EOF
+          ClientId=${{ secrets.CLIENT_ID }}
+          ClientSecret=${{ secrets.CLIENT_SECRET }}
+          EOF
+
+      - name: Configure android sdk
+        run: |
+          echo "y" | $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}"
+          echo "y" | $ANDROID_HOME/tools/bin/sdkmanager "platform-tools"
+          echo "y" | $ANDROID_HOME/tools/bin/sdkmanager "build-tools;${{ env.ANDROID_BUILD_TOOLS }}"
+
+      - name: Build release
+        working-directory: ./gh4a_source
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Find release apk
+        run: |
+          echo "Looking for APK files..."
+          RELEASE_APK=$(find ./gh4a_source -name "*release*.apk" ! -name "*unaligned*" -type f | head -1)
+          if [ -n "$RELEASE_APK" ]; then
+            echo "Found release APK: $RELEASE_APK"
+            echo "RELEASE_APK=$RELEASE_APK" >> $GITHUB_ENV
+            echo "apk_path=$RELEASE_APK" >> $GITHUB_OUTPUT
+            # mv "${{ env.RELEASE_APK }}" ""
+          else
+            echo "No release APK found"
+            exit 1
+          fi
+
+      - name: Verify apk signature
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
+          apksigner verify --verbose "${{ env.RELEASE_APK }}"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci-source/.github/actions/erase-aes256pac-release/
+        with:
+          P12_KEYSTORE_PATH: "${{ env.KEYSTORE_PATH }}"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "${{ env.RELEASE_APK }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-gh4a"
