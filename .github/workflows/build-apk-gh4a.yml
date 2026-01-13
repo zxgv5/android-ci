@@ -63,15 +63,32 @@ jobs:
       - name: Create client properties
         working-directory: ./gh4a_source
         run: |
-          cat > client.properties << EOF
+          cat > client.properties << 'EOF'
           ClientId=${{ secrets.CLIENT_ID }}
           ClientSecret=${{ secrets.CLIENT_SECRET }}
           EOF
+          echo "client.properties content:"
+          cat client.properties
+          echo "client.properties location: $(pwd)/client.properties"
+
+      - name: Verify files exist
+        working-directory: ./gh4a_source
+        run: |
+          echo "Checking files in $(pwd):"
+          ls -la
+          echo "Checking app directory:"
+          ls -la app/
+          echo "Checking if client.properties exists:"
+          ls -la client.properties
+          echo "Checking if signing.properties exists:"
+          ls -la signing.properties
 
       - name: Build release
         working-directory: ./gh4a_source
         run: |
           chmod +x ./gradlew
+          # 先清理构建缓存
+          ./gradlew clean
           ./gradlew assembleRelease --stacktrace
 
       - name: Find release apk
