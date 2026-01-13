@@ -42,7 +42,7 @@ sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV R8 Test.*<\/string
 # fi
 
 FANTASY_BV_SOURCE_ATSMKDABTSMH_DYNAMICSSCREEN="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
-CI_FANTASY_BV_SOURCE_ATSMKDABTSMH_DYNAMICSSCREEN="/scripts/ci_DynamicsScreen.kt"
+CI_FANTASY_BV_SOURCE_ATSMKDABTSMH_DYNAMICSSCREEN="/ci-source/scripts/ci_DynamicsScreen.kt"
 if [ ! -f "$CI_FANTASY_BV_SOURCE_ATSMKDABTSMH_DYNAMICSSCREEN" ]; then
     echo "❌ 错误：源文件 $CI_FANTASY_BV_SOURCE_ATSMKDABTSMH_DYNAMICSSCREEN 不存在"
     exit 1
