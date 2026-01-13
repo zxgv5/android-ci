@@ -27,6 +27,12 @@ jobs:
           path: zipxtract_source
           fetch-depth: 0
 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          # 指定一个子目录放ci仓库，避免与源仓库混淆
+          path: ci-source
+
       - name: Setup jdk
         uses: actions/setup-java@main
         with:
