@@ -214,8 +214,8 @@ fun DynamicsScreen(
                                     // 如果索引无效，将焦点设置到最后一个有效项
                                     currentFocusedIndex = dynamicViewModel.dynamicVideoList.size - 1
                                 }
-                            },
-                            isFocused = currentFocusedIndex == index
+                            }
+                            // 删除多余的 isFocused 参数，匹配 SmallVideoCard 组件定义
                         )
                     }
 
