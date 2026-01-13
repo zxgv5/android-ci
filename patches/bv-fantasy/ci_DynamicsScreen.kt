@@ -1,7 +1,6 @@
 package dev.aaa1115910.bv.tv.screens.main.home
 
 import android.content.Intent
-import android.view.View
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,16 +19,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -56,9 +55,8 @@ import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.androidx.compose.koinViewModel
-import androidx.compose.ui.focus.FocusStateImpl
-import android.view.FocusFinder
 
 @Composable
 fun DynamicsScreen(
@@ -70,7 +68,25 @@ fun DynamicsScreen(
     val scope = rememberCoroutineScope()
     var currentFocusedIndex by remember { mutableIntStateOf(-1) }
 
-    // 新增：获取LazyGrid当前可见item的索引范围（解决“item已添加但未渲染”问题）
+    // 核心修复1：用FocusRequester数组管理每个item焦点（替代Tag+findViewWithTag，兼容TV端Compose）
+    val itemFocusRequesters = remember {
+        mutableStateListOf<FocusRequester>().apply {
+            // 初始化与列表长度匹配的FocusRequester
+            repeat(dynamicViewModel.dynamicVideoList.size) { add(FocusRequester()) }
+        }
+    }
+
+    // 核心修复2：监听列表变化，同步FocusRequester数组长度
+    LaunchedEffect(dynamicViewModel.dynamicVideoList.size) {
+        if (itemFocusRequesters.size < dynamicViewModel.dynamicVideoList.size) {
+            val needAddCount = dynamicViewModel.dynamicVideoList.size - itemFocusRequesters.size
+            repeat(needAddCount) { itemFocusRequesters.add(FocusRequester()) }
+        } else if (itemFocusRequesters.size > dynamicViewModel.dynamicVideoList.size) {
+            itemFocusRequesters.subList(dynamicViewModel.dynamicVideoList.size, itemFocusRequesters.size).clear()
+        }
+    }
+
+    // 获取当前可见item索引范围（解决“item已添加但未渲染”问题）
     val visibleItemIndices by remember(lazyGridState.layoutInfo) {
         derivedStateOf {
             val layoutInfo = lazyGridState.layoutInfo
@@ -78,7 +94,7 @@ fun DynamicsScreen(
         }
     }
 
-    // 优化加载触发时机，提前6项开始加载+避免重复加载
+    // 加载触发时机（提前6项+防重复加载）
     val shouldLoadMore by remember {
         derivedStateOf {
             dynamicViewModel.dynamicVideoList.isNotEmpty() &&
@@ -91,13 +107,10 @@ fun DynamicsScreen(
         derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0 }
     }
 
-    // 新增：获取列表最大有效索引
+    // 列表最大有效索引
     val maxValidIndex by remember {
         derivedStateOf { dynamicViewModel.dynamicVideoList.size - 1 }
     }
-
-    // 新增：Grid焦点请求器，用于焦点管理
-    val gridFocusRequester = remember { FocusRequester() }
 
     val onClickVideo: (DynamicVideo) -> Unit = { dynamic ->
         VideoInfoActivity.actionStart(
@@ -116,7 +129,7 @@ fun DynamicsScreen(
         )
     }
 
-    // 加载更多逻辑（原有逻辑保留）
+    // 加载更多逻辑
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
             scope.launch(Dispatchers.IO) {
@@ -143,13 +156,12 @@ fun DynamicsScreen(
             LazyVerticalGrid(
                 modifier = modifier
                     .fillMaxSize()
-                    .focusRequester(gridFocusRequester)
                     .onFocusChanged {
                         if (!it.isFocused) {
                             currentFocusedIndex = -1
                         }
                     }
-                    // 核心优化1：拦截下键所有事件（KeyDown + KeyRepeat），阻止焦点溢出
+                    // 核心修复3：拦截下键事件（KeyDown+KeyRepeat），用FocusRequester控制焦点流转
                     .onPreviewKeyEvent { event ->
                         // 菜单键原有逻辑保留
                         if (event.type == KeyEventType.KeyUp && event.key == Key.Menu) {
@@ -157,42 +169,24 @@ fun DynamicsScreen(
                             return@onPreviewKeyEvent true
                         }
 
-                        // 拦截向下方向键的KeyDown和KeyRepeat（覆盖长按连续事件）
+                        // 拦截向下方向键（处理KeyDown和KeyRepeat，覆盖长按连续事件）
                         val isDownKey = event.key == Key.DirectionDown
-                        val isDownEventType = event.type == KeyEventType.KeyDown || event.type == KeyEventType.KeyRepeat
-                        val isLastValidIndex = currentFocusedIndex == maxValidIndex
-                        val nextItemNotVisible = currentFocusedIndex + 1 <= maxValidIndex && !visibleItemIndices.contains(currentFocusedIndex + 1)
-
-                        // 满足“下键+（已到最后一项/下一项未渲染）”则拦截
-                        if (isDownKey && isDownEventType && (isLastValidIndex || nextItemNotVisible)) {
+                        val isEffectiveEvent = event.type == KeyEventType.KeyDown || event.type == KeyEventType.KeyRepeat
+                        if (isDownKey && isEffectiveEvent) {
+                            val nextIndex = currentFocusedIndex + 1
+                            // 校验下一个item是否有效且已渲染
+                            val nextItemAvailable = nextIndex <= maxValidIndex && visibleItemIndices.contains(nextIndex)
+                            if (nextItemAvailable) {
+                                // 下一项可用，请求焦点（替代focusSearch）
+                                scope.launch {
+                                    itemFocusRequesters[nextIndex].requestFocus()
+                                }
+                            }
+                            // 无论下一项是否可用，都拦截事件（防止系统默认搜索焦点）
                             return@onPreviewKeyEvent true
                         }
 
                         false
-                    }
-                    // 核心优化2：重写focusSearch，限定焦点仅在Grid内部流转
-                    .onFocusEvent { focusState ->
-                        if (focusState.isFocused) {
-                            (focusState as? FocusStateImpl)?.let { state ->
-                                state.focusSearch = { focusedView, direction ->
-                                    when (direction) {
-                                        // 仅允许向下搜索，且必须是已渲染的item
-                                        View.FOCUS_DOWN -> {
-                                            val nextIndex = currentFocusedIndex + 1
-                                            if (nextIndex <= maxValidIndex && visibleItemIndices.contains(nextIndex)) {
-                                                focusedView.findViewWithTag<View>("VideoCard_$nextIndex") ?: focusedView
-                                            } else {
-                                                focusedView // 下一项不可用，保持当前焦点
-                                            }
-                                        }
-                                        // 其他方向（左/上/右）按原有规则处理（保证正常退出逻辑）
-                                        else -> {
-                                            FocusFinder.getInstance().findNextFocus(state.host, focusedView, direction)
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     },
                 columns = GridCells.Fixed(4),
                 state = lazyGridState,
@@ -202,7 +196,15 @@ fun DynamicsScreen(
             ) {
                 itemsIndexed(dynamicViewModel.dynamicVideoList) { index, item ->
                     SmallVideoCard(
-                        modifier = Modifier.tag("VideoCard_$index"), // 新增：给item打唯一Tag，用于focusSearch定位
+                        modifier = Modifier
+                            // 核心修复4：为每个item绑定对应的FocusRequester
+                            .focusRequester(itemFocusRequesters[index])
+                            .onFocusChanged { focusState ->
+                                // 焦点变化时更新当前索引
+                                if (focusState.isFocused) {
+                                    currentFocusedIndex = index
+                                }
+                            },
                         data = remember(item.aid) {
                             VideoCardData(
                                 avid = item.aid,
@@ -219,12 +221,8 @@ fun DynamicsScreen(
                         },
                         onClick = { onClickVideo(item) },
                         onLongClick = { onLongClickVideo(item) },
-                        // 核心优化3：强化焦点索引校验，仅允许可见且有效索引更新焦点
-                        onFocus = {
-                            if (index <= maxValidIndex && visibleItemIndices.contains(index)) {
-                                currentFocusedIndex = index
-                            }
-                        }
+                        // 移除原onFocus回调，改用onFocusChanged绑定FocusRequester
+                        onFocus = {}
                     )
                 }
 
