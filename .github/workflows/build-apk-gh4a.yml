@@ -68,12 +68,6 @@ jobs:
           ClientSecret=${{ secrets.CLIENT_SECRET }}
           EOF
 
-      - name: Configure android sdk
-        run: |
-          echo "y" | $ANDROID_HOME/tools/bin/sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}"
-          echo "y" | $ANDROID_HOME/tools/bin/sdkmanager "platform-tools"
-          echo "y" | $ANDROID_HOME/tools/bin/sdkmanager "build-tools;${{ env.ANDROID_BUILD_TOOLS }}"
-
       - name: Build release
         working-directory: ./gh4a_source
         run: |
