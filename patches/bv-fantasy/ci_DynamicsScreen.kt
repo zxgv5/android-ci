@@ -25,7 +25,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -55,7 +54,6 @@ import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -68,15 +66,14 @@ fun DynamicsScreen(
     val scope = rememberCoroutineScope()
     var currentFocusedIndex by remember { mutableIntStateOf(-1) }
 
-    // 核心修复1：用FocusRequester数组管理每个item焦点（替代Tag+findViewWithTag，兼容TV端Compose）
+    // 用FocusRequester数组管理每个item焦点（兼容TV端Compose）
     val itemFocusRequesters = remember {
         mutableStateListOf<FocusRequester>().apply {
-            // 初始化与列表长度匹配的FocusRequester
             repeat(dynamicViewModel.dynamicVideoList.size) { add(FocusRequester()) }
         }
     }
 
-    // 核心修复2：监听列表变化，同步FocusRequester数组长度
+    // 监听列表变化，同步FocusRequester数组长度
     LaunchedEffect(dynamicViewModel.dynamicVideoList.size) {
         if (itemFocusRequesters.size < dynamicViewModel.dynamicVideoList.size) {
             val needAddCount = dynamicViewModel.dynamicVideoList.size - itemFocusRequesters.size
@@ -86,7 +83,7 @@ fun DynamicsScreen(
         }
     }
 
-    // 获取当前可见item索引范围（解决“item已添加但未渲染”问题）
+    // 获取当前可见item索引范围
     val visibleItemIndices by remember(lazyGridState.layoutInfo) {
         derivedStateOf {
             val layoutInfo = lazyGridState.layoutInfo
@@ -161,7 +158,7 @@ fun DynamicsScreen(
                             currentFocusedIndex = -1
                         }
                     }
-                    // 核心修复3：拦截下键事件（KeyDown+KeyRepeat），用FocusRequester控制焦点流转
+                    // 修复核心：将KeyEventType.KeyRepeat改为KeyEventType.Repeat
                     .onPreviewKeyEvent { event ->
                         // 菜单键原有逻辑保留
                         if (event.type == KeyEventType.KeyUp && event.key == Key.Menu) {
@@ -169,20 +166,20 @@ fun DynamicsScreen(
                             return@onPreviewKeyEvent true
                         }
 
-                        // 拦截向下方向键（处理KeyDown和KeyRepeat，覆盖长按连续事件）
+                        // 拦截向下方向键（处理KeyDown和Repeat，覆盖长按连续事件）
                         val isDownKey = event.key == Key.DirectionDown
-                        val isEffectiveEvent = event.type == KeyEventType.KeyDown || event.type == KeyEventType.KeyRepeat
+                        val isEffectiveEvent = event.type == KeyEventType.KeyDown || event.type == KeyEventType.Repeat
                         if (isDownKey && isEffectiveEvent) {
                             val nextIndex = currentFocusedIndex + 1
                             // 校验下一个item是否有效且已渲染
                             val nextItemAvailable = nextIndex <= maxValidIndex && visibleItemIndices.contains(nextIndex)
                             if (nextItemAvailable) {
-                                // 下一项可用，请求焦点（替代focusSearch）
+                                // 下一项可用，请求焦点
                                 scope.launch {
                                     itemFocusRequesters[nextIndex].requestFocus()
                                 }
                             }
-                            // 无论下一项是否可用，都拦截事件（防止系统默认搜索焦点）
+                            // 拦截事件，防止系统默认搜索焦点
                             return@onPreviewKeyEvent true
                         }
 
@@ -197,10 +194,8 @@ fun DynamicsScreen(
                 itemsIndexed(dynamicViewModel.dynamicVideoList) { index, item ->
                     SmallVideoCard(
                         modifier = Modifier
-                            // 核心修复4：为每个item绑定对应的FocusRequester
                             .focusRequester(itemFocusRequesters[index])
                             .onFocusChanged { focusState ->
-                                // 焦点变化时更新当前索引
                                 if (focusState.isFocused) {
                                     currentFocusedIndex = index
                                 }
@@ -221,12 +216,11 @@ fun DynamicsScreen(
                         },
                         onClick = { onClickVideo(item) },
                         onLongClick = { onLongClickVideo(item) },
-                        // 移除原onFocus回调，改用onFocusChanged绑定FocusRequester
                         onFocus = {}
                     )
                 }
 
-                // 加载中提示（原有逻辑保留）
+                // 加载中提示
                 if (dynamicViewModel.loadingVideo) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
@@ -238,7 +232,7 @@ fun DynamicsScreen(
                     }
                 }
 
-                // 无更多数据提示（原有逻辑保留）
+                // 无更多数据提示
                 if (!dynamicViewModel.videoHasMore) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
@@ -250,7 +244,7 @@ fun DynamicsScreen(
             }
         }
     } else {
-        // 未登录提示（原有逻辑保留）
+        // 未登录提示
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
