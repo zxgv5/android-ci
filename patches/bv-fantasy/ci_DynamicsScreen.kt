@@ -66,14 +66,14 @@ fun DynamicsScreen(
     val scope = rememberCoroutineScope()
     var currentFocusedIndex by remember { mutableIntStateOf(-1) }
 
-    // 用FocusRequester数组管理每个item焦点（兼容TV端Compose）
+    // FocusRequester数组管理每个item焦点（TV端兼容方案）
     val itemFocusRequesters = remember {
         mutableStateListOf<FocusRequester>().apply {
             repeat(dynamicViewModel.dynamicVideoList.size) { add(FocusRequester()) }
         }
     }
 
-    // 监听列表变化，同步FocusRequester数组长度
+    // 同步列表与FocusRequester数组长度
     LaunchedEffect(dynamicViewModel.dynamicVideoList.size) {
         if (itemFocusRequesters.size < dynamicViewModel.dynamicVideoList.size) {
             val needAddCount = dynamicViewModel.dynamicVideoList.size - itemFocusRequesters.size
@@ -83,7 +83,7 @@ fun DynamicsScreen(
         }
     }
 
-    // 获取当前可见item索引范围
+    // 当前可见item索引范围（解决“已添加未渲染”问题）
     val visibleItemIndices by remember(lazyGridState.layoutInfo) {
         derivedStateOf {
             val layoutInfo = lazyGridState.layoutInfo
@@ -158,7 +158,7 @@ fun DynamicsScreen(
                             currentFocusedIndex = -1
                         }
                     }
-                    // 修复核心：将KeyEventType.KeyRepeat改为KeyEventType.Repeat
+                    // 终极修复：仅拦截KeyDown（长按下键=连续KeyDown，无需Repeat枚举）
                     .onPreviewKeyEvent { event ->
                         // 菜单键原有逻辑保留
                         if (event.type == KeyEventType.KeyUp && event.key == Key.Menu) {
@@ -166,20 +166,18 @@ fun DynamicsScreen(
                             return@onPreviewKeyEvent true
                         }
 
-                        // 拦截向下方向键（处理KeyDown和Repeat，覆盖长按连续事件）
-                        val isDownKey = event.key == Key.DirectionDown
-                        val isEffectiveEvent = event.type == KeyEventType.KeyDown || event.type == KeyEventType.Repeat
-                        if (isDownKey && isEffectiveEvent) {
+                        // 仅拦截向下方向键的KeyDown事件（覆盖长按连续触发）
+                        if (event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown) {
                             val nextIndex = currentFocusedIndex + 1
-                            // 校验下一个item是否有效且已渲染
+                            // 校验下一项是否有效且已渲染
                             val nextItemAvailable = nextIndex <= maxValidIndex && visibleItemIndices.contains(nextIndex)
                             if (nextItemAvailable) {
-                                // 下一项可用，请求焦点
+                                // 下一项可用，手动请求焦点
                                 scope.launch {
                                     itemFocusRequesters[nextIndex].requestFocus()
                                 }
                             }
-                            // 拦截事件，防止系统默认搜索焦点
+                            // 强制拦截事件，彻底阻止系统默认焦点搜索（核心防左移）
                             return@onPreviewKeyEvent true
                         }
 
@@ -196,6 +194,7 @@ fun DynamicsScreen(
                         modifier = Modifier
                             .focusRequester(itemFocusRequesters[index])
                             .onFocusChanged { focusState ->
+                                // 焦点变化时更新当前索引
                                 if (focusState.isFocused) {
                                     currentFocusedIndex = index
                                 }
@@ -216,11 +215,11 @@ fun DynamicsScreen(
                         },
                         onClick = { onClickVideo(item) },
                         onLongClick = { onLongClickVideo(item) },
-                        onFocus = {}
+                        onFocus = {} // 兼容原有回调，无需实现
                     )
                 }
 
-                // 加载中提示
+                // 加载中提示（原有逻辑）
                 if (dynamicViewModel.loadingVideo) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
@@ -232,7 +231,7 @@ fun DynamicsScreen(
                     }
                 }
 
-                // 无更多数据提示
+                // 无更多数据提示（原有逻辑）
                 if (!dynamicViewModel.videoHasMore) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
@@ -244,7 +243,7 @@ fun DynamicsScreen(
             }
         }
     } else {
-        // 未登录提示
+        // 未登录提示（原有逻辑）
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
