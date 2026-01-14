@@ -80,8 +80,6 @@ jobs:
           # 如果标准目录不存在，则在整个项目中查找
           APK_PATH=$(find . -name "*.apk" -type f | grep -i release | head -1)
         fi
-        echo "apk file details:"
-        ls -la *.apk
         mv "$APK_PATH" "./materialfiles-${{ env.BUILD_DATE }}.apk"
 
     - name: Erase keystore, encrypt package and create release
