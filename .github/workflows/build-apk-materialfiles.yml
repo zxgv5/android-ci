@@ -25,6 +25,11 @@ jobs:
         ref: master
         path: ./materialfiles-source
 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci-source
+
     - name: Initialization values
       run: |
         echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -36,13 +41,12 @@ jobs:
         java-version: '21'
 
     - name: Decode keystore and create signing.properties
+      working-directory: ./materialfiles-source
       run: |
         # 解码keystore文件
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-        
         # 获取keystore的绝对路径
         KEYSTORE_PATH=$(realpath keystore.p12)
-        
         # 创建signing.properties文件
         cat > signing.properties << EOF
         storeFile=$KEYSTORE_PATH
@@ -50,26 +54,23 @@ jobs:
         keyAlias=${{ secrets.KEY_ALIAS }}
         keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
         EOF
-        
         # 或者，作为替代方案，也设置环境变量（双重保障）
-        echo "STORE_FILE=$KEYSTORE_PATH" >> $GITHUB_ENV
-        echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-        echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-        echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
-        
-        echo "Created signing.properties with signing configuration"
-        echo "Store file path: $KEYSTORE_PATH"
-        echo "signing.properties content (passwords masked):"
-        sed 's/password=.*/password=***/g' signing.properties
-      working-directory: ./materialfiles-source
+        # echo "STORE_FILE=$KEYSTORE_PATH" >> $GITHUB_ENV
+        # echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+        # echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+        # echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
+        # echo "Created signing.properties with signing configuration"
+        # echo "Store file path: $KEYSTORE_PATH"
+        # echo "signing.properties content (passwords masked):"
+        # sed 's/password=.*/password=***/g' signing.properties
 
     - name: Make gradlew executable
-      run: chmod +x ./gradlew
       working-directory: ./materialfiles-source
+      run: chmod +x ./gradlew
 
     - name: Build release apk files
-      run: ./gradlew assembleRelease
       working-directory: ./materialfiles-source
+      run: ./gradlew assembleRelease
       env:
         STORE_FILE: ${{ env.STORE_FILE }}
         STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -87,48 +88,15 @@ jobs:
           # 如果标准目录不存在，则在整个项目中查找
           APK_PATH=$(find . -name "*.apk" -type f | grep -i release | head -1)
         fi
-        
-        if [ -z "$APK_PATH" ]; then
-          echo "No APK files found!"
-          # 列出构建输出目录以进行调试
-          echo "Listing build outputs:"
-          find app/build/outputs -type f 2>/dev/null || echo "No outputs directory found"
-          exit 1
-        fi
-        
-        # 从gradle.properties文件获取版本号
-        if [ -f "gradle.properties" ]; then
-          VERSION=$(grep -E "versionName|version" gradle.properties | head -1 | cut -d'=' -f2 | tr -d ' "')
-        fi
-        
-        # 如没有成功，改从build.gradle文件获取
-        if [ -z "$VERSION" ]; then
-          if [ -f "app/build.gradle" ]; then
-            VERSION=$(grep -E "versionName\s+" app/build.gradle | head -1 | sed -E "s/.*versionName\s+['\"]([^'\"]+)['\"].*/\1/")
-          fi
-        fi
-        
-        # 如果仍然没有版本号，使用构建日期
-        if [ -z "$VERSION" ]; then
-          VERSION=${{env.BUILD_DATE}}
-        fi
-        
-        APK_NEW_PATH="$(dirname "$APK_PATH")/MaterialFiles_${VERSION}.apk"
-        mv "$APK_PATH" "$APK_NEW_PATH"
-        
-        echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
-        echo "APK_NEW_PATH=$APK_NEW_PATH" >> $GITHUB_OUTPUT
-        echo "Found APK: $APK_NEW_PATH"
-        echo "APK file details:"
-        ls -la "$APK_NEW_PATH"
-        
-        mv "./${{ steps.find-apk.outputs.APK_NEW_PATH }}" "./materialfiles-${{ env.BUILD_DATE }}.apk"
+        echo "apk file details:"
+        ls -la "$APK_PATH"
+        mv "$APK_PATH" "./materialfiles-${{ env.BUILD_DATE }}.apk"
 
-    - name: Create github release & upload apk
-      uses: softprops/action-gh-release@master
-      with:
-        tag_name: ${{env.BUILD_DATE}}-materialfiles
-        files: ./materialfiles-source/materialfiles-${{ env.BUILD_DATE }}.apk
-        # files: ./materialfiles-source/${{ steps.find-apk.outputs.APK_NEW_PATH }}
-        draft: false
-        prerelease: false
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci-source/.github/actions/erase-aes256pac-release/
+        with:
+          # 文件路径（基于github.workspace的绝对路径）
+          P12_KEYSTORE_PATH: "/materialfiles-source/keystore.p12 /materialfiles-source/signing.properties"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "/materialfiles-source/materialfiles-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-materialfiles"
