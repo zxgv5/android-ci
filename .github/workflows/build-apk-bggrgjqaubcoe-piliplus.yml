@@ -48,12 +48,12 @@ jobs:
         uses: subosito/flutter-action@main
         id: flutter-action
         with:
-          channel: stable
+          # channel: stable # 更新周期3月
+          # channel: beta # 更新周期1-2月
+          channel: dev # 更新周期1周
+          # channel: master # 更新周期每天
           flutter-version-file: pubspec.yaml
           cache: true
-          # 尝试更激进的版本策略
-          # channel: master
-      # - run: flutter --version
 
       - name: Apply bottom sheet patch
         working-directory: ${{ env.FLUTTER_ROOT }}
