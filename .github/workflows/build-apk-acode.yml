@@ -32,6 +32,11 @@ jobs:
           repository: Acode-Foundation/Acode
           ref: main
 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci-source
+
       - name: Initialization values
         run: |
           # 先获取当前commit信息
