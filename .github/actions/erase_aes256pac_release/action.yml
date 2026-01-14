@@ -81,4 +81,4 @@ runs:
         draft: false
         prerelease: false
         files: |
-          "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
+          "${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
