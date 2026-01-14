@@ -9,8 +9,8 @@ permissions:
 
 env:
   GITHUB_TOKEN: "${{secrets.GITHUB_TOKEN}}"
-  BUILD_JSON_PATH: "${{ github.workspace }}/build.json"
-  STORE_FILE_PATH: "${{ github.workspace }}/tmp/app-release.keystore"
+  BUILD_JSON_PATH: "./build.json"
+  STORE_FILE_PATH: "./tmp/app-release.keystore"
   KEYSTORE_PASSWORD: "${{secrets.KEYSTORE_PASSWORD}}"
   KEY_ALIAS: "${{secrets.KEY_ALIAS}}"
   KEY_PASSWORD: "${{secrets.KEY_PASSWORD}}"
@@ -88,6 +88,7 @@ jobs:
       # "./tmp/app-release.keystore" 和 "./build.json"
       - name: Add keystore and build.json from secrets
         run: |
+          mkdir -p tmp
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ env.STORE_FILE_PATH }}"
           echo "${{ secrets.ACODE_BUILD_JSON_CONTENT }}" | base64 -d > "${{ env.BUILD_JSON_PATH }}"
           echo "Keystore and build.json added successfully."
