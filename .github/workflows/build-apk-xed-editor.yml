@@ -44,11 +44,11 @@ jobs:
       # "/tmp/signing.properties"和"/tmp/xed.keystore"
       - name: Decode and create secrets
         run: |
-          mkdir -p ./tmp
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./tmp/xed.keystore
+          mkdir -p /tmp
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > /tmp/xed.keystore
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" > ./tmp/signing.properties
-          echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> ./tmp/signing.properties
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> ./tmp/signing.properties
+          echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> /tmp/signing.properties
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> /tmp/signing.properties
 
       - name: Clone submodules
         working-directory: ./xed_editor_source
@@ -56,9 +56,6 @@ jobs:
 
       - name: Build release apk files
         working-directory: ./xed_editor_source
-        env:
-          KEYSTORE_FILE: "${{ github.workspace }}/tmp/xed.keystore"
-          SIGNING_PROPERTIES_FILE: "${{ github.workspace }}/tmp/signing.properties"
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -Pandroid.ndk.abiFilters=arm64-v8a
@@ -69,7 +66,7 @@ jobs:
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           # 文件路径为基于github.workspace的绝对路径
-          P12_KEYSTORE_PATH: "./tmp/xed.keystore ./tmp/signing.properties"
+          P12_KEYSTORE_PATH: "/tmp/xed.keystore /tmp/signing.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./xed_editor_source/release-apks/xed-editor-${{env.BUILD_DATE}}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-xed-editor"
