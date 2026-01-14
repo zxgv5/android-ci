@@ -49,8 +49,8 @@ jobs:
         id: flutter-action
         with:
           # channel: stable # 更新周期3月
-          # channel: beta # 更新周期1-2月
-          channel: dev # 更新周期1周
+          channel: beta # 更新周期1-2月
+          # channel: dev # 更新周期1周
           # channel: master # 更新周期每天
           flutter-version-file: pubspec.yaml
           cache: true
