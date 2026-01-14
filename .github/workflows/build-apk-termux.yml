@@ -22,6 +22,8 @@ jobs:
         with:
           repository: termux/termux-app
           ref: master
+          path: termux_source
+          fetch-depth: 0
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
@@ -33,19 +35,18 @@ jobs:
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       - name: Decode keystore
+        working-directory: ./termux_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
-      # ========== 新增：准备bootstrap文件 ==========
       - name: Prepare bootstrap files
+        working-directory: ./termux_source
         run: |
           echo "Downloading bootstrap files for all architectures"
-          
           # 创建目录
           mkdir -p ./app/src/main/cpp/
-          
           # 定义需要下载的bootstrap文件列表
           # 根据Termux项目，通常有以下架构：
           BOOTSTRAP_FILES=(
@@ -54,17 +55,13 @@ jobs:
             "bootstrap-x86_64.zip"    # x86_64
             "bootstrap-i686.zip"      # x86
           )
-          
           # 基础URL（GitHub Releases）
           BASE_URL="https://github.com/termux/termux-packages/releases/latest/download"
-          
           # 下载函数
           download_bootstrap() {
             local filename=$1
             local url="${BASE_URL}/${filename}"
-            
             echo "Downloading $filename..."
-            
             if command -v curl >/dev/null 2>&1; then
               if curl -L -f --retry 3 --retry-delay 2 -o "./app/src/main/cpp/${filename}" "$url"; then
                 echo "  Downloaded from GitHub Releases"
@@ -79,11 +76,9 @@ jobs:
               echo "ERROR: Neither curl nor wget is available"
               return 1
             fi
-            
             echo "  WARNING: Failed to download $filename"
             return 1
           }
-          
           # 下载所有bootstrap文件
           failed_downloads=()
           for file in "${BOOTSTRAP_FILES[@]}"; do
@@ -91,14 +86,12 @@ jobs:
               failed_downloads+=("$file")
             fi
           done
-          
           # 检查是否至少下载了必要的文件
           if [ ${#failed_downloads[@]} -gt 0 ]; then
             echo "WARNING: Failed to download some bootstrap files:"
             for file in "${failed_downloads[@]}"; do
               echo "  - $file"
             done
-            
             # 检查是否至少下载了当前构建所需的文件
             # 根据错误日志，我们需要bootstrap-aarch64.zip和bootstrap-arm.zip
             if [ ! -f "./app/src/main/cpp/bootstrap-aarch64.zip" ] || [ ! -f "./app/src/main/cpp/bootstrap-arm.zip" ]; then
@@ -106,10 +99,8 @@ jobs:
               exit 1
             fi
           fi
-          
           echo "Downloaded bootstrap files:"
           ls -lh ./app/src/main/cpp/bootstrap-*.zip
-          
           # 验证文件大小（确保不是空文件）
           for file in ./app/src/main/cpp/bootstrap-*.zip; do
             if [ -f "$file" ]; then
@@ -119,24 +110,22 @@ jobs:
               fi
             fi
           done
-      # ========== 结束新增 ==========
 
       - name: Build apk files and rename
-        shell: bash {0}
+        working-directory: ./termux_source
+        shell: bash
         env:
           PACKAGE_VARIANT: apt-android-7
-          KEYSTORE_PATH: ${{ github.workspace }}/keystore.p12
+          KEYSTORE_PATH: ./keystore.p12
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
         run: |
           exit_on_error() { echo "$1"; exit 1; }
-
           echo "Setting vars"
           if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
               GITHUB_SHA="${{ github.event.pull_request.head.sha }}"
           fi
-
           # Set RELEASE_VERSION_NAME
           CURRENT_VERSION_NAME_REGEX='\s+versionName "([^"]+)"$'
           CURRENT_VERSION_NAME="$(grep -m 1 -E "$CURRENT_VERSION_NAME_REGEX" ./app/build.gradle | sed -r "s/$CURRENT_VERSION_NAME_REGEX/\1/")"
@@ -144,20 +133,16 @@ jobs:
           if ! printf "%s" "${RELEASE_VERSION_NAME/v/}" | grep -qP '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'; then
            exit_on_error "The versionName '${RELEASE_VERSION_NAME/v/}' is not a valid version..."
           fi
-
           APK_DIR_PATH="./app/build/outputs/apk/release"
           APK_VERSION_TAG="$RELEASE_VERSION_NAME-${{ env.PACKAGE_VARIANT }}-github-release"
           APK_BASENAME_PREFIX="termux-app_$APK_VERSION_TAG"
-
           echo "APK_DIR_PATH=$APK_DIR_PATH" >> $GITHUB_ENV
           echo "APK_VERSION_TAG=$APK_VERSION_TAG" >> $GITHUB_ENV
           echo "APK_BASENAME_PREFIX=$APK_BASENAME_PREFIX" >> $GITHUB_ENV
-
           echo "Building APKs for 'APK_VERSION_TAG' build"
           export TERMUX_APP_VERSION_NAME="${RELEASE_VERSION_NAME/v/}"
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG"
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}"
-
           # Configure signing
           echo "Configuring release build with signing"
           cat >> ./app/build.gradle << EOF
@@ -170,7 +155,6 @@ jobs:
                       keyPassword '${{ env.KEY_ALIAS_PASSWORD }}'
                   }
               }
-    
               buildTypes {
                   release {
                       minifyEnabled true
@@ -181,35 +165,27 @@ jobs:
               }
           }
           EOF
-          
           # 只需执行标准构建
           if ! ./gradlew assembleRelease; then
             exit_on_error "Build failed."
           fi
-
           echo "Validating APKs"
-          
-          # ------------------------------------------------------
-          # ?? 修改点：验证 universal.apk 而不是 arm64-v8a.apk
-          # ------------------------------------------------------
           UNIVERSAL_APK="$APK_DIR_PATH/${APK_BASENAME_PREFIX}_universal.apk"
           if [ ! -f "$UNIVERSAL_APK" ]; then
             echo " Error: Universal APK not found!"
             ls -la "$APK_DIR_PATH"
             exit 1
           fi
-
           echo "Generating sha256sums file"
           # 针对 universal 文件生成校验码
           (cd "$APK_DIR_PATH"; sha256sum "${APK_BASENAME_PREFIX}_universal.apk" > "${APK_BASENAME_PREFIX}_sha256sums")
-          
-          mv "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_universal.apk" "$APK_DIR_PATH/termux-$BUILD_DATE.apk"
+          mv "$APK_DIR_PATH/${APK_BASENAME_PREFIX}_universal.apk" "$APK_DIR_PATH/termux-${BUILD_DATE}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 私密文件路径（基于github.workspace的绝对路径）
-          P12_KEYSTORE_PATH: "/keystore.p12"
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./termux_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "${{ env.APK_DIR_PATH }}/termux-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./termux_source/${{ env.APK_DIR_PATH }}/termux-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-termux"

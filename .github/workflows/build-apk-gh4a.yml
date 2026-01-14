@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: |
           SRC_RELEASE_APK_PATH_NAME=$(dirname "${{ env.RELEASE_APK }}")
-          DST_RELEASE_APK_PATH_NAME="$SRC_RELEASE_APK_PATH_NAME/gh4a-${{ env.BUILD_DATE }}.apk"
+          DST_RELEASE_APK_PATH_NAME="./gh4a_source/gh4a-${{ env.BUILD_DATE }}.apk"
           # 3. 强制重命名
           mv -f "${{ env.RELEASE_APK }}" "$DST_RELEASE_APK_PATH_NAME"
           # 4. 验证结果+传递环境变量
@@ -142,7 +142,8 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "${{ env.KEYSTORE_PATH }}"
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./gh4a_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "${{ env.RENAMED_APK }}"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-gh4a"

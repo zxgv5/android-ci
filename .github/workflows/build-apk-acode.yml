@@ -8,12 +8,12 @@ permissions:
   contents: write
 
 env:
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-  BUILD_JSON_PATH: build.json
-  STORE_FILE_PATH: /tmp/app-release.keystore
-  KEYSTORE_PASSWORD: ${{secrets.KEYSTORE_PASSWORD}}
-  KEY_ALIAS: ${{secrets.KEY_ALIAS}}
-  KEY_PASSWORD: ${{secrets.KEY_PASSWORD}}
+  GITHUB_TOKEN: "${{secrets.GITHUB_TOKEN}}"
+  BUILD_JSON_PATH: "./build.json"
+  STORE_FILE_PATH: "./tmp/app-release.keystore"
+  KEYSTORE_PASSWORD: "${{secrets.KEYSTORE_PASSWORD}}"
+  KEY_ALIAS: "${{secrets.KEY_ALIAS}}"
+  KEY_PASSWORD: "${{secrets.KEY_PASSWORD}}"
 
 jobs:
   build:
@@ -28,9 +28,10 @@ jobs:
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
-          fetch-depth: 0
           repository: Acode-Foundation/Acode
           ref: main
+          path: acode_source
+          fetch-depth: 0
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
@@ -45,6 +46,7 @@ jobs:
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       - name: Fix build-extras.gradle for release build
+        working-directory: ./acode_source
         run: |
           cat > build-extras.gradle << 'EOF'
           android {
@@ -83,6 +85,7 @@ jobs:
           node-version: 'lts/*'
 
       - name: Add keystore and build.json from secrets
+        working-directory: ./acode_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ env.STORE_FILE_PATH }}"
           echo "${{ secrets.ACODE_BUILD_JSON_CONTENT }}" | base64 -d > "${{ env.BUILD_JSON_PATH }}"
@@ -94,6 +97,7 @@ jobs:
           }
 
       - name: Replace config.js with secured version
+        working-directory: ./acode_source
         run: |
           echo "正在替换 utils/config.js 文件..."
           
@@ -134,6 +138,7 @@ jobs:
 
       - name: Extract versionCode and version from config.xml
         id: extract_version
+        working-directory: ./acode_source
         run: |
           if [ ! -f config.xml ]; then
             echo "config.xml not found!"
@@ -148,6 +153,7 @@ jobs:
 
       - name: Append commit hash to version and update config.xml
         id: update-version
+        working-directory: ./acode_source
         run: |
           # 确保GIT_COMMIT不为空
           if [ -z "${{ env.GIT_COMMIT }}" ]; then
@@ -168,20 +174,25 @@ jobs:
           echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install node.js packages
+        working-directory: ./acode_source
         run: npm install
 
       - name: Install cordova cli
+        working-directory: ./acode_source
         run: npm install -g cordova
 
       - name: Run npm setup
+        working-directory: ./acode_source
         run: npm run setup
 
       - name: Run npm build paid apk
+        working-directory: ./acode_source
         run: |
           node utils/storage_manager.mjs y
           npm run build paid apk
           
       - name: Build release apk files with gradle
+        working-directory: ./acode_source
         run: |
           cd platforms/android
           ./gradlew clean
@@ -216,6 +227,7 @@ jobs:
           ls -la /tmp/acode-unsigned.apk || echo "APK file not found!"
 
       - name: Sign the apk (pkcs12)
+        working-directory: ./acode_source
         run: |
           # 设置Android build-tools路径
           export ANDROID_HOME=/usr/local/lib/android/sdk
@@ -250,8 +262,8 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 私密文件路径（基于github.workspace的绝对路径）
-          P12_KEYSTORE_PATH: "${{ env.STORE_FILE_PATH }} ${{ env.BUILD_JSON_PATH }}"
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./acode_source/${{ env.STORE_FILE_PATH }} ./acode_source/${{ env.BUILD_JSON_PATH }}"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "/tmp/acode-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./acode_source/tmp/acode-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-acode"

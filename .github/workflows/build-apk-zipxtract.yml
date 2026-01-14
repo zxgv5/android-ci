@@ -87,6 +87,7 @@ jobs:
           ./gradlew assemblePsRelease
 
       - name: Find release apks
+        working-directory: ./zipxtract_source
         run: |
           echo "Looking for APK files..."
           PS_APK=$(find . -name "*ps*release*.apk" -type f | head -1)
@@ -101,6 +102,7 @@ jobs:
           echo "APK_COUNT=$APK_COUNT" >> $GITHUB_ENV
 
       - name: Sign the apk (pkcs12)
+        working-directory: ./zipxtract_source
         run: |
           # 设置Android build-tools路径
           export ANDROID_HOME=/usr/local/lib/android/sdk
@@ -114,15 +116,15 @@ jobs:
             --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
             --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
             --ks-type PKCS12 \
-            --out "$GITHUB_WORKSPACE/zipxtract_source/zipxtract-${{ env.BUILD_DATE }}.apk" \
+            --out "./zipxtract-${{ env.BUILD_DATE }}.apk" \
             ${{ env.PS_APK_PATH }}
           # 验证签名
-          apksigner verify --verbose "$GITHUB_WORKSPACE/zipxtract_source/zipxtract-${{ env.BUILD_DATE }}.apk"
+          apksigner verify --verbose "./zipxtract-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 私钥文件路径（基于github.workspace的绝对路径）
+          # 文件路径为基于github.workspace的绝对路径
           P12_KEYSTORE_PATH: "./zipxtract_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./zipxtract_source/zipxtract-${{ env.BUILD_DATE }}.apk"
