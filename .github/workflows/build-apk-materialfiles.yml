@@ -84,7 +84,7 @@ jobs:
         echo "apk file details:"
         ls -la "$APK_PATH"
         mv "$APK_PATH" "./materialfiles-${{ env.BUILD_DATE }}.apk"
-        ls -la "*.apk"
+        ls -la *.apk
 
     - name: Erase keystore, encrypt package and create release
       uses: ./ci-source/.github/actions/erase-aes256pac-release/
