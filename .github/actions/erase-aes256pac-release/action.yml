@@ -30,6 +30,7 @@ runs:
       working-directory: "${{ github.workspace }}/../" #根目录
       run: |
         set -e  # 命令出错时立即退出，避免继续执行
+        pwd
         # 删除私钥文件并校验结果
         rm -f "${{ inputs.P12_KEYSTORE_PATH }}"
         if [ ! -f "${{ inputs.P12_KEYSTORE_PATH }}" ]; then
