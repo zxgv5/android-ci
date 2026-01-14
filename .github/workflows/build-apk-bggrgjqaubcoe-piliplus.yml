@@ -25,6 +25,11 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci-source
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -39,7 +44,7 @@ jobs:
             android/*.gradle*
             android/**/gradle-wrapper.properties
             
-      - name: Set up Flutter
+      - name: Set up flutter
         uses: subosito/flutter-action@main
         id: flutter-action
         with:
@@ -55,7 +60,7 @@ jobs:
         run: git apply $GITHUB_WORKSPACE/lib/scripts/bottom_sheet_patch.diff
         continue-on-error: true
         
-      - name: Write key
+      - name: Decode and write keys
         # if: github.event_name == 'workflow_dispatch'
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
@@ -70,7 +75,7 @@ jobs:
         shell: pwsh
         run: lib/scripts/build.ps1 android
         
-      - name: Flutter build release apk files
+      - name: Flutter build release apk
         # run: flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --pub
         # 改为仅编译arm64-v8a架构版本
         run: flutter build apk --release --target-platform=android-arm64 --split-per-abi --dart-define-from-file=pili_release.json --pub
@@ -86,12 +91,11 @@ jobs:
           # mv "build/app/outputs/flutter-apk/app-release.apk" "PiliPlus_android_${{ env.version }}_${abi}.apk"
         shell: bash
         
-      - name: Create github release & upload apk
-        uses: softprops/action-gh-release@master
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci-source/.github/actions/erase-aes256pac-release/
         with:
-          tag_name: ${{env.BUILD_DATE}}-piliplus
-          files: |
-              piliplus-${{ env.BUILD_DATE }}.apk
-              # PiliPlus_android_*-v8a.apk
-          draft: false
-          prerelease: false
+          # 私密文件路径（基于github.workspace的绝对路径）
+          P12_KEYSTORE_PATH: "/android/app/key.p12 /android/key.properties"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "/piliplus-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-piliplus"
