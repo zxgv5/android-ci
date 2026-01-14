@@ -80,16 +80,9 @@ jobs:
         # 改为仅编译arm64-v8a架构版本
         run: flutter build apk --release --target-platform=android-arm64 --split-per-abi --dart-define-from-file=pili_release.json --pub
         
-      - name: Rename apk files
+      - name: Rename apk file
         run: |
-          for file in build/app/outputs/flutter-apk/app-*-release.apk; do
-            abi=$(echo "$file" | sed -E 's|.*app-(.*)-release\.apk|\1|')
-            # mv "$file" "PiliPlus_android_${{ env.version }}_${abi}.apk"
-            mv "$file" "piliplus-${{ env.BUILD_DATE }}.apk" 
-          done
-          # 配合仅编译arm64-v8a架构版本导致的文件名变化进行的修改
-          # mv "build/app/outputs/flutter-apk/app-release.apk" "PiliPlus_android_${{ env.version }}_${abi}.apk"
-        shell: bash
+          mv "/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "/build/app/outputs/flutter-apk/piliplus-${{ env.BUILD_DATE }}.apk"
         
       - name: Erase keystore, encrypt package and create release
         uses: ./ci-source/.github/actions/erase-aes256pac-release/
@@ -97,5 +90,5 @@ jobs:
           # 私密文件路径（基于github.workspace的绝对路径）
           P12_KEYSTORE_PATH: "/android/app/key.p12 /android/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "/piliplus-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "/build/app/outputs/flutter-apk/piliplus-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-piliplus"
