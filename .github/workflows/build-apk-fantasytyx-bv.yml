@@ -175,14 +175,10 @@ jobs:
           echo "=== 编译 player.tv 模块，验证 TV 依赖 ==="
           ./gradlew :player:tv:assembleRelease --refresh-dependencies --no-daemon
 
-      - name: Decode and write release keystore
+      - name: Decode keystore.p12 and write signing.properties
         working-directory: ./fantasy-bv-source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-
-      - name: Write signing.properties for release build
-        working-directory: ./fantasy-bv-source
-        run: |
           cat <<EOF > signing.properties
           keystore.path=keystore.p12
           keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
