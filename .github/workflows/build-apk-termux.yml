@@ -116,7 +116,6 @@ jobs:
         shell: bash
         env:
           PACKAGE_VARIANT: apt-android-7
-          KEYSTORE_PATH: ./keystore.p12
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
@@ -149,7 +148,7 @@ jobs:
           android {
               signingConfigs {
                   release {
-                      storeFile file('${{ env.KEYSTORE_PATH }}')
+                      storeFile file("${{ github.workspace }}/termux_source/keystore.p12")
                       storePassword '${{ env.KEYSTORE_PASSWORD }}'
                       keyAlias '${{ env.KEY_ALIAS }}'
                       keyPassword '${{ env.KEY_ALIAS_PASSWORD }}'
