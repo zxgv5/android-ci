@@ -46,58 +46,36 @@ runs:
         sudo apt-get update -y
         sudo apt-get install -y --no-install-recommends p7zip-full
 
-    - name: Create aes256 archive with filename encryption
-      shell: bash
-      working-directory: "${{ github.workspace }}"
-      run: |
-        set -e
-        pwd
-        # 打包并加密（参数说明：-mhe=on启用文件名加密，-mx=5中等压缩级别）
-        7z a \
-          -p"${{ inputs.ZIP_AES256_PWD }}" \
-          -mhe=on \
-          -t7z \
-          -m0=lzma2 \
-          -mx=5 \
-          -mfb=64 \
-          -md=32m \
-          -ms=on \
-          -mhc=on \
-          -ma=2 \
-          "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" \
-          "${{ inputs.BUILD_ARTIFACT_PATH }}"
-        # 校验压缩包生成结果
-        if [ -f "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" ]; then
-          echo "✅ 加密压缩包已生成：${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
-        else
-          echo "❌ 压缩包生成失败"
-          exit 1
-        fi
+    # - name: Create aes256 archive with filename encryption
+    #   shell: bash
+    #   working-directory: "${{ github.workspace }}"
+    #   run: |
+    #     set -e
+    #     pwd
+    #     # 打包并加密（参数说明：-mhe=on启用文件名加密，-mx=5中等压缩级别）
+    #     7z a \
+    #       -p"${{ inputs.ZIP_AES256_PWD }}" \
+    #       -mhe=on \
+    #       -t7z \
+    #       -m0=lzma2 \
+    #       -mx=5 \
+    #       -mfb=64 \
+    #       -md=32m \
+    #       -ms=on \
+    #       -mhc=on \
+    #       -ma=2 \
+    #       "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" \
+    #       "${{ inputs.BUILD_ARTIFACT_PATH }}"
+    #     # 校验压缩包生成结果
+    #     if [ -f "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" ]; then
+    #       echo "✅ 加密压缩包已生成：${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
+    #     else
+    #       echo "❌ 压缩包生成失败"
+    #       exit 1
+    #     fi
 
     - name: Create github release
       shell: bash
       run: |
         pwd
         echo "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
-
-    - name: Find apk files and rename
-      working-directory: ./materialfiles-source
-      run: |
-        # 首先尝试在标准的release目录中查找
-        if [ -d "app/build/outputs/apk/release" ]; then
-          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" -type f | head -1)
-        else
-          # 如果标准目录不存在，则在整个项目中查找
-          APK_PATH=$(find . -name "*.apk" -type f | grep -i release | head -1)
-        fi
-        echo "apk file details:"
-        ls -la *.apk
-        mv "$APK_PATH" "./materialfiles-${{ env.BUILD_DATE }}.apk"
-
-    - name: Create github release
-      uses: softprops/action-gh-release@master
-      with:
-        tag_name: ${{ inputs.RELEASE_TAG_NAME }}
-        draft: false
-        prerelease: false
-        files: "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
