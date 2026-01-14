@@ -75,12 +75,6 @@ runs:
         fi
 
     - name: Create github release
-      uses: softprops/action-gh-release@master
-      with:
-        tag_name: ${{ inputs.RELEASE_TAG_NAME }}
-        draft: false
-        prerelease: false
-        files: "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
       run: |
         pwd
         echo "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
