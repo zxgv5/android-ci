@@ -26,7 +26,8 @@ runs:
   steps:
     - name: Remove keystore
       shell: bash
-      working-directory: ${{ github.workspace }}  # 固定工作目录为仓库根目录
+      # !!! 注意此处是ci仓库的工作目录，即/ci-source/ !!!
+      working-directory: "${{ github.workspace }}/../" #根目录
       run: |
         set -e  # 命令出错时立即退出，避免继续执行
         # 删除私钥文件并校验结果
@@ -40,7 +41,6 @@ runs:
 
     - name: Install 7zip
       shell: bash
-      # working-directory: ${{ github.workspace }}
       run: |
         set -e
         sudo apt-get update -y
@@ -48,7 +48,8 @@ runs:
 
     - name: Create aes256 archive with filename encryption
       shell: bash
-      working-directory: ${{ github.workspace }}
+      # !!! 注意此处是ci仓库的工作目录，即/ci-source/ !!!
+      working-directory: "${{ github.workspace }}/../" #根目录
       run: |
         set -e
         # 打包并加密（参数说明：-mhe=on启用文件名加密，-mx=5中等压缩级别）
