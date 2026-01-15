@@ -59,15 +59,15 @@ jobs:
         keyAlias=${{ secrets.KEY_ALIAS }}
         keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
         EOF
-        # 或者，作为替代方案，也设置环境变量（双重保障）
-        # echo "STORE_FILE=$KEYSTORE_PATH" >> $GITHUB_ENV
-        # echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-        # echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-        # echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
-        # echo "Created signing.properties with signing configuration"
-        # echo "Store file path: $KEYSTORE_PATH"
-        # echo "signing.properties content (passwords masked):"
-        # sed 's/password=.*/password=***/g' signing.properties
+        # 替代方案，设置环境变量
+        echo "STORE_FILE=$KEYSTORE_PATH" >> $GITHUB_ENV
+        echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+        echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+        echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
+        echo "Created signing.properties with signing configuration"
+        echo "Store file path: $KEYSTORE_PATH"
+        echo "signing.properties content (passwords masked):"
+        sed 's/password=.*/password=***/g' signing.properties
 
     - name: Build release apk files
       working-directory: ./materialfiles_source
