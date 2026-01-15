@@ -47,7 +47,7 @@ jobs:
           cache: 'gradle'
 
       - name: Set up android sdk
-        uses: android-actions/setup-android@main
+        uses: zxgv5/setup-android@main
 
       - name: Enable gradle build cache
         working-directory: ./wgtunnel_source
