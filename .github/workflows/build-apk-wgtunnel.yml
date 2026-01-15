@@ -46,31 +46,8 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      # 替代android-actions/setup-android@main
-      - name: Set up android sdk components
-        shell: bash
-        run: |
-          echo "📦 Installing Android SDK components..."
-          # 设置 Android SDK 环境变量（如果已安装）
-          if [ -d "$HOME/Android/sdk" ]; then
-            echo "ANDROID_HOME=$HOME/Android/sdk" >> $GITHUB_ENV
-            echo "ANDROID_SDK_ROOT=$HOME/Android/sdk" >> $GITHUB_ENV
-          elif [ -d "/usr/local/lib/android/sdk" ]; then
-            echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-            echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          fi
-          # 如果环境中有 sdkmanager，安装必要组件
-          if command -v sdkmanager &> /dev/null; then
-            echo "📥 Installing required SDK packages..."
-            yes | sdkmanager --licenses || true
-            sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk-bundle"
-          else
-            echo "⚠️ sdkmanager not found, using pre-installed components"
-          fi
-          echo "✅ Android SDK components installed"
-
-      # - name: Set up android sdk
-      #   uses: android-actions/setup-android@main
+      - name: Set up android sdk
+        uses: android-actions/setup-android@main
 
       - name: Enable gradle build cache
         working-directory: ./wgtunnel_source
