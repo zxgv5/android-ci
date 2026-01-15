@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: wgtunnel/wgtunnel
-          ref: main
+          ref: master
           path: wgtunnel_source
           fetch-depth: 0
 
