@@ -26,14 +26,13 @@ runs:
   steps:
     - name: Remove keystore
       shell: bash
-      working-directory: "${{ github.workspace }}"
+      # working-directory: "${{ github.workspace }}"
       run: |
         set -e  # 命令出错时立即退出，避免继续执行
-        pwd
         # 删除私钥文件并校验结果
-        rm -f "${{ inputs.P12_KEYSTORE_PATH }}"
-        if [ ! -f "${{ inputs.P12_KEYSTORE_PATH }}" ]; then
-          echo "✅ 私钥文件 '${{ inputs.P12_KEYSTORE_PATH }}' 已成功删除"
+        rm -f "${{ github.workspace }}/${{ inputs.P12_KEYSTORE_PATH }}"
+        if [ ! -f "${{ github.workspace }}/${{ inputs.P12_KEYSTORE_PATH }}" ]; then
+          echo "✅ 私钥文件 '${{ github.workspace }}/${{ inputs.P12_KEYSTORE_PATH }}' 已成功删除"
         else
           echo "❌ 私钥文件删除失败"
           exit 1
@@ -48,7 +47,7 @@ runs:
 
     - name: Create aes256 archive with filename encryption
       shell: bash
-      working-directory: "${{ github.workspace }}"
+      # working-directory: "${{ github.workspace }}"
       run: |
         set -e
         pwd
@@ -64,10 +63,10 @@ runs:
           -ms=on \
           -mhc=on \
           -ma=2 \
-          "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" \
-          "${{ inputs.BUILD_ARTIFACT_PATH }}"
+          "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z" \
+          "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}"
         # 校验压缩包生成结果
-        if [ -f "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" ]; then
+        if [ -f "${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z" ]; then
           echo "✅ 加密压缩包已生成：${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
         else
           echo "❌ 压缩包生成失败"
