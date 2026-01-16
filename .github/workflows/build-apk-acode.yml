@@ -30,7 +30,7 @@ jobs:
 
       - name: Setup build environment
         run: |
-          echo "BUILD_DATE=$(TZ=UTC-8 date +'%y%m%d-%H%M%S')" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
           echo "SHORT_SHA=$(cd acode_source && git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "PREV_TAG=$(cd acode_source && git describe --tags --abbrev=0 2>/dev/null || echo 'initial')" >> $GITHUB_ENV
 
@@ -136,9 +136,7 @@ jobs:
           const path = require('path');
           const fs = require('fs');
           const MiniCssExtractPlugin = require('mini-css-extract-plugin');
-
           const WWW = path.resolve(__dirname, 'www');
-
           module.exports = (env, options) => {
             const { mode = 'development' } = options;
             const rules = [
@@ -238,11 +236,9 @@ jobs:
                 }),
               ],
             };
-
             return [main];
           };
           EOF
-          
           mv webpack.config.fixed.js webpack.config.js
           echo "✅ Webpack配置已修复"
 
@@ -258,10 +254,8 @@ jobs:
           # Cordova 13.0.0 的一个bug：在添加平台时会错误地寻找android/package.json
           # 解决方法：创建空的android目录和package.json文件
           echo "修复Cordova Android平台添加问题..."
-          
           # 1. 创建android目录
           mkdir -p android
-          
           # 2. 在android目录中创建一个空的package.json文件
           cat > android/package.json << 'EOF'
           {
@@ -270,7 +264,6 @@ jobs:
             "description": "Placeholder package.json for Cordova Android platform"
           }
           EOF
-          
           echo "✅ 已创建android/package.json占位文件"
 
       - name: Add cordova android platform
@@ -281,7 +274,6 @@ jobs:
           # 方法1：使用npx cordova添加平台
           # 指定具体的版本号，避免使用范围选择器 ^
           npx cordova platform add android@14.0.1 --save
-          
           echo "✅ Android平台添加完成"
 
       - name: Build webpack assets
@@ -289,11 +281,9 @@ jobs:
         run: |
           # 运行config.js进行配置
           node utils/config.js p paid
-          
           # 使用修复后的webpack配置构建前端
           echo "构建前端资源..."
           npx webpack --progress --mode production
-          
           # 验证构建结果
           if [ -d "www/build" ] && [ -f "www/build/main.js" ]; then
             echo "✅ 前端资源构建成功"
@@ -309,17 +299,15 @@ jobs:
           # 准备Cordova项目
           echo "准备Cordova项目..."
           npx cordova prepare android
-          
           # 使用Cordova构建APK（使用build.json进行签名）
           echo "构建Android APK..."
           npx cordova build android --release -- --packageType=apk
-          
           # 验证构建产物
           if [ -f "platforms/android/app/build/outputs/apk/release/app-release.apk" ]; then
             echo "✅ APK构建成功!"
-            cp platforms/android/app/build/outputs/apk/release/app-release.apk "/tmp/acode-${{ env.UPDATED_VERSION }}-${{ env.BUILD_DATE }}.apk"
-            echo "APK文件: /tmp/acode-${{ env.UPDATED_VERSION }}-${{ env.BUILD_DATE }}.apk"
-            ls -lh "/tmp/acode-${{ env.UPDATED_VERSION }}-${{ env.BUILD_DATE }}.apk"
+            cp platforms/android/app/build/outputs/apk/release/app-release.apk "/tmp/acode-${{ env.BUILD_DATE }}.apk"
+            echo "APK文件: /tmp/acode-${{ env.BUILD_DATE }}.apk"
+            ls -lh "/tmp/acode-${{ env.BUILD_DATE }}.apk"
           else
             echo "❌ 错误: 未找到构建产物!"
             echo "搜索APK文件..."
@@ -332,5 +320,5 @@ jobs:
         with:
           P12_KEYSTORE_PATH: "build.json ${{ env.KEYSTORE_PATH }}"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "/tmp/acode-${{ env.UPDATED_VERSION }}-${{ env.BUILD_DATE }}.apk"
-          RELEASE_TAG_NAME: "build-${{ env.BUILD_DATE }}"
+          BUILD_ARTIFACT_PATH: "/tmp/acode-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-acode"
