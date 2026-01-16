@@ -8,24 +8,16 @@ permissions:
   contents: write
 
 env:
-  GITHUB_TOKEN: "${{secrets.GITHUB_TOKEN}}"
-  BUILD_JSON_PATH: "./build.json"
-  STORE_FILE_PATH: "/tmp/app-release.keystore"
-  KEYSTORE_PASSWORD: "${{secrets.KEYSTORE_PASSWORD}}"
-  KEY_ALIAS: "${{secrets.KEY_ALIAS}}"
-  KEY_PASSWORD: "${{secrets.KEY_PASSWORD}}"
+  # 签名配置使用环境变量，不在代码中硬编码密码
+  KEYSTORE_PATH: "./android/app/paid-release.keystore"
+  # F-Droid模式明确禁用，确保targetSdkVersion=35
+  F_DROID_MODE: "false"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Clean runner environment
-        run: |
-          # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
-          rm -rf ~/.android/build-cache/
-
-      - name: Checkout source repo
+      - name: Checkout source repository
         uses: actions/checkout@main
         with:
           repository: Acode-Foundation/Acode
@@ -33,239 +25,152 @@ jobs:
           path: acode_source
           fetch-depth: 0
 
-      - name: Checkout ci source repo (self)
+      - name: Checkout ci repository
         uses: actions/checkout@main
         with:
           path: ci_source
 
-      - name: Initialization values
+      - name: Setup build environment
         run: |
-          # 先获取当前commit信息
-          echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC-8 date +'%y%m%d-%H%M%S')" >> $GITHUB_ENV
+          echo "SHORT_SHA=$(cd acode_source && git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "PREV_TAG=$(cd acode_source && git describe --tags --abbrev=0 2>/dev/null || echo 'initial')" >> $GITHUB_ENV
 
-      - name: Fix build-extras.gradle for release build
-        working-directory: ./acode_source
-        run: |
-          cat > build-extras.gradle << 'EOF'
-          android {
-              compileSdkVersion 35
-              packagingOptions {
-                  pickFirst 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
-              }
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
-                  }
-              }
-          }
-          configurations {
-            all {
-                exclude module: 'commons-logging'
-                exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
-                exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15on'
-                exclude group: 'org.bouncycastle', module: 'bcpkix-jdk18on'
-                exclude group: 'org.bouncycastle', module: 'bcprov-jdk18on'
-            }
-          }
-          EOF
-
-      - name: Set up jdk 21
+      - name: Setup java and android sdk
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
+          java-version: '17' # Cordova Android 14要求JDK 17
 
-      - name: Set up node.js
-        uses: actions/setup-node@main
-        with:
-          node-version: 'lts/*'
-
-      # app-release.keystore和build.json的路径都在构建文件中被硬编码了
-      # "/tmp/app-release.keystore" 和 "/build.json"
-      - name: Add keystore and build.json from secrets
+      - name: Setup bun runtime
         run: |
-          mkdir -p /tmp
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ env.STORE_FILE_PATH }}"
-          echo "${{ secrets.ACODE_BUILD_JSON_CONTENT }}" | base64 -d > "${{ env.BUILD_JSON_PATH }}"
-          echo "Keystore and build.json added successfully."
-          # 验证keystore密码
-          keytool -list -keystore "${{ env.STORE_FILE_PATH }}" -storepass "${{ env.KEYSTORE_PASSWORD }}" -v || {
-            echo "Keystore password verification failed!"
-            exit 1
-          }
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-      - name: Replace config.js with secured version
+      - name: Setup fdroid configuration
         working-directory: ./acode_source
         run: |
-          echo "正在替换 utils/config.js 文件..."
-          
-          # 确保utils目录存在
-          if [ ! -d "utils" ]; then
-            mkdir -p utils
-            echo "创建了 utils 目录"
-          fi
-          
-          # 从secrets中获取base64编码的config.js内容并解码
-          if [ -z "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" ]; then
-            echo "错误: ACODE_BUILD_CONFIGJS_BASE64 secret 为空!"
-            exit 1
-          fi
-          
-          echo "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" | base64 -d > utils/config.js
-          
-          # 验证文件是否成功写入
-          if [ ! -f "utils/config.js" ]; then
-            echo "错误: 无法创建 utils/config.js 文件!"
-            exit 1
-          fi
-          
-          # 验证文件内容（检查是否是有效的JavaScript）
-          if ! node -c utils/config.js 2>/dev/null; then
-            echo "警告: utils/config.js 不是有效的JavaScript文件"
-            echo "文件内容预览（前10行）:"
-            head -10 utils/config.js
-          else
-            echo "✓ utils/config.js 是有效的JavaScript文件"
-          fi
-          
-          # 显示文件大小和基本信息
-          echo "文件信息:"
-          ls -la utils/config.js
-          echo "文件行数: $(wc -l < utils/config.js)"
-          echo "✓ utils/config.js 文件替换完成"
+          # 明确设置F-Droid模式为false，确保targetSdkVersion=35
+          echo "${{ env.F_DROID_MODE }}" > /tmp/fdroid.bool
+          echo "F-Droid模式已设置为: ${{ env.F_DROID_MODE }} (targetSdkVersion=35)"
 
-      - name: Extract versionCode and version from config.xml
-        id: extract_version
+      - name: Restore signing credentials
         working-directory: ./acode_source
         run: |
-          if [ ! -f config.xml ]; then
-            echo "config.xml not found!"
-            exit 1
-          fi
-          VERSION_CODE=$(grep -oP 'versionCode="\K[0-9]+' config.xml || grep -oP 'versionCode="([0-9]+)' config.xml | sed -E 's/versionCode="([0-9]+)"/\1/')
-          VERSION=$(grep -oP 'version="\K[0-9.]+' config.xml)
-          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted Version Code: $VERSION_CODE"
-          echo "Extracted Version: $VERSION"
+          # 从Secrets还原签名密钥文件
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ env.KEYSTORE_PATH }}"
+          echo "✅ 签名密钥文件已恢复"
+          # 验证密钥文件有效性
+          keytool -list -keystore "${{ env.KEYSTORE_PATH }}" -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -v && echo "✅ 密钥验证成功"
 
-      - name: Append commit hash to version and update config.xml
-        id: update-version
+      - name: Inject build configuration
         working-directory: ./acode_source
         run: |
-          # 确保GIT_COMMIT不为空
-          if [ -z "${{ env.GIT_COMMIT }}" ]; then
-            echo "GIT_COMMIT is empty, using default"
-            SHORT_COMMIT_HASH="unknown"
-          else
-            SHORT_COMMIT_HASH=$(echo "${{ env.GIT_COMMIT }}" | cut -c 1-7)
-          fi
-          
-          UPDATED_VERSION="${{ steps.extract_version.outputs.VERSION }}-$SHORT_COMMIT_HASH"
-          echo "Updated Version: $UPDATED_VERSION"
-          
-          # Update config.xml with the new version
-          sed -i "s/version=\"${{ steps.extract_version.outputs.VERSION }}\"/version=\"$UPDATED_VERSION\"/g" config.xml
-          echo "Updated version in config.xml"
-          # Output the updated version
+          # 从config.xml提取版本信息
+          APP_VERSION=$(grep -oP 'version="\K[0-9.]+' config.xml)
+          VERSION_CODE=$(grep -oP 'android-versionCode="\K[0-9]+' config.xml)
+          # 在版本号后追加提交哈希
+          UPDATED_VERSION="${APP_VERSION}-${SHORT_SHA}"
+          echo "构建版本: $UPDATED_VERSION (原始: $APP_VERSION)"
+          echo "版本代码: $VERSION_CODE"
+          # 更新config.xml中的版本号
+          sed -i "s/version=\"$APP_VERSION\"/version=\"$UPDATED_VERSION\"/" config.xml
+          # 设置环境变量供后续步骤使用
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
           echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_ENV
-          echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
-      - name: Install node.js packages
+      - name: Generate build configuration
         working-directory: ./acode_source
-        run: npm install
+        run: |
+          # 1. 生成build.json（使用环境变量，确保密码正确注入）
+          cat > build.json << EOF
+          {
+            "android": {
+              "release": {
+                "keystore": "./android/app/paid-release.keystore",
+                "storePassword": "${{ secrets.KEYSTORE_PASSWORD }}",
+                "alias": "${{ secrets.KEY_ALIAS }}",
+                "password": "${{ secrets.KEY_PASSWORD }}"
+              }
+            }
+          }
+          EOF
+          echo "✅ build.json已生成"
+          # 验证build.json格式
+          if jq empty build.json 2>/dev/null; then
+            echo "✅ build.json格式正确"
+          else
+            echo "❌ build.json格式错误"
+            exit 1
+          fi
+          # 2. 生成config.js（简化为仅处理付费版生产构建）
+          cat > utils/config.js << 'EOF'
+          // 简化的config.js，仅处理付费版生产构建
+          const path = require("node:path");
+          const fs = require("node:fs");
+          // 读取配置
+          const configPath = path.resolve(__dirname, "../config.xml");
+          let config = fs.readFileSync(configPath, "utf-8");
+          // 确保是付费版ID
+          if (!config.includes('id="com.foxdebug.acode"')) {
+            config = config.replace(/id="[^"]+"/, 'id="com.foxdebug.acode"');
+            fs.writeFileSync(configPath, config, "utf8");
+            console.log("✅ 已设置为付费版应用ID");
+          }
+          // 设置生产模式（compact）
+          const babelrcPath = path.resolve(__dirname, "../.babelrc");
+          const babelrc = JSON.parse(fs.readFileSync(babelrcPath, "utf-8"));
+          babelrc.compact = true;
+          fs.writeFileSync(babelrcPath, JSON.stringify(babelrc, null, 2), "utf8");
+          console.log("✅ 配置完成");
+          EOF
+          echo "✅ config.js已生成"
+          # 验证config.js语法
+          if node -c utils/config.js; then
+            echo "✅ config.js语法正确"
+          else
+            echo "❌ config.js语法错误"
+            exit 1
+          fi
+
+      - name: Install project dependencies
+        working-directory: ./acode_source
+        run: |
+          # 使用Bun安装依赖，利用其更快的速度
+          bun install
+          # 安装钩子脚本所需的全局依赖
+          bun add -g prettier prettier-plugin-java
 
       - name: Install cordova cli
         working-directory: ./acode_source
-        run: npm install -g cordova
+        run: |
+          # 安装与package.json中版本匹配的Cordova
+          CORDOVA_VERSION=$(grep -oP '"cordova": "\K[^"]+' package.json)
+          bun add cordova@${CORDOVA_VERSION}
+          echo "✅ Cordova CLI ${CORDOVA_VERSION} 已安装"
 
-      - name: Run npm setup
-        working-directory: ./acode_source
-        run: npm run setup
-
-      - name: Run npm build paid apk
+      - name: Execute application build
         working-directory: ./acode_source
         run: |
-          node utils/storage_manager.mjs y
-          npm run build paid apk
-          
-      - name: Build release apk files with gradle
-        working-directory: ./acode_source
-        run: |
-          cd platforms/android
-          ./gradlew clean
-          ./gradlew assembleRelease
-          
-          # 查找生成的APK文件
-          echo "Looking for APK files..."
-          find app/build/outputs/apk -name "*.apk" -type f
-          
-          # 确保目录存在
-          mkdir -p /tmp
-          
-          # 复制release APK到临时目录
-          if [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
-            echo "Found unsigned release APK"
-            cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/acode-unsigned.apk
-            echo "Copied to /tmp/acode-unsigned.apk"
+          # 调用项目自身的构建脚本，确保与本地构建一致
+          echo "开始构建 Paid Release APK..."
+          sh ./utils/scripts/build.sh paid p apk
+          # 验证构建产物
+          if [ -f "platforms/android/app/build/outputs/apk/release/app-release.apk" ]; then
+            echo "✅ APK构建成功!"
+            cp platforms/android/app/build/outputs/apk/release/app-release.apk "/tmp/acode-${{ env.BUILD_DATE }}.apk"
+            ls -lh "/tmp/acode-${{ env.BUILD_DATE }}.apk"
           else
-            echo "Checking for signed APK..."
-            # 尝试查找已签名的APK
-            for apk in app/build/outputs/apk/release/*.apk; do
-              if [[ "$apk" != *"unsigned"* ]] && [[ -f "$apk" ]]; then
-                echo "Found signed APK: $apk"
-                cp "$apk" /tmp/acode-unsigned.apk
-                echo "Copied to /tmp/acode-unsigned.apk"
-                break
-              fi
-            done
+            echo "❌ 错误: 未找到构建产物!"
+            find platforms/android/app/build/outputs -name "*.apk" -type f
+            exit 1
           fi
-          
-          # 验证APK文件存在
-          ls -la /tmp/acode-unsigned.apk || echo "APK file not found!"
-
-      - name: Sign the apk (pkcs12)
-        working-directory: ./acode_source
-        run: |
-          # 设置Android build-tools路径
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
-          
-          # 验证apksigner可用
-          which apksigner
-          apksigner --version
-          
-          echo "APK file size before signing:"
-          ls -lh /tmp/acode-unsigned.apk
-          
-          # 使用apksigner对APK签名
-          apksigner sign \
-            --ks "${{ env.STORE_FILE_PATH }}" \
-            --ks-pass "pass:${{ env.KEYSTORE_PASSWORD }}" \
-            --ks-key-alias "${{ env.KEY_ALIAS }}" \
-            --ks-type PKCS12 \
-            --out "/tmp/acode-${{ env.BUILD_DATE }}.apk" \
-            /tmp/acode-unsigned.apk
-            
-          echo "APK file size after signing:"
-          ls -lh "/tmp/acode-${{ env.BUILD_DATE }}.apk"
-          
-          # 验证签名
-          apksigner verify --verbose "/tmp/acode-${{ env.BUILD_DATE }}.apk"
-          
-          # 列出所有/tmp目录下的acode相关文件
-          echo "Files in /tmp directory:"
-          ls -la /tmp/acode-*
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 文件路径为基于github.workspace的绝对路径
-          P12_KEYSTORE_PATH: "${{ env.BUILD_JSON_PATH }} ${{ env.STORE_FILE_PATH }}"
+          P12_KEYSTORE_PATH: "build.json ${{ env.KEYSTORE_PATH }}"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "/tmp/acode-${{ env.BUILD_DATE }}.apk"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-acode"
+          RELEASE_TAG_NAME: "build-${{ env.BUILD_DATE }}"
