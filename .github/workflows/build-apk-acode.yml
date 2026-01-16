@@ -280,10 +280,14 @@ jobs:
         working-directory: ./acode_source
         run: |
           # 运行config.js进行配置
-          node utils/config.js p paid
+          # node utils/config.js p paid
+          # 加 p 参数构建app启动卡住
+          node utils/config.js paid
           # 使用修复后的webpack配置构建前端
           echo "构建前端资源..."
-          npx webpack --progress --mode production
+          # npx webpack --progress --mode production
+          # 加--mode production构建app启动卡住
+          npx webpack --progress
           # 验证构建结果
           if [ -d "www/build" ] && [ -f "www/build/main.js" ]; then
             echo "✅ 前端资源构建成功"
