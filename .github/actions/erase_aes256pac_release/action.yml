@@ -68,7 +68,7 @@ runs:
           "${{ inputs.BUILD_ARTIFACT_PATH }}"
         # 校验压缩包生成结果
         if [ -f "${{ inputs.BUILD_ARTIFACT_PATH }}.7z" ]; then
-          echo "✅ 加密压缩包已生成：${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
+          echo "✅ 加密压缩包已生成：${{ github.workspace }}/${{ inputs.BUILD_ARTIFACT_PATH }}.7z"
         else
           echo "❌ 压缩包生成失败"
           exit 1
