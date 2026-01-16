@@ -305,9 +305,10 @@ jobs:
           # 验证构建产物
           if [ -f "platforms/android/app/build/outputs/apk/release/app-release.apk" ]; then
             echo "✅ APK构建成功!"
-            cp platforms/android/app/build/outputs/apk/release/app-release.apk "/tmp/acode-${{ env.BUILD_DATE }}.apk"
-            echo "APK文件: /tmp/acode-${{ env.BUILD_DATE }}.apk"
-            ls -lh "/tmp/acode-${{ env.BUILD_DATE }}.apk"
+            mkdir -p "${{ github.workspace }}/dist"
+            cp platforms/android/app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
+            echo "APK文件: ${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
+            ls -lh "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
           else
             echo "❌ 错误: 未找到构建产物!"
             echo "搜索APK文件..."
@@ -318,7 +319,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "acode_source/${{ env.KEYSTORE_PATH }}"
+          P12_KEYSTORE_PATH: "./acode_source/${{ env.KEYSTORE_PATH }}"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "acode_source/tmp/acode-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./dist/acode-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-acode"
