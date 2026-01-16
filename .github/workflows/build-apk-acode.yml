@@ -1,536 +1,258 @@
 name: build-apk-acode
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 permissions:
   contents: write
-
+ 
 env:
-  KEYSTORE_PATH: "./android/app/paid-release.keystore"
-  F_DROID_MODE: "false"
-
+  GITHUB_TOKEN: "${{secrets.GITHUB_TOKEN}}"
+  BUILD_JSON_PATH: "./build.json"
+  STORE_FILE_PATH: "/tmp/app-release.keystore"
+  KEYSTORE_PASSWORD: "${{secrets.KEYSTORE_PASSWORD}}"
+  KEY_ALIAS: "${{secrets.KEY_ALIAS}}"
+  KEY_PASSWORD: "${{secrets.KEY_PASSWORD}}"
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source repository
+      - name: Clean runner environment
+        run: |
+          # 清理可能存在的全局缓存文件
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+ 
+      - name: Checkout source repo
         uses: actions/checkout@main
         with:
           repository: Acode-Foundation/Acode
           ref: main
           path: acode_source
           fetch-depth: 0
-
-      - name: Checkout ci repository
+ 
+      - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
-
-      - name: Setup build environment
+ 
+      - name: Initialization values
         run: |
-          echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
-          echo "SHORT_SHA=$(cd acode_source && git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "PREV_TAG=$(cd acode_source && git describe --tags --abbrev=0 2>/dev/null || echo 'initial')" >> $GITHUB_ENV
-
-      - name: Setup java and android sdk
+          # 先获取当前commit信息
+          echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Fix build-extras.gradle for release build
+        working-directory: ./acode_source
+        run: |
+          cat > build-extras.gradle << 'EOF'
+          android {
+              compileSdkVersion 35
+              packagingOptions {
+                  pickFirst 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+                  }
+              }
+          }
+          configurations {
+            all {
+                exclude module: 'commons-logging'
+                exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+                exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15on'
+                exclude group: 'org.bouncycastle', module: 'bcpkix-jdk18on'
+                exclude group: 'org.bouncycastle', module: 'bcprov-jdk18on'
+            }
+          }
+          EOF
+ 
+      - name: Set up jdk 21
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup bun runtime
+          java-version: '21'
+          cache: 'gradle'
+ 
+      - name: Set up node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: 'lts/*'
+      # app-release.keystore和build.json的路径都在构建文件中被硬编码了
+      # "/tmp/app-release.keystore" 和 "/build.json"
+      - name: Add keystore and build.json from secrets
         run: |
-          curl -fsSL https://bun.sh/install | bash
-          echo "$HOME/.bun/bin" >> $GITHUB_PATH
-
-      - name: Setup fdroid configuration
+          mkdir -p /tmp
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ env.STORE_FILE_PATH }}"
+          # echo "${{ secrets.ACODE_BUILD_JSON_CONTENT }}" | base64 -d > "${{ env.BUILD_JSON_PATH }}"
+          echo "${{ secrets.ACODE_BUILD_JSON_CONTENT_BASE64 }}" | base64 -d > "${{ env.BUILD_JSON_PATH }}"
+          echo "Keystore and build.json added successfully."
+          # 验证keystore密码
+          keytool -list -keystore "${{ env.STORE_FILE_PATH }}" -storepass "${{ env.KEYSTORE_PASSWORD }}" -v || {
+            echo "Keystore password verification failed!"
+            exit 1
+          }
+ 
+      - name: Replace config.js with secured version
         working-directory: ./acode_source
         run: |
-          echo "${{ env.F_DROID_MODE }}" > /tmp/fdroid.bool
-          echo "F-Droid模式已设置为: ${{ env.F_DROID_MODE }} (targetSdkVersion=35)"
-
-      - name: Restore signing credentials
+          echo "正在替换 utils/config.js 文件..."
+          # 确保utils目录存在
+          if [ ! -d "utils" ]; then
+            mkdir -p utils
+            echo "创建了 utils 目录"
+          fi
+          # 从secrets中获取base64编码的config.js内容并解码
+          if [ -z "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" ]; then
+            echo "错误: ACODE_BUILD_CONFIGJS_BASE64 secret 为空!"
+            exit 1
+          fi
+          echo "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" | base64 -d > utils/config.js
+          # 验证文件是否成功写入
+          if [ ! -f "utils/config.js" ]; then
+            echo "错误: 无法创建 utils/config.js 文件!"
+            exit 1
+          fi
+          # 验证文件内容（检查是否是有效的JavaScript）
+          if ! node -c utils/config.js 2>/dev/null; then
+            echo "警告: utils/config.js 不是有效的JavaScript文件"
+            echo "文件内容预览（前10行）:"
+            head -10 utils/config.js
+          else
+            echo "✓ utils/config.js 是有效的JavaScript文件"
+          fi
+          # 显示文件大小和基本信息
+          echo "文件信息:"
+          ls -la utils/config.js
+          echo "文件行数: $(wc -l < utils/config.js)"
+          echo "✓ utils/config.js 文件替换完成"
+ 
+      - name: Extract versionCode and version from config.xml
+        id: extract_version
         working-directory: ./acode_source
         run: |
-          mkdir -p android/app
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ env.KEYSTORE_PATH }}"
-          echo "✅ 签名密钥文件已恢复"
-          keytool -list -keystore "${{ env.KEYSTORE_PATH }}" -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -v && echo "✅ 密钥验证成功"
-
-      - name: Inject build configuration
+          if [ ! -f config.xml ]; then
+            echo "config.xml not found!"
+            exit 1
+          fi
+          VERSION_CODE=$(grep -oP 'versionCode="\K[0-9]+' config.xml || grep -oP 'versionCode="([0-9]+)' config.xml | sed -E 's/versionCode="([0-9]+)"/\1/')
+          VERSION=$(grep -oP 'version="\K[0-9.]+' config.xml)
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted Version Code: $VERSION_CODE"
+          echo "Extracted Version: $VERSION"
+ 
+      - name: Append commit hash to version and update config.xml
+        id: update-version
         working-directory: ./acode_source
         run: |
-          APP_VERSION=$(grep -oP 'version="\K[0-9.]+' config.xml)
-          VERSION_CODE=$(grep -oP 'android-versionCode="\K[0-9]+' config.xml)
-          UPDATED_VERSION="${APP_VERSION}-${SHORT_SHA}"
-          echo "构建版本: $UPDATED_VERSION (原始: $APP_VERSION)"
-          echo "版本代码: $VERSION_CODE"
-          sed -i "s/version=\"$APP_VERSION\"/version=\"$UPDATED_VERSION\"/" config.xml
-          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          # 确保GIT_COMMIT不为空
+          if [ -z "${{ env.GIT_COMMIT }}" ]; then
+            echo "GIT_COMMIT is empty, using default"
+            SHORT_COMMIT_HASH="unknown"
+          else
+            SHORT_COMMIT_HASH=$(echo "${{ env.GIT_COMMIT }}" | cut -c 1-7)
+          fi
+          
+          UPDATED_VERSION="${{ steps.extract_version.outputs.VERSION }}-$SHORT_COMMIT_HASH"
+          echo "Updated Version: $UPDATED_VERSION"
+          
+          # Update config.xml with the new version
+          sed -i "s/version=\"${{ steps.extract_version.outputs.VERSION }}\"/version=\"$UPDATED_VERSION\"/g" config.xml
+          echo "Updated version in config.xml"
+          # Output the updated version
           echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_ENV
-          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
-
-      - name: Generate build configuration
+          echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_OUTPUT
+ 
+      - name: Install node.js packages
+        working-directory: ./acode_source
+        run: npm install
+ 
+      - name: Install cordova cli
+        working-directory: ./acode_source
+        run: npm install -g cordova
+ 
+      - name: Run npm setup
+        working-directory: ./acode_source
+        run: npm run setup
+ 
+      - name: Run npm build paid apk
         working-directory: ./acode_source
         run: |
-          cat > build.json << EOF
-          {
-            "android": {
-              "release": {
-                "keystore": "./android/app/paid-release.keystore",
-                "storePassword": "${{ secrets.KEYSTORE_PASSWORD }}",
-                "alias": "${{ secrets.KEY_ALIAS }}",
-                "password": "${{ secrets.KEY_PASSWORD }}"
-              }
-            }
-          }
-          EOF
-          echo "✅ build.json已生成"
-
-          cat > utils/config.js << 'EOF'
-          const path = require("node:path");
-          const fs = require("node:fs");
-          console.log("开始配置应用...");
-          try {
-            const configPath = path.resolve(__dirname, "../config.xml");
-            const babelrcPath = path.resolve(__dirname, "../.babelrc");
-            if (!fs.existsSync(configPath)) {
-              console.error("❌ config.xml不存在");
-              process.exit(1);
-            }
-            if (!fs.existsSync(babelrcPath)) {
-              console.error("❌ .babelrc不存在");
-              process.exit(1);
-            }
-            let config = fs.readFileSync(configPath, "utf-8");
-            if (!config.includes('id="com.foxdebug.acode"')) {
-              config = config.replace(/id="[^"]+"/, 'id="com.foxdebug.acode"');
-              fs.writeFileSync(configPath, config, "utf8");
-              console.log("✅ 已设置为付费版应用ID");
-            } else {
-              console.log("✅ 应用ID已是付费版");
-            }
-            const babelrc = JSON.parse(fs.readFileSync(babelrcPath, "utf-8"));
-            babelrc.compact = true;
-            fs.writeFileSync(babelrcPath, JSON.stringify(babelrc, null, 2), "utf8");
-            console.log("✅ 配置完成");
-            process.exit(0);
-          } catch (error) {
-            console.error("❌ 配置失败:", error.message);
-            process.exit(1);
-          }
-          EOF
-          echo "✅ config.js已生成"
-          node -c utils/config.js && echo "✅ config.js语法正确"
-
-      - name: Install missing global dependencies
+          node utils/storage_manager.mjs y
+          npm run build paid apk
+          
+      - name: Build release apk files with gradle
         working-directory: ./acode_source
         run: |
-          npm install -g cordova@13.0.0
-          npm install -g webpack-cli webpack
-          echo "✅ 全局依赖安装完成"
-
-      - name: Copy missing build scripts and hooks
-        working-directory: ./acode_source
-        run: |
-          # 从ci_source复制缺失的脚本文件
-          if [ -f "../ci_source/utils/config.js" ]; then
-            cp ../ci_source/utils/config.js ./utils/config.js
-          fi
-          if [ -f "../ci_source/build.sh" ]; then
-            mkdir -p ./utils/scripts
-            cp ../ci_source/build.sh ./utils/scripts/build.sh
-            chmod +x ./utils/scripts/build.sh
-          fi
-          if [ -f "../ci_source/hooks/modify-java-files.js" ]; then
-            mkdir -p ./hooks
-            cp ../ci_source/hooks/modify-java-files.js ./hooks/
-          fi
-          if [ -f "../ci_source/hooks/post-process.js" ]; then
-            cp ../ci_source/hooks/post-process.js ./hooks/
-          fi
-          if [ -f "../ci_source/webpack.config.js" ]; then
-            cp ../ci_source/webpack.config.js ./
-          fi
-          if [ -f "../ci_source/generate-release-notes.js" ]; then
-            cp ../ci_source/generate-release-notes.js ./utils/
-          fi
-          if [ -f "../ci_source/move-files.js" ]; then
-            cp ../ci_source/move-files.js ./utils/
-          fi
-          echo "✅ 缺失的构建脚本已复制"
-
-      - name: Create missing .babelrc configuration
-        working-directory: ./acode_source
-        run: |
-          # 创建Babel配置文件（如果不存在）
-          if [ ! -f ".babelrc" ]; then
-            cat > .babelrc << 'EOF'
-            {
-              "presets": [
-                [
-                  "@babel/preset-env",
-                  {
-                    "useBuiltIns": "usage",
-                    "corejs": 3
-                  }
-                ]
-              ],
-              "plugins": [
-                "@babel/plugin-transform-runtime",
-                ["@babel/plugin-proposal-decorators", { "legacy": true }],
-                ["@babel/plugin-proposal-class-properties", { "loose": true }]
-              ],
-              "compact": true
-            }
-            EOF
-            echo "✅ .babelrc已创建"
+          cd platforms/android
+          ./gradlew clean
+          ./gradlew assembleRelease
+          # 查找生成的APK文件
+          echo "Looking for APK files..."
+          find app/build/outputs/apk -name "*.apk" -type f
+          # 确保目录存在
+          mkdir -p /tmp
+          # 复制release APK到临时目录
+          if [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            echo "Found unsigned release APK"
+            cp app/build/outputs/apk/release/app-release-unsigned.apk /tmp/acode-unsigned.apk
+            echo "Copied to /tmp/acode-unsigned.apk"
           else
-            echo "✅ .babelrc已存在"
-            cat .babelrc
+            echo "Checking for signed APK..."
+            # 尝试查找已签名的APK
+            for apk in app/build/outputs/apk/release/*.apk; do
+              if [[ "$apk" != *"unsigned"* ]] && [[ -f "$apk" ]]; then
+                echo "Found signed APK: $apk"
+                cp "$apk" /tmp/acode-unsigned.apk
+                echo "Copied to /tmp/acode-unsigned.apk"
+                break
+              fi
+            done
           fi
-
-      - name: Create build-extras.gradle if missing
+          # 验证APK文件存在
+          ls -la /tmp/acode-unsigned.apk || echo "APK file not found!"
+ 
+      - name: Sign the apk (pkcs12)
         working-directory: ./acode_source
         run: |
-          if [ ! -f "build-extras.gradle" ]; then
-            cat > build-extras.gradle << 'EOF'
-            android {
-                packagingOptions {
-                    pickFirst 'META-INF/versions/9/OSGI-INF/MANIFEST.MF'
-                }
-            }
-
-            configurations {
-              all {
-                  exclude module: 'commons-logging'
-                  exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
-                  exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15on'
-                  exclude group: 'org.bouncycastle', module: 'bcpkix-jdk18on'
-                  exclude group: 'org.bouncycastle', module: 'bcprov-jdk18on'
-              }
-            }
-            EOF
-            echo "✅ build-extras.gradle已创建"
-          else
-            echo "✅ build-extras.gradle已存在"
-          fi
-
-      - name: Fix webpack duplicate import issue
-        working-directory: ./acode_source
-        run: |
-          # 备份原webpack配置
-          if [ -f "webpack.config.js" ]; then
-            cp webpack.config.js webpack.config.js.backup
-          fi
+          # 设置Android build-tools路径
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          # 验证apksigner可用
+          which apksigner
+          apksigner --version
+          echo "APK file size before signing:"
+          ls -lh /tmp/acode-unsigned.apk
+          # 使用apksigner对APK签名
+          apksigner sign \
+            --ks "${{ env.STORE_FILE_PATH }}" \
+            --ks-pass "pass:${{ env.KEYSTORE_PASSWORD }}" \
+            --ks-key-alias "${{ env.KEY_ALIAS }}" \
+            --ks-type PKCS12 \
+            --out "/tmp/acode-${{ env.BUILD_DATE }}.apk" \
+            /tmp/acode-unsigned.apk
+            
+          echo "APK file size after signing:"
+          ls -lh "/tmp/acode-${{ env.BUILD_DATE }}.apk"
           
-          # 修改webpack配置，在生产模式下移除tag-loader
-          cat > webpack.config.fixed.js << 'EOF'
-          const path = require('path');
-          const fs = require('fs');
-          const MiniCssExtractPlugin = require('mini-css-extract-plugin');
-
-          const WWW = path.resolve(__dirname, 'www');
-
-          module.exports = (env, options) => {
-            const { mode = 'development' } = options;
-            const rules = [
-              {
-                test: /\.(hbs|md)$/,
-                use: ['raw-loader'],
-              },
-              {
-                test: /\.m.(sa|sc|c)ss$/,
-                use: [
-                  'raw-loader',
-                  'postcss-loader',
-                  'sass-loader',
-                ],
-              },
-              {
-                test: /\.(png|svg|jpg|jpeg|ico|ttf|webp|eot|woff|webm|mp4|webp|wav)(\?.*)?$/,
-                type: "asset/resource",
-              },
-              {
-                test: /(?<!\.m)\.(sa|sc|c)ss$/,
-                use: [
-                  {
-                    loader: MiniCssExtractPlugin.loader,
-                  },
-                  'css-loader',
-                  'postcss-loader',
-                  'sass-loader',
-                ],
-              },
-            ];
-
-            // 生产模式下只使用babel-loader，避免重复导入
-            if (mode === 'production') {
-              rules.push({
-                test: /\.m?js$/,
-                exclude: /node_modules\/(?!(html-tag-js)\/).*/,
-                use: [
-                  {
-                    loader: 'babel-loader',
-                    options: {
-                      presets: ['@babel/preset-env'],
-                      plugins: [
-                        ['@babel/plugin-transform-runtime', {
-                          corejs: 3,
-                          helpers: true,
-                          regenerator: true,
-                          useESModules: false
-                        }]
-                      ]
-                    },
-                  },
-                ],
-              });
-            } else {
-              rules.push({
-                test: /\.m?js$/,
-                use: [
-                  'html-tag-js/jsx/tag-loader.js',
-                  {
-                    loader: 'babel-loader',
-                    options: {
-                      presets: ['@babel/preset-env'],
-                    },
-                  },
-                ],
-              });
-            }
-
-            const main = {
-              mode,
-              entry: {
-                main: './src/main.js',
-                console: './src/lib/console.js',
-              },
-              output: {
-                path: path.resolve(__dirname, 'www/build/'),
-                filename: '[name].js',
-                chunkFilename: '[name].chunk.js',
-                assetModuleFilename: '[name][ext]',
-                publicPath: '/build/',
-                clean: true,
-              },
-              module: {
-                rules,
-              },
-              resolve: {
-                fallback: {
-                  path: require.resolve('path-browserify'),
-                  crypto: false,
-                },
-                modules: ["node_modules", "src"],
-              },
-              plugins: [
-                new MiniCssExtractPlugin({
-                  filename: '[name].css',
-                }),
-              ],
-            };
-            return [main];
-          };
-          EOF
-          mv webpack.config.fixed.js webpack.config.js
-          echo "✅ Webpack配置已修复"
-
-      - name: Install project dependencies
-        working-directory: ./acode_source
-        run: |
-          bun install
-          bun add -g prettier prettier-plugin-java
-          # 安装项目devDependencies中指定的Cordova版本
-          bun add cordova@13.0.0
-
-      - name: Fix cordova android platform issue
-        working-directory: ./acode_source
-        run: |
-          # Cordova 13.0.0 的一个bug：在添加平台时会错误地寻找android/package.json
-          # 解决方法：创建空的android目录和package.json文件
-          echo "修复Cordova Android平台添加问题..."
-          # 1. 创建android目录
-          mkdir -p android
-          # 2. 在android目录中创建一个空的package.json文件
-          cat > android/package.json << 'EOF'
-          {
-            "name": "android",
-            "version": "1.0.0",
-            "description": "Placeholder package.json for Cordova Android platform"
-          }
-          EOF
-          echo "✅ 已创建android/package.json占位文件"
-
-      - name: Add cordova android platform
-        working-directory: ./acode_source
-        run: |
-          echo "添加Cordova Android平台..."
+          # 验证签名
+          apksigner verify --verbose "/tmp/acode-${{ env.BUILD_DATE }}.apk"
           
-          # 检查是否已有平台，避免重复添加
-          if [ ! -d "platforms/android" ]; then
-            # 指定具体的版本号，避免使用范围选择器 ^
-            npx cordova platform add android@14.0.1 --save
-            echo "✅ Android平台添加完成"
-          else
-            echo "✅ Android平台已存在"
-          fi
-
-      - name: Build webpack assets (using project's build system)
-        working-directory: ./acode_source
-        run: |
-          # 运行config.js进行配置
-          node utils/config.js p paid
-          
-          # 确保必要的目录存在
-          mkdir -p www/build
-          
-          # 使用修复后的webpack配置构建前端
-          echo "构建前端资源..."
-          npx webpack --progress --mode production
-          
-          # 验证构建结果
-          if [ -d "www/build" ] && [ -f "www/build/main.js" ]; then
-            echo "✅ 前端资源构建成功"
-            # 显示构建文件大小
-            ls -lh www/build/
-            # 确保index.html正确引用构建文件
-            if grep -q "build/main.js" www/index.html; then
-              echo "✅ index.html正确引用构建文件"
-            else
-              echo "⚠️  警告: index.html可能未正确引用构建文件"
-              # 检查index.html内容
-              echo "index.html内容片段:"
-              head -20 www/index.html
-            fi
-          else
-            echo "❌ 前端资源构建失败"
-            echo "www/build目录内容:"
-            ls -la www/ 2>/dev/null || echo "www目录不存在"
-            exit 1
-          fi
-
-      - name: Run cordova hooks and prepare
-        working-directory: ./acode_source
-        run: |
-          # 确保钩子文件存在
-          if [ -f "hooks/modify-java-files.js" ]; then
-            chmod +x hooks/modify-java-files.js
-            echo "✅ modify-java-files.js钩子已准备"
-          else
-            echo "⚠️ 警告: modify-java-files.js钩子不存在"
-          fi
-          
-          if [ -f "hooks/post-process.js" ]; then
-            chmod +x hooks/post-process.js
-            echo "✅ post-process.js钩子已准备"
-          else
-            echo "⚠️ 警告: post-process.js钩子不存在"
-          fi
-          
-          # 确保build-extras.gradle被复制到正确位置
-          if [ -f "build-extras.gradle" ]; then
-            mkdir -p platforms/android/app
-            cp build-extras.gradle platforms/android/app/
-            echo "✅ build-extras.gradle已复制到平台目录"
-          fi
-          
-          # 运行Cordova准备（这会触发钩子）
-          echo "运行Cordova准备..."
-          npx cordova prepare android --verbose
-          
-          echo "✅ Cordova准备完成"
-          
-          # 检查平台目录结构
-          echo "平台目录结构:"
-          find platforms/android -name "*.java" | head -10
-
-      - name: Build Android APK with proper hooks
-        working-directory: ./acode_source
-        run: |
-          echo "构建Android APK..."
-          
-          # 确保build-extras.gradle在正确位置
-          if [ ! -f "platforms/android/app/build-extras.gradle" ] && [ -f "build-extras.gradle" ]; then
-            cp build-extras.gradle platforms/android/app/
-            echo "✅ build-extras.gradle已复制到构建目录"
-          fi
-          
-          # 方法1: 使用项目的build.sh脚本（如果存在）
-          if [ -f "./utils/scripts/build.sh" ]; then
-            echo "使用项目build.sh脚本..."
-            chmod +x ./utils/scripts/build.sh
-            ./utils/scripts/build.sh paid prod apk
-          else
-            # 方法2: 直接使用Cordova构建
-            echo "直接使用Cordova构建..."
-            npx cordova build android --release --verbose
-          fi
-          
-          # 查找构建产物
-          echo "查找APK文件..."
-          APK_FOUND=false
-          find platforms/android -name "*.apk" -type f | while read apk; do
-            echo "找到APK: $apk"
-            mkdir -p "${{ github.workspace }}/dist"
-            cp "$apk" "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
-            echo "✅ APK复制到: ${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
-            ls -lh "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
-            APK_FOUND=true
-          done
-          
-          # 验证是否找到APK
-          if [ "$APK_FOUND" = false ]; then
-            echo "❌ 错误: 未找到构建产物!"
-            echo "搜索所有可能的APK位置..."
-            find . -name "*.apk" -type f
-            echo "检查构建输出目录:"
-            find platforms/android/app/build/outputs -type f
-            exit 1
-          fi
-
-      - name: Debug - Check build artifacts (on failure)
-        if: failure()
-        working-directory: ./acode_source
-        run: |
-          echo "=== 调试信息 ==="
-          echo "1. 检查www目录:"
-          ls -la www/
-          echo ""
-          echo "2. 检查www/build目录:"
-          ls -la www/build/ 2>/dev/null || echo "www/build目录不存在"
-          echo ""
-          echo "3. 检查index.html内容:"
-          head -50 www/index.html
-          echo ""
-          echo "4. 检查platforms/android目录结构:"
-          find platforms/android -name "*.java" | head -20
-          echo ""
-          echo "5. 检查hooks执行状态:"
-          ls -la hooks/ 2>/dev/null || echo "hooks目录不存在"
-          echo ""
-          echo "6. 检查.babelrc:"
-          cat .babelrc 2>/dev/null || echo ".babelrc不存在"
-          echo ""
-          echo "7. 检查build-extras.gradle:"
-          cat build-extras.gradle 2>/dev/null || echo "build-extras.gradle不存在"
-          echo ""
-          echo "8. 检查cordova插件:"
-          npx cordova plugin list
-          echo ""
-          echo "9. 检查AndroidManifest.xml:"
-          find platforms/android -name "AndroidManifest.xml" -exec head -30 {} \;
-          echo ""
-          echo "10. 最近构建日志:"
-          tail -100 platforms/android/build/outputs/logs/build-log.txt 2>/dev/null || echo "构建日志不存在"
-
+          # 列出所有/tmp目录下的acode相关文件
+          echo "Files in /tmp directory:"
+          ls -la /tmp/acode-*
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./acode_source/${{ env.KEYSTORE_PATH }}"
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "${{ env.BUILD_JSON_PATH }} ${{ env.STORE_FILE_PATH }}"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/acode-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "/tmp/acode-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-acode"
