@@ -125,13 +125,13 @@ jobs:
           echo "✅ config.js已生成"
           node -c utils/config.js && echo "✅ config.js语法正确"
 
-      - name: Fix webpack duplicate import issue
+      - name: Fix webpack configuration
         working-directory: ./acode_source
         run: |
           # 备份原webpack配置
           cp webpack.config.js webpack.config.js.backup
           
-          # 修改webpack配置，在生产模式下移除tag-loader
+          # 创建修复的webpack配置，保持开发和生产模式一致的loader配置
           cat > webpack.config.fixed.js << 'EOF'
           const path = require('path');
           const fs = require('fs');
@@ -167,45 +167,29 @@ jobs:
                   'sass-loader',
                 ],
               },
-            ];
-
-            // 生产模式下只使用babel-loader，避免重复导入
-            if (mode === 'production') {
-              rules.push({
+              {
                 test: /\.m?js$/,
                 exclude: /node_modules\/(?!(html-tag-js)\/).*/,
-                use: [
-                  {
-                    loader: 'babel-loader',
-                    options: {
-                      presets: ['@babel/preset-env'],
-                      plugins: [
-                        ['@babel/plugin-transform-runtime', {
-                          corejs: 3,
-                          helpers: true,
-                          regenerator: true,
-                          useESModules: false
-                        }]
-                      ]
-                    },
-                  },
-                ],
-              });
-            } else {
-              rules.push({
-                test: /\.m?js$/,
                 use: [
                   'html-tag-js/jsx/tag-loader.js',
                   {
                     loader: 'babel-loader',
                     options: {
                       presets: ['@babel/preset-env'],
+                      plugins: mode === 'production' ? [
+                        ['@babel/plugin-transform-runtime', {
+                          corejs: 3,
+                          helpers: true,
+                          regenerator: true,
+                          useESModules: false
+                        }]
+                      ] : []
                     },
                   },
                 ],
-              });
-            }
-
+              },
+            ];
+      
             const main = {
               mode,
               entry: {
@@ -235,10 +219,40 @@ jobs:
                   filename: '[name].css',
                 }),
               ],
+              // 添加开发工具以帮助调试
+              devtool: mode === 'production' ? false : 'source-map',
+              // 优化配置
+              optimization: {
+                minimize: mode === 'production',
+                splitChunks: {
+                  chunks: 'all',
+                  minSize: 20000,
+                  maxSize: 70000,
+                  cacheGroups: {
+                    defaultVendors: {
+                      test: /[\\/]node_modules[\\/]/,
+                      priority: -10,
+                      reuseExistingChunk: true,
+                    },
+                    default: {
+                      minChunks: 2,
+                      priority: -20,
+                      reuseExistingChunk: true,
+                    },
+                  },
+                },
+              },
+              // 性能提示
+              performance: {
+                hints: mode === 'production' ? 'warning' : false,
+                maxAssetSize: 1024 * 1024, // 1MB
+                maxEntrypointSize: 1024 * 1024, // 1MB
+              },
             };
             return [main];
           };
           EOF
+          
           mv webpack.config.fixed.js webpack.config.js
           echo "✅ Webpack配置已修复"
 
@@ -280,14 +294,10 @@ jobs:
         working-directory: ./acode_source
         run: |
           # 运行config.js进行配置
-          # node utils/config.js p paid
-          # 加 p 参数构建app启动卡住
           node utils/config.js p paid
           # 使用修复后的webpack配置构建前端
           echo "构建前端资源..."
-          # npx webpack --progress --mode production
-          # 加--mode production构建app启动卡住
-          npx webpack --progress
+          npx webpack --progress --mode production
           # 验证构建结果
           if [ -d "www/build" ] && [ -f "www/build/main.js" ]; then
             echo "✅ 前端资源构建成功"
