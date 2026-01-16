@@ -57,9 +57,16 @@ jobs:
       - name: Restore signing credentials
         working-directory: ./acode_source
         run: |
+          # 关键修复：创建android/app目录
+          mkdir -p android/app
+          
           # 从Secrets还原签名密钥文件
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ env.KEYSTORE_PATH }}"
+          
           echo "✅ 签名密钥文件已恢复"
+          echo "密钥文件路径: $(pwd)/${{ env.KEYSTORE_PATH }}"
+          ls -la android/app/
+          
           # 验证密钥文件有效性
           keytool -list -keystore "${{ env.KEYSTORE_PATH }}" -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -v && echo "✅ 密钥验证成功"
 
@@ -69,12 +76,15 @@ jobs:
           # 从config.xml提取版本信息
           APP_VERSION=$(grep -oP 'version="\K[0-9.]+' config.xml)
           VERSION_CODE=$(grep -oP 'android-versionCode="\K[0-9]+' config.xml)
+          
           # 在版本号后追加提交哈希
           UPDATED_VERSION="${APP_VERSION}-${SHORT_SHA}"
           echo "构建版本: $UPDATED_VERSION (原始: $APP_VERSION)"
           echo "版本代码: $VERSION_CODE"
+          
           # 更新config.xml中的版本号
           sed -i "s/version=\"$APP_VERSION\"/version=\"$UPDATED_VERSION\"/" config.xml
+          
           # 设置环境变量供后续步骤使用
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
           echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_ENV
@@ -96,7 +106,11 @@ jobs:
             }
           }
           EOF
+          
           echo "✅ build.json已生成"
+          echo "build.json内容预览:"
+          cat build.json | sed 's/"storePassword": ".*"/"storePassword": "***"/g' | sed 's/"password": ".*"/"password": "***"/g'
+          
           # 验证build.json格式
           if jq empty build.json 2>/dev/null; then
             echo "✅ build.json格式正确"
@@ -104,28 +118,35 @@ jobs:
             echo "❌ build.json格式错误"
             exit 1
           fi
+          
           # 2. 生成config.js（简化为仅处理付费版生产构建）
           cat > utils/config.js << 'EOF'
           // 简化的config.js，仅处理付费版生产构建
           const path = require("node:path");
           const fs = require("node:fs");
+          
           // 读取配置
           const configPath = path.resolve(__dirname, "../config.xml");
           let config = fs.readFileSync(configPath, "utf-8");
+          
           // 确保是付费版ID
           if (!config.includes('id="com.foxdebug.acode"')) {
             config = config.replace(/id="[^"]+"/, 'id="com.foxdebug.acode"');
             fs.writeFileSync(configPath, config, "utf8");
             console.log("✅ 已设置为付费版应用ID");
           }
+          
           // 设置生产模式（compact）
           const babelrcPath = path.resolve(__dirname, "../.babelrc");
           const babelrc = JSON.parse(fs.readFileSync(babelrcPath, "utf-8"));
           babelrc.compact = true;
           fs.writeFileSync(babelrcPath, JSON.stringify(babelrc, null, 2), "utf8");
+          
           console.log("✅ 配置完成");
           EOF
+          
           echo "✅ config.js已生成"
+          
           # 验证config.js语法
           if node -c utils/config.js; then
             echo "✅ config.js语法正确"
@@ -147,6 +168,7 @@ jobs:
         run: |
           # 安装与package.json中版本匹配的Cordova
           CORDOVA_VERSION=$(grep -oP '"cordova": "\K[^"]+' package.json)
+          echo "检测到Cordova版本: ${CORDOVA_VERSION}"
           bun add cordova@${CORDOVA_VERSION}
           echo "✅ Cordova CLI ${CORDOVA_VERSION} 已安装"
 
@@ -156,6 +178,7 @@ jobs:
           # 调用项目自身的构建脚本，确保与本地构建一致
           echo "开始构建 Paid Release APK..."
           sh ./utils/scripts/build.sh paid p apk
+          
           # 验证构建产物
           if [ -f "platforms/android/app/build/outputs/apk/release/app-release.apk" ]; then
             echo "✅ APK构建成功!"
