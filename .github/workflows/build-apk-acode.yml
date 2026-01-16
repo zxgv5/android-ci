@@ -128,7 +128,13 @@ jobs:
       - name: Fix webpack duplicate import issue
         working-directory: ./acode_source
         run: |
-          # 创建修复重复导入问题的webpack配置
+          # 临时修复：修改有问题的文件，移除重复的tag导入
+          echo "修复重复导入问题..."
+          
+          # 1. 备份原webpack配置
+          cp webpack.config.js webpack.config.js.backup
+          
+          # 2. 修改webpack配置，在生产模式下移除tag-loader
           cat > webpack.config.fixed.js << 'EOF'
           const path = require('path');
           const fs = require('fs');
@@ -168,7 +174,7 @@ jobs:
               },
             ];
 
-            // 修复：生产模式下移除tag-loader，避免重复导入问题
+            // 生产模式下只使用babel-loader，避免重复导入
             if (mode === 'production') {
               rules.push({
                 test: /\.m?js$/,
@@ -240,9 +246,9 @@ jobs:
           };
           EOF
           
-          # 替换原webpack配置
+          # 3. 替换原webpack配置
           mv webpack.config.fixed.js webpack.config.js
-          echo "✅ Webpack配置已修复，移除了生产模式下的tag-loader"
+          echo "✅ Webpack配置已修复"
 
       - name: Install project dependencies
         working-directory: ./acode_source
@@ -250,40 +256,57 @@ jobs:
           bun install
           bun add -g prettier prettier-plugin-java
 
-      - name: Install cordova and setup platforms
+      - name: Setup cordova environment
         working-directory: ./acode_source
         run: |
-          # 安装cordova
-          CORDOVA_VERSION=$(grep -oP '"cordova": "\K[^"]+' package.json)
-          echo "安装Cordova版本: ${CORDOVA_VERSION}"
-          npm install cordova@${CORDOVA_VERSION}
+          # 使用项目自己的setup脚本
+          echo "运行项目setup脚本..."
+          npm run setup
           
-          # 安装cordova-android
-          CORDOVA_ANDROID_VERSION=$(grep -oP '"cordova-android": "\K[^"]+' package.json)
-          echo "安装cordova-android版本: ${CORDOVA_ANDROID_VERSION}"
-          npm install cordova-android@${CORDOVA_ANDROID_VERSION}
+          # 验证Cordova环境
+          echo "检查Cordova环境..."
+          npx cordova --version
           
-          # 添加Android平台
-          echo "添加Android平台..."
-          npx cordova platform add android@${CORDOVA_ANDROID_VERSION} --save
+          # 检查Android平台
+          echo "检查Android平台..."
+          if [ -d "platforms/android" ]; then
+            echo "✅ Android平台已存在"
+          else
+            echo "添加Android平台..."
+            npx cordova platform add android@10
+          fi
           
-          echo "✅ Cordova和Android平台安装完成"
+          echo "✅ Cordova环境设置完成"
 
-      - name: Execute application build
+      - name: Build webpack assets
         working-directory: ./acode_source
         run: |
-          export PATH="$PATH:$(pwd)/node_modules/.bin"
+          # 运行config.js进行配置
+          node utils/config.js p paid
           
-          echo "开始构建 Paid Release APK..."
-          echo "使用修复后的webpack配置构建前端..."
-          
-          # 直接运行webpack构建（生产模式）
+          # 使用修复后的webpack配置构建前端
+          echo "构建前端资源..."
           npx webpack --progress --mode production
           
-          echo "前端构建完成，开始Cordova构建..."
+          # 验证构建结果
+          if [ -d "www/build" ] && [ -f "www/build/main.js" ]; then
+            echo "✅ 前端资源构建成功"
+            ls -la www/build/
+          else
+            echo "❌ 前端资源构建失败"
+            exit 1
+          fi
+
+      - name: Build cordova android apk
+        working-directory: ./acode_source
+        run: |
+          # 准备Cordova项目
+          echo "准备Cordova项目..."
+          npx cordova prepare android
           
-          # 使用Cordova构建APK
-          npx cordova build android --release
+          # 使用Cordova构建APK（使用build.json进行签名）
+          echo "构建Android APK..."
+          npx cordova build android --release -- --packageType=apk
           
           # 验证构建产物
           if [ -f "platforms/android/app/build/outputs/apk/release/app-release.apk" ]; then
