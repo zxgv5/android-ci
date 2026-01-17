@@ -49,7 +49,7 @@ sed -i \
   "$FANTASY_BV_TOPNAV_KT"
 
 # - - - - - - - - - - - - - - - - - -复杂或容易歧义的修改，用源文件替换实现 - - - - - - - - - - - - - - - - - -
-# 6、MainScreen.kt进行覆盖，配合上面对隐藏左侧边栏中的“搜索”、“UGC”和“PGC”三个页面导航按钮所作修改
+# 6、对MainScreen.kt进行覆盖，配合上面对隐藏左侧边栏中的“搜索”、“UGC”和“PGC”三个页面导航按钮所作修改
 FANTASY_BV_MAINSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
 CI_FANTASY_BV_MAINSCREEN_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_MainScreen.kt"
 if [ ! -f "$CI_FANTASY_BV_MAINSCREEN_KT" ]; then
@@ -75,3 +75,11 @@ if [ ! -f "$CI_FANTASY_BV_DYNAMICSSCREEN_KT" ]; then
     exit 1
 fi
 cp -f "$CI_FANTASY_BV_DYNAMICSSCREEN_KT" "$FANTASY_BV_DYNAMICSSCREEN_KT"
+
+FANTASY_BV_DYNAMICVIEWMODEL_KT="$FANTASY_BV_SOURCE_ROOT/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home/DynamicViewModel.kt"
+CI_FANTASY_BV_DYNAMICVIEWMODEL_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_DynamicViewModel.kt"
+if [ ! -f "$CI_FANTASY_BV_DYNAMICVIEWMODEL_KT" ]; then
+    echo "❌ 错误：源文件 $CI_FANTASY_BV_DYNAMICVIEWMODEL_KT 不存在"
+    exit 1
+fi
+cp -f "$CI_FANTASY_BV_DYNAMICVIEWMODEL_KT" "$FANTASY_BV_DYNAMICVIEWMODEL_KT"
