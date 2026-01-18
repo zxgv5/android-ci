@@ -49,37 +49,60 @@ sed -i \
   "$FANTASY_BV_TOPNAV_KT"
 
 # - - - - - - - - - - - - - - - - - -复杂或容易歧义的修改，用源文件替换实现 - - - - - - - - - - - - - - - - - -
+CI_FILE_UTILS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${CI_FILE_UTILS_SCRIPT_DIR}/ci_file_utils.sh"
+
 # 6、对MainScreen.kt进行覆盖，配合上面对隐藏左侧边栏中的“搜索”、“UGC”和“PGC”三个页面导航按钮所作修改
-FANTASY_BV_MAINSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
-CI_FANTASY_BV_MAINSCREEN_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_MainScreen.kt"
-if [ ! -f "$CI_FANTASY_BV_MAINSCREEN_KT" ]; then
-    echo "❌ 错误：源文件 $CI_FANTASY_BV_MAINSCREEN_KT 不存在"
-    exit 1
-fi
-cp -f "$CI_FANTASY_BV_MAINSCREEN_KT" "$FANTASY_BV_MAINSCREEN_KT"
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens" \
+    "MainScreen.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# 7、对HomeContent.kt进行覆盖，配合上面对隐藏顶部“追番”和“稍后看”两个导航标签所作修改
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main" \
+    "HomeContent.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# 8、尝试修复“动态”页长按下方向键焦点左移出区问题
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app" \
+    "build.gradle.kts" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+    "DynamicsScreen.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+
+# # 6、对MainScreen.kt进行覆盖，配合上面对隐藏左侧边栏中的“搜索”、“UGC”和“PGC”三个页面导航按钮所作修改
+# FANTASY_BV_MAINSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
+# CI_FANTASY_BV_MAINSCREEN_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_MainScreen.kt"
+# if [ ! -f "$CI_FANTASY_BV_MAINSCREEN_KT" ]; then
+#     echo "❌ 错误：源文件 $CI_FANTASY_BV_MAINSCREEN_KT 不存在"
+#     exit 1
+# fi
+# cp -f "$CI_FANTASY_BV_MAINSCREEN_KT" "$FANTASY_BV_MAINSCREEN_KT"
 
 # 7、对HomeContent.kt进行覆盖，配合上面对隐藏顶部“追番”和“稍后看”两个导航标签所作修改
-FANTASY_BV_HOMECONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
-CI_FANTASY_BV_HOMECONTENT_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_HomeContent.kt"
-if [ ! -f "$CI_FANTASY_BV_HOMECONTENT_KT" ]; then
-    echo "❌ 错误：源文件 $CI_FANTASY_BV_HOMECONTENT_KT 不存在"
-    exit 1
-fi
-cp -f "$CI_FANTASY_BV_HOMECONTENT_KT" "$FANTASY_BV_HOMECONTENT_KT"
+# FANTASY_BV_HOMECONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
+# CI_FANTASY_BV_HOMECONTENT_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_HomeContent.kt"
+# if [ ! -f "$CI_FANTASY_BV_HOMECONTENT_KT" ]; then
+#     echo "❌ 错误：源文件 $CI_FANTASY_BV_HOMECONTENT_KT 不存在"
+#     exit 1
+# fi
+# cp -f "$CI_FANTASY_BV_HOMECONTENT_KT" "$FANTASY_BV_HOMECONTENT_KT"
 
-# 8、尝试使用python修复“动态”页长按下方向键焦点左移出区问题
-FANTASY_BV_DYNAMICSSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
-CI_FANTASY_BV_DYNAMICSSCREEN_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_DynamicsScreen.kt"
-if [ ! -f "$CI_FANTASY_BV_DYNAMICSSCREEN_KT" ]; then
-    echo "❌ 错误：源文件 $CI_FANTASY_BV_DYNAMICSSCREEN_KT 不存在"
-    exit 1
-fi
-cp -f "$CI_FANTASY_BV_DYNAMICSSCREEN_KT" "$FANTASY_BV_DYNAMICSSCREEN_KT"
+# 8、尝试修复“动态”页长按下方向键焦点左移出区问题
+# FANTASY_BV_DYNAMICSSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
+# CI_FANTASY_BV_DYNAMICSSCREEN_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_DynamicsScreen.kt"
+# if [ ! -f "$CI_FANTASY_BV_DYNAMICSSCREEN_KT" ]; then
+#     echo "❌ 错误：源文件 $CI_FANTASY_BV_DYNAMICSSCREEN_KT 不存在"
+#     exit 1
+# fi
+# cp -f "$CI_FANTASY_BV_DYNAMICSSCREEN_KT" "$FANTASY_BV_DYNAMICSSCREEN_KT"
 
-FANTASY_BV_DYNAMICVIEWMODEL_KT="$FANTASY_BV_SOURCE_ROOT/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home/DynamicViewModel.kt"
-CI_FANTASY_BV_DYNAMICVIEWMODEL_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_DynamicViewModel.kt"
-if [ ! -f "$CI_FANTASY_BV_DYNAMICVIEWMODEL_KT" ]; then
-    echo "❌ 错误：源文件 $CI_FANTASY_BV_DYNAMICVIEWMODEL_KT 不存在"
-    exit 1
-fi
-cp -f "$CI_FANTASY_BV_DYNAMICVIEWMODEL_KT" "$FANTASY_BV_DYNAMICVIEWMODEL_KT"
+# FANTASY_BV_DYNAMICVIEWMODEL_KT="$FANTASY_BV_SOURCE_ROOT/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home/DynamicViewModel.kt"
+# CI_FANTASY_BV_DYNAMICVIEWMODEL_KT="$GITHUB_WORKSPACE/ci_source/patches/bv_fantasy/ci_DynamicViewModel.kt"
+# if [ ! -f "$CI_FANTASY_BV_DYNAMICVIEWMODEL_KT" ]; then
+#     echo "❌ 错误：源文件 $CI_FANTASY_BV_DYNAMICVIEWMODEL_KT 不存在"
+#     exit 1
+# fi
+# cp -f "$CI_FANTASY_BV_DYNAMICVIEWMODEL_KT" "$FANTASY_BV_DYNAMICVIEWMODEL_KT"

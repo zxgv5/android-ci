@@ -1,47 +1,26 @@
 package dev.aaa1115910.bv.tv.screens.main.home
 
 import android.content.Intent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.*
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Text
+import coil.compose.AsyncImage
 import dev.aaa1115910.biliapi.entity.user.DynamicVideo
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
-import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.R
 import dev.aaa1115910.bv.tv.activities.user.FollowActivity
 import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
@@ -53,12 +32,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
-// 定义常量
-private const val GRID_COLUMNS = 4
-private const val PRELOAD_ROW_COUNT = 5
-private val PRELOAD_ITEM_COUNT = GRID_COLUMNS * PRELOAD_ROW_COUNT
-private const val BOTTOM_BUFFER_ROW_COUNT = 5
-
 @Composable
 fun DynamicsScreen(
     modifier: Modifier = Modifier,
@@ -68,58 +41,11 @@ fun DynamicsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var currentFocusedIndex by remember { mutableIntStateOf(-1) }
-    
-    // 使用常量
     val shouldLoadMore by remember {
-        derivedStateOf { 
-            dynamicViewModel.dynamicVideoList.isNotEmpty() && 
-            currentFocusedIndex + PRELOAD_ITEM_COUNT > dynamicViewModel.dynamicVideoList.size 
-        }
+        derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex + 12 > dynamicViewModel.dynamicVideoList.size }
     }
-    
     val showTip by remember {
         derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0 }
-    }
-    
-    // 计算当前焦点所在的行（使用常量）
-    val currentRow by remember {
-        derivedStateOf { 
-            if (currentFocusedIndex >= 0) currentFocusedIndex / GRID_COLUMNS else -1 
-        }
-    }
-    
-    // 计算总行数（使用常量）
-    val totalRows by remember {
-        derivedStateOf { 
-            (dynamicViewModel.dynamicVideoList.size + GRID_COLUMNS - 1) / GRID_COLUMNS // 向上取整
-        }
-    }
-    
-    // 判断是否在最下面一行
-    val isAtBottomRow by remember {
-        derivedStateOf { currentRow >= 0 && currentRow >= totalRows - 1 }
-    }
-    
-    // 判断是否接近列表末尾（使用常量）
-    val isNearBottom by remember {
-        derivedStateOf { 
-            currentRow >= 0 && totalRows > 0 && currentRow >= totalRows - BOTTOM_BUFFER_ROW_COUNT
-        }
-    }
-    
-    // 判断是否接近列表末尾（使用常量）
-    val isNearBottomByIndex by remember {
-        derivedStateOf {
-            currentFocusedIndex >= 0 && dynamicViewModel.dynamicVideoList.isNotEmpty() &&
-            currentFocusedIndex >= dynamicViewModel.dynamicVideoList.size - PRELOAD_ITEM_COUNT
-        }
-    }
-    
-    // 判断是否应该阻止焦点向下移动：当正在加载且接近列表末尾时
-    val shouldBlockDownKey by remember {
-        derivedStateOf {
-            dynamicViewModel.loadingVideo && (isNearBottom || isNearBottomByIndex)
-        }
     }
 
     val onClickVideo: (DynamicVideo) -> Unit = { dynamic ->
@@ -139,7 +65,6 @@ fun DynamicsScreen(
         )
     }
 
-    // 不能直接使用 LaunchedEffect(currentFocusedIndex)，会导致整个页面重组
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
             scope.launch(Dispatchers.IO) {
@@ -147,6 +72,9 @@ fun DynamicsScreen(
             }
         }
     }
+
+    // 1. 为每个卡片预生成 FocusRequester
+    val requesters = remember { mutableStateMapOf<Int, FocusRequester>() }
 
     if (dynamicViewModel.isLogin) {
         val padding = dimensionResource(R.dimen.grid_padding)
@@ -165,40 +93,23 @@ fun DynamicsScreen(
                 modifier = modifier
                     .fillMaxSize()
                     .onFocusChanged {
-                        if (!it.isFocused) {
-                            currentFocusedIndex = -1
-                        }
+                        if (!it.isFocused) currentFocusedIndex = -1
                     }
-                    .onPreviewKeyEvent { event ->
-                        // 处理菜单键
-                        if (event.type == KeyEventType.KeyUp && event.key == Key.Menu) {
+                    .onPreviewKeyEvent {
+                        if (it.type == KeyEventType.KeyUp && it.key == Key.Menu) {
                             context.startActivity(Intent(context, FollowActivity::class.java))
                             return@onPreviewKeyEvent true
                         }
-
-                        // 处理下方向键：防止在加载卡顿时焦点移出页面
-                        // 当正在加载且焦点接近列表末尾（最后3行或最后12个项）时，阻止焦点向下移动
-                        // 这样可以防止当网络加载慢或无法加载时，焦点因为找不到下一个可聚焦项目而向左移动并移出页面
-                        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
-                            // 情况1：正在加载且接近列表末尾，阻止向下移动
-                            if (shouldBlockDownKey) {
-                                return@onPreviewKeyEvent true
-                            }
-                            // 情况2：在最下面一行且没有更多数据，阻止向下移动
-                            if (isAtBottomRow && !dynamicViewModel.videoHasMore) {
-                                return@onPreviewKeyEvent true
-                            }
-                        }
-
                         false
                     },
-                columns = GridCells.Fixed(GRID_COLUMNS), // 使用常量
+                columns = GridCells.Fixed(4),
                 state = lazyGridState,
                 contentPadding = PaddingValues(padding),
                 verticalArrangement = Arrangement.spacedBy(spacedBy),
                 horizontalArrangement = Arrangement.spacedBy(spacedBy)
             ) {
                 itemsIndexed(dynamicViewModel.dynamicVideoList) { index, item ->
+                    val focusRequester = requesters.getOrPut(index) { FocusRequester() }
                     SmallVideoCard(
                         data = remember(item.aid) {
                             VideoCardData(
@@ -216,7 +127,36 @@ fun DynamicsScreen(
                         },
                         onClick = { onClickVideo(item) },
                         onLongClick = { onLongClickVideo(item) },
-                        onFocus = { currentFocusedIndex = index }
+                        onFocus = { currentFocusedIndex = index },
+                        modifier = Modifier
+                            // 2. 绑定焦点节点
+                            .focusRequester(focusRequester)
+                            // 3. 横向/纵向焦点锁定
+                            .focusProperties {
+                                val row = index / 4
+                                val col = index % 4
+                                right = if (col == 3) FocusRequester.Default
+                                        else requesters.getOrElse(index + 1) { FocusRequester.Default }
+                                left  = if (col == 0) FocusRequester.Default
+                                        else requesters.getOrElse(index - 1) { FocusRequester.Default }
+                                down  = if (index + 4 < dynamicViewModel.dynamicVideoList.size) requesters[index + 4]
+                                        else FocusRequester.Default
+                                up    = if (index - 4 >= 0) requesters[index - 4]
+                                        else FocusRequester.Default
+                            }
+                            // 4. 长按 DOWN 且最后一行可见时吃掉事件
+                            .onKeyEvent { keyEvent ->
+                                val nav = keyEvent.nativeKeyEvent
+                                if (nav.action == KeyEvent.ACTION_DOWN
+                                    && nav.repeatCount > 0
+                                    && nav.keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                                    && lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index == dynamicViewModel.dynamicVideoList.lastIndex
+                                ) {
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                     )
                 }
 
