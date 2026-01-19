@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,14 +67,19 @@ fun SmallVideoCard(
         label = "small video card scale"
     )
 
-    LaunchedEffect(hasFocus) {
-        if (hasFocus) onFocus()
-    }
-
+    // 当焦点状态变化时调用onFocus回调
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .onFocusChanged { hasFocus = it.isFocused }
+            .onFocusChanged { focusState ->
+                val newFocus = focusState.isFocused
+                if (newFocus != hasFocus) {
+                    hasFocus = newFocus
+                    if (newFocus) {
+                        onFocus()
+                    }
+                }
+            }
             .graphicsLayer {
                 if (showScaleAnimation) {
                     scaleX = scale
