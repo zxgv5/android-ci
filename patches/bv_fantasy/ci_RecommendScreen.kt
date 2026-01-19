@@ -1,5 +1,5 @@
 package dev.aaa1115910.bv.tv.screens.main.home
-
+ 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.TvLazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.Composable
@@ -20,7 +20,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-
+ 
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
@@ -36,7 +36,7 @@ import dev.aaa1115910.bv.viewmodel.home.RecommendViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
-
+ 
 @Composable
 fun RecommendScreen(
     modifier: Modifier = Modifier,
@@ -49,11 +49,11 @@ fun RecommendScreen(
     val shouldLoadMore by remember {
         derivedStateOf { recommendViewModel.recommendVideoList.isNotEmpty() && currentFocusedIndex + 12 > recommendViewModel.recommendVideoList.size }
     }
-
+ 
     val onClickVideo: (UgcItem) -> Unit = { ugcItem ->
         VideoInfoActivity.actionStart(context, ugcItem.aid)
     }
-
+ 
     val onLongClickVideo: (UgcItem) -> Unit = { ugcItem ->
         UpInfoActivity.actionStart(
             context,
@@ -62,7 +62,7 @@ fun RecommendScreen(
             face = ugcItem.authorFace
         )
     }
-
+ 
     //不能直接使用 LaunchedEffect(currentFocusedIndex)，会导致整个页面重组
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
@@ -71,17 +71,18 @@ fun RecommendScreen(
             }
         }
     }
-
+ 
     val padding = dimensionResource(R.dimen.grid_padding)
     val spacedBy = dimensionResource(R.dimen.grid_spacedBy)
     ProvideListBringIntoViewSpec {
-        LazyVerticalGrid(
+        TvLazyVerticalGrid(
             modifier = modifier.fillMaxSize(),
             columns = GridCells.Fixed(4),
             state = lazyGridState,
             contentPadding = PaddingValues(padding),
             verticalArrangement = Arrangement.spacedBy(spacedBy),
-            horizontalArrangement = Arrangement.spacedBy(spacedBy)
+            horizontalArrangement = Arrangement.spacedBy(spacedBy),
+            pivotFraction = 0.3f // 可选，使用默认值
         ) {
             itemsIndexed(recommendViewModel.recommendVideoList) { index, item ->
                 SmallVideoCard(
@@ -99,11 +100,10 @@ fun RecommendScreen(
                     },
                     onClick = { onClickVideo(item) },
                     onLongClick = {onLongClickVideo(item) },
-                    // onFocus = { currentFocusedIndex = index }
-                    onFocus = {} // 添加这一行
+                    onFocus = { currentFocusedIndex = index }
                 )
             }
-
+ 
             if (recommendViewModel.loading) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(
