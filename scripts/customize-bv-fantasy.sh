@@ -69,6 +69,21 @@ ci_source_patch \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+    "PopularScreen.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+    "RecommendScreen.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens" \
+    "TagScreen.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+
+ci_source_patch \
     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/util" \
     "ProvideListBringIntoViewSpec.kt" \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
