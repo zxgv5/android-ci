@@ -13,15 +13,12 @@ import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.BuildConfig
 import dev.aaa1115910.bv.R
 import dev.aaa1115910.bv.util.Prefs
-import dev.aaa1115910.bv.util.addAllWithMainContext
 import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.fWarn
 import dev.aaa1115910.bv.util.toast
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.android.annotation.KoinViewModel
 import dev.aaa1115910.bv.repository.UserRepository as BvUserRepository
 
@@ -39,15 +36,23 @@ class DynamicViewModel(
 
     private var currentVideoPage = 0
     var loadingVideo = false
+        private set
     var videoHasMore = true
+        private set
     private var videoHistoryOffset: String? = null
     private var videoUpdateBaseline: String? = null
 
     private var currentAllPage = 0
     var loadingAll by mutableStateOf(false)
+        private set
     var allHasMore by mutableStateOf(true)
+        private set
     private var allHistoryOffset: String? = null
     private var allUpdateBaseline: String? = null
+    
+    // 添加防抖控制
+    private var isVideoRequesting = false
+    private var isAllRequesting = false
 
     val isLogin get() = bvUserRepository.isLogin
 
@@ -56,112 +61,109 @@ class DynamicViewModel(
     }
 
     suspend fun loadMoreVideo() {
-        if (!loadingVideo) loadVideoData()
+        if (loadingVideo || !videoHasMore || !bvUserRepository.isLogin || isVideoRequesting) return
+        isVideoRequesting = true
+        
+        try {
+            loadVideoData()
+        } finally {
+            isVideoRequesting = false
+        }
     }
 
     suspend fun loadMoreAll() {
-        if (!loadingAll) loadAllData()
+        if (loadingAll || !allHasMore || !bvUserRepository.isLogin || isAllRequesting) return
+        isAllRequesting = true
+        
+        try {
+            loadAllData()
+        } finally {
+            isAllRequesting = false
+        }
     }
 
     private suspend fun loadVideoData() {
-        if (!videoHasMore || !bvUserRepository.isLogin) return
         loadingVideo = true
-        logger.fInfo { "Load more dynamic videos [apiType=${Prefs.apiType}, offset=$videoHistoryOffset, page=${currentVideoPage + 1}]" }
+        val nextPage = currentVideoPage + 1
+        logger.fInfo { "Load more dynamic videos [apiType=${Prefs.apiType}, offset=$videoHistoryOffset, page=$nextPage]" }
         
-        // 添加超时和重试机制，提高加载稳定性
-        val maxRetries = 2
-        var lastException: Throwable? = null
-        
-        for (attempt in 0..maxRetries) {
-            try {
-                // 设置30秒超时，避免长时间等待
-                val dynamicVideoData = withTimeoutOrNull(30_000) {
-                    userRepository.getDynamicVideos(
-                        page = if (attempt == 0) ++currentVideoPage else currentVideoPage,
-                        offset = videoHistoryOffset ?: "",
-                        updateBaseline = videoUpdateBaseline ?: "",
-                        preferApiType = Prefs.apiType
-                    )
-                }
-                
-                if (dynamicVideoData != null) {
-                    dynamicVideoList.addAllWithMainContext(dynamicVideoData.videos)
-                    videoHistoryOffset = dynamicVideoData.historyOffset
-                    videoUpdateBaseline = dynamicVideoData.updateBaseline
-                    videoHasMore = dynamicVideoData.hasMore
-
-                    logger.fInfo { "Load dynamic video list page: ${currentVideoPage},size: ${dynamicVideoData.videos.size}" }
-                    val avList = dynamicVideoData.videos.map {
-                        it.aid
-                    }
-                    logger.fInfo { "Load dynamic video size: ${avList.size}" }
-                    logger.info { "Load dynamic video list ${avList}}" }
-                    
-                    // 成功加载，退出重试循环
-                    break
-                } else {
-                    // 超时
-                    lastException = java.util.concurrent.TimeoutException("Request timeout after 30 seconds")
-                    if (attempt < maxRetries) {
-                        logger.fWarn { "Load dynamic video timeout, retrying... (attempt ${attempt + 1}/${maxRetries + 1})" }
-                        delay(1000L * (attempt + 1)) // 递增延迟重试
-                    }
-                }
-            } catch (e: Throwable) {
-                lastException = e
-                logger.fWarn { "Load dynamic video list failed (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message}" }
-                
-                when (e) {
-                    is AuthFailureException -> {
-                        withContext(Dispatchers.Main) {
-                            BVApp.context.getString(R.string.exception_auth_failure)
-                                .toast(BVApp.context)
-                        }
-                        logger.fInfo { "User auth failure" }
-                        if (!BuildConfig.DEBUG) bvUserRepository.logout()
-                        break // 认证失败不需要重试
-                    }
-                    else -> {
-                        if (attempt < maxRetries) {
-                            delay(1000L * (attempt + 1)) // 递增延迟重试
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 如果所有重试都失败，显示错误消息
-        if (lastException != null && lastException !is AuthFailureException) {
+        try {
+            val dynamicVideoData = userRepository.getDynamicVideos(
+                page = nextPage,
+                offset = videoHistoryOffset ?: "",
+                updateBaseline = videoUpdateBaseline ?: "",
+                preferApiType = Prefs.apiType
+            )
+            
+            // 在主线程更新UI和状态
             withContext(Dispatchers.Main) {
-                "加载动态失败: ${lastException?.localizedMessage ?: "网络请求超时"}".toast(BVApp.context)
+                dynamicVideoList.addAll(dynamicVideoData.videos)
+                videoHistoryOffset = dynamicVideoData.historyOffset
+                videoUpdateBaseline = dynamicVideoData.updateBaseline
+                videoHasMore = dynamicVideoData.hasMore
+                currentVideoPage = nextPage
+                loadingVideo = false
             }
-        }
-        
-        withContext(Dispatchers.Main) {
-            loadingVideo = false
+            
+            logger.fInfo { "Load dynamic video list page: ${nextPage}, size: ${dynamicVideoData.videos.size}" }
+            
+        } catch (e: Exception) {
+            logger.fWarn { "Load dynamic video list failed: ${e.stackTraceToString()}" }
+            
+            withContext(Dispatchers.Main) {
+                loadingVideo = false
+            }
+            
+            when (e) {
+                is AuthFailureException -> {
+                    withContext(Dispatchers.Main) {
+                        BVApp.context.getString(R.string.exception_auth_failure)
+                            .toast(BVApp.context)
+                    }
+                    logger.fInfo { "User auth failure" }
+                    if (!BuildConfig.DEBUG) bvUserRepository.logout()
+                }
+                else -> {
+                    withContext(Dispatchers.Main) {
+                        "加载动态失败: ${e.localizedMessage}".toast(BVApp.context)
+                    }
+                }
+            }
         }
     }
 
     private suspend fun loadAllData() {
-        if (!allHasMore || !bvUserRepository.isLogin) return
         loadingAll = true
-        logger.fInfo { "Load more dynamic all [apiType=${Prefs.apiType}, offset=$allHistoryOffset, page=${currentVideoPage + 1}]" }
-        runCatching {
+        val nextPage = currentAllPage + 1
+        logger.fInfo { "Load more dynamic all [apiType=${Prefs.apiType}, offset=$allHistoryOffset, page=$nextPage]" }
+        
+        try {
             val dynamicData = userRepository.getDynamics(
-                page = ++currentVideoPage,
+                page = nextPage,
                 offset = allHistoryOffset ?: "",
                 updateBaseline = allUpdateBaseline ?: "",
                 preferApiType = Prefs.apiType
             )
-            dynamicAllList.addAll(dynamicData.dynamics)
-            allHistoryOffset = dynamicData.historyOffset
-            allUpdateBaseline = dynamicData.updateBaseline
-            allHasMore = dynamicData.hasMore
-
-            logger.fInfo { "Load dynamic all list page: ${currentVideoPage},size: ${dynamicData.dynamics.size}" }
-        }.onFailure {
-            logger.fWarn { "Load dynamic all list failed: ${it.stackTraceToString()}" }
-            when (it) {
+            
+            withContext(Dispatchers.Main) {
+                dynamicAllList.addAll(dynamicData.dynamics)
+                allHistoryOffset = dynamicData.historyOffset
+                allUpdateBaseline = dynamicData.updateBaseline
+                allHasMore = dynamicData.hasMore
+                currentAllPage = nextPage
+                loadingAll = false
+            }
+            
+            logger.fInfo { "Load dynamic all list page: ${nextPage}, size: ${dynamicData.dynamics.size}" }
+            
+        } catch (e: Exception) {
+            logger.fWarn { "Load dynamic all list failed: ${e.stackTraceToString()}" }
+            
+            withContext(Dispatchers.Main) {
+                loadingAll = false
+            }
+            
+            when (e) {
                 is AuthFailureException -> {
                     withContext(Dispatchers.Main) {
                         BVApp.context.getString(R.string.exception_auth_failure)
@@ -169,16 +171,12 @@ class DynamicViewModel(
                     }
                     logger.fInfo { "User auth failure" }
                 }
-
                 else -> {
                     withContext(Dispatchers.Main) {
-                        "加载动态失败: ${it.localizedMessage}".toast(BVApp.context)
+                        "加载动态失败: ${e.localizedMessage}".toast(BVApp.context)
                     }
                 }
             }
-        }
-        withContext(Dispatchers.Main) {
-            loadingAll = false
         }
     }
 
@@ -188,6 +186,7 @@ class DynamicViewModel(
         loadingVideo = false
         videoHasMore = true
         videoHistoryOffset = null
+        isVideoRequesting = false
     }
 
     fun clearAllData() {
@@ -196,5 +195,6 @@ class DynamicViewModel(
         loadingAll = false
         allHasMore = true
         allHistoryOffset = null
+        isAllRequesting = false
     }
 }
