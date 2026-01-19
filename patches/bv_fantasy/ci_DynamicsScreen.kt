@@ -10,16 +10,17 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import dev.aaa1115910.biliapi.entity.user.DynamicVideo
 import dev.aaa1115910.bv.tv.component.LoadingTip
+import dev.aaa1115910.bv.tv.component.TvLazyVerticalGrid
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
 import dev.aaa1115910.bv.entity.proxy.ProxyArea
 import dev.aaa1115910.bv.tv.R
@@ -45,11 +47,8 @@ import dev.aaa1115910.bv.tv.activities.user.FollowActivity
 import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
-import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
 import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -61,20 +60,21 @@ fun DynamicsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // 修复：使用正确的derivedStateOf语法
-    val shouldLoadMore = remember(lazyGridState, dynamicViewModel.dynamicVideoList) {
-        derivedStateOf {
-            val visibleItems = lazyGridState.layoutInfo.visibleItemsInfo
-            if (visibleItems.isEmpty() || dynamicViewModel.dynamicVideoList.isEmpty()) {
-                false
-            } else {
-                val lastVisibleIndex = visibleItems.last().index
-                // 当最后一个可见项距离列表末尾8个位置时开始加载
-                lastVisibleIndex >= dynamicViewModel.dynamicVideoList.size - 8
-            }
+    var currentFocusedIndex by remember { mutableIntStateOf(-1) }
+    
+    val shouldLoadMore by remember {
+        derivedStateOf { 
+            dynamicViewModel.dynamicVideoList.isNotEmpty() && 
+            currentFocusedIndex + 12 > dynamicViewModel.dynamicVideoList.size 
         }
-    }.value
+    }
+    
+    val showTip by remember {
+        derivedStateOf { 
+            dynamicViewModel.dynamicVideoList.isNotEmpty() && 
+            currentFocusedIndex >= 0 
+        }
+    }
 
     val onClickVideo: (DynamicVideo) -> Unit = { dynamic ->
         VideoInfoActivity.actionStart(
@@ -93,90 +93,90 @@ fun DynamicsScreen(
         )
     }
 
-    // 监听可见项变化来触发加载
-    LaunchedEffect(lazyGridState) {
-        snapshotFlow { lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .distinctUntilChanged()
-            .filter { index ->
-                index != null && 
-                dynamicViewModel.dynamicVideoList.isNotEmpty() &&
-                index >= dynamicViewModel.dynamicVideoList.size - 8
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            scope.launch(Dispatchers.IO) {
+                dynamicViewModel.loadMoreVideo()
             }
-            .collect {
-                if (!dynamicViewModel.loadingVideo) {
-                    scope.launch(Dispatchers.IO) {
-                        dynamicViewModel.loadMoreVideo()
-                    }
-                }
-            }
+        }
     }
 
     if (dynamicViewModel.isLogin) {
         val padding = dimensionResource(R.dimen.grid_padding)
         val spacedBy = dimensionResource(R.dimen.grid_spacedBy)
         
-        ProvideListBringIntoViewSpec(
-            padding = 24.dp  // 明确指定padding
+        if (showTip) {
+            Text(
+                modifier = Modifier.fillMaxWidth().offset(x = (-20).dp, y = (-8).dp),
+                text = stringResource(R.string.entry_follow_screen),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                fontSize = 12.sp,
+                textAlign = TextAlign.End
+            )
+        }
+        
+        // 使用 TvLazyVerticalGrid 替换 ProvideListBringIntoViewSpec + LazyVerticalGrid
+        TvLazyVerticalGrid(
+            modifier = modifier
+                .fillMaxSize()
+                .onFocusChanged {
+                    if (!it.isFocused) {
+                        currentFocusedIndex = -1
+                    }
+                }
+                .onPreviewKeyEvent {
+                    if(it.type == KeyEventType.KeyUp && it.key == Key.Menu) {
+                        context.startActivity(Intent(context, FollowActivity::class.java))
+                        return@onPreviewKeyEvent true
+                    }
+                    false
+                },
+            columns = GridCells.Fixed(4),
+            state = lazyGridState,
+            contentPadding = PaddingValues(padding),
+            verticalArrangement = Arrangement.spacedBy(spacedBy),
+            horizontalArrangement = Arrangement.spacedBy(spacedBy),
+            pivotFraction = 0.3f // 使用 Frost819 的默认值
         ) {
-            LazyVerticalGrid(
-                modifier = modifier
-                    .fillMaxSize()
-                    .onPreviewKeyEvent {
-                        if(it.type == KeyEventType.KeyUp && it.key == Key.Menu) {
-                            context.startActivity(Intent(context, FollowActivity::class.java))
-                            return@onPreviewKeyEvent true
-                        }
-                        false
-                    },
-                columns = GridCells.Fixed(4),
-                state = lazyGridState,
-                contentPadding = PaddingValues(24.dp), // 增加内边距
-                verticalArrangement = Arrangement.spacedBy(24.dp), // 增加间距
-                horizontalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                itemsIndexed(
-                    items = dynamicViewModel.dynamicVideoList,
-                    key = { index, item -> item.aid }  // 使用aid作为key，确保项目正确识别
-                ) { index, item ->
-                    SmallVideoCard(
-                        data = remember(item.aid) {
-                            VideoCardData(
-                                avid = item.aid,
-                                title = item.title,
-                                cover = item.cover,
-                                play = item.play,
-                                danmaku = item.danmaku,
-                                upName = item.author,
-                                time = item.duration * 1000L,
-                                pubTime = item.pubTime,
-                                isChargingArc = item.isChargingArc,
-                                badgeText = item.chargingArcBadge
-                            )
-                        },
-                        onClick = { onClickVideo(item) },
-                        onLongClick = { onLongClickVideo(item) },
-                        onFocus = {} // 空实现，兼容旧代码
-                    )
-                }
-
-                if (dynamicViewModel.loadingVideo) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingTip()
-                        }
-                    }
-                }
-
-                if (!dynamicViewModel.videoHasMore) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            text = "没有更多了捏",
-                            color = Color.White
+            itemsIndexed(dynamicViewModel.dynamicVideoList) { index, item ->
+                SmallVideoCard(
+                    data = remember(item.aid) {
+                        VideoCardData(
+                            avid = item.aid,
+                            title = item.title,
+                            cover = item.cover,
+                            play = item.play,
+                            danmaku = item.danmaku,
+                            upName = item.author,
+                            time = item.duration * 1000L,
+                            pubTime = item.pubTime,
+                            isChargingArc = item.isChargingArc,
+                            badgeText = item.chargingArcBadge
                         )
+                    },
+                    onClick = { onClickVideo(item) },
+                    onLongClick = { onLongClickVideo(item) },
+                    onFocus = { currentFocusedIndex = index }
+                )
+            }
+
+            if (dynamicViewModel.loadingVideo) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingTip()
                     }
+                }
+            }
+
+            if (!dynamicViewModel.videoHasMore) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "没有更多了捏",
+                        color = Color.White
+                    )
                 }
             }
         }
