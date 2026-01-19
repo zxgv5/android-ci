@@ -73,42 +73,163 @@ ci_source_patch \
     "DynamicsScreen.kt" \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-    "PopularScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# 开始启用TvLazyVerticalGrid对LazyVerticalGrid的替代
+# 设置 TV 模块源码目录
+FANTASY_BV_TV_SOURCE_DIR="$GITHUB_WORKSPACE/fantasy-bv-source/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv"
+echo "🔍 开始搜索替换 TV 模块中的 LazyVerticalGrid → TvLazyVerticalGrid"
+# 计数器
+total_files=0
+total_replacements=0
+# 查找所有 .kt 文件，并排除可能的构建目录
+find "$FANTASY_BV_TV_SOURCE_DIR" -type f -name "*.kt" \
+    -not -path "*/build/*" \
+    -not -path "*/.gradle/*" \
+    -not -path "*/.idea/*" | while read file; do
+    # 检查文件是否包含 LazyVerticalGrid（全字匹配）
+    if grep -q "\bLazyVerticalGrid\b" "$file"; then
+        ((total_files++))
+        echo "📄 处理文件: ${file#$FANTASY_BV_TV_SOURCE_DIR/}"
+        # 备份原文件
+        cp "$file" "$file.bak"
+        # 0. 注释掉 LazyVerticalGrid 的导入
+        sed -i 's/^import androidx.compose.foundation.lazy.grid.LazyVerticalGrid$/\/\/ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid/' "$file"
+        # 1. 替换代码中的 LazyVerticalGrid
+        sed -i 's/\bLazyVerticalGrid\b/TvLazyVerticalGrid/g' "$file"
+        # 统计替换数量
+        count=$(grep -o "\bLazyVerticalGrid\b" "$file.bak" | wc -l)
+        ((total_replacements+=count))
+        # 2. 检查是否需要添加 TvLazyVerticalGrid 导入
+        if grep -q "TvLazyVerticalGrid" "$file" && ! grep -q "import dev.aaa1115910.bv.tv.component.TvLazyVerticalGrid" "$file"; then
+            # 找到最后一个 import 语句的位置，在其后添加新导入
+            last_import_line=$(grep -n "^import " "$file" | tail -1 | cut -d: -f1)
+            if [ -n "$last_import_line" ]; then
+                # 在最后一个 import 后添加新导入
+                sed -i "${last_import_line}a import dev.aaa1115910.bv.tv.component.TvLazyVerticalGrid" "$file"
+            else
+                # 如果没有 import 语句，在 package 声明后添加
+                package_line=$(grep -n "^package " "$file" | head -1 | cut -d: -f1)
+                if [ -n "$package_line" ]; then
+                    sed -i "${package_line}a import dev.aaa1115910.bv.tv.component.TvLazyVerticalGrid" "$file"
+                else
+                    # 如果没有 package 声明，在文件开头添加
+                    sed -i "1i import dev.aaa1115910.bv.tv.component.TvLazyVerticalGrid" "$file"
+                fi
+            fi
+            echo "   ➕ 添加了 TvLazyVerticalGrid 导入"
+        fi
+        echo "   🔄 替换了 $count 处 LazyVerticalGrid"
+        # 3. 清理可能被注释的其他 LazyVerticalGrid 导入
+        sed -i 's/^import androidx.compose.foundation.lazy.grid.LazyVerticalGrid\b.*$/\/\/ &/' "$file"
+    fi
+done
+echo "✅ 替换完成！"
+echo "📊 统计："
+echo "   - 处理文件数: $total_files"
+echo "   - 总替换次数: $total_replacements"
+# 验证替换结果
+echo "🔍 验证替换结果："
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-    "RecommendScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# 检查是否还有未注释的 LazyVerticalGrid 导入
+remaining_imports=$(find "$FANTASY_BV_TV_SOURCE_DIR" -type f -name "*.kt" \
+    -not -path "*/build/*" \
+    -not -path "*/.gradle/*" \
+    -not -path "*/.idea/*" \
+    -exec grep -l "^import androidx.compose.foundation.lazy.grid.LazyVerticalGrid" {} \; | wc -l)
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens" \
-    "TagScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+if [ $remaining_imports -eq 0 ]; then
+    echo "✅ 所有 LazyVerticalGrid 导入已成功注释！"
+else
+    echo "⚠️  仍有 $remaining_imports 个文件包含未注释的 LazyVerticalGrid 导入"
+    # 列出具体文件
+    find "$FANTASY_BV_TV_SOURCE_DIR" -type f -name "*.kt" \
+        -not -path "*/build/*" \
+        -not -path "*/.gradle/*" \
+        -not -path "*/.idea/*" \
+        -exec grep -l "^import androidx.compose.foundation.lazy.grid.LazyVerticalGrid" {} \; | while read file; do
+        echo "   ❌ ${file#$FANTASY_BV_TV_SOURCE_DIR/}"
+    done
+fi
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/util" \
-    "ProvideListBringIntoViewSpec.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# 检查是否还有代码中的 LazyVerticalGrid
+remaining_code=$(find "$FANTASY_BV_TV_SOURCE_DIR" -type f -name "*.kt" \
+    -not -path "*/build/*" \
+    -not -path "*/.gradle/*" \
+    -not -path "*/.idea/*" \
+    -exec grep -l "\bLazyVerticalGrid\b" {} \; | wc -l)
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
-    "DynamicViewModel.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+if [ $remaining_code -eq 0 ]; then
+    echo "✅ 所有代码中的 LazyVerticalGrid 已成功替换！"
+else
+    echo "⚠️  仍有 $remaining_code 个文件在代码中使用 LazyVerticalGrid"
+    # 列出具体文件
+    find "$FANTASY_BV_TV_SOURCE_DIR" -type f -name "*.kt" \
+        -not -path "*/build/*" \
+        -not -path "*/.gradle/*" \
+        -not -path "*/.idea/*" \
+        -exec grep -l "\bLazyVerticalGrid\b" {} \; | while read file; do
+        echo "   ❌ ${file#$FANTASY_BV_TV_SOURCE_DIR/}"
+    done
+fi
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
-    "SmallVideoCard.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# 检查所有使用 TvLazyVerticalGrid 的文件是否都有正确导入
+echo "🔍 检查 TvLazyVerticalGrid 导入情况："
+no_import_count=0
+find "$FANTASY_BV_TV_SOURCE_DIR" -type f -name "*.kt" \
+    -not -path "*/build/*" \
+    -not -path "*/.gradle/*" \
+    -not -path "*/.idea/*" \
+    -exec grep -l "\bTvLazyVerticalGrid\b" {} \; | while read file; do
+    if ! grep -q "import dev.aaa1115910.bv.tv.component.TvLazyVerticalGrid" "$file"; then
+        ((no_import_count++))
+        echo "   ⚠️  缺少导入: ${file#$FANTASY_BV_TV_SOURCE_DIR/}"
+    fi
+done
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
-    "LargeVideoCard.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+if [ $no_import_count -eq 0 ]; then
+    echo "✅ 所有使用 TvLazyVerticalGrid 的文件都有正确导入！"
+else
+    echo "⚠️  有 $no_import_count 个文件使用了 TvLazyVerticalGrid 但缺少导入"
+fi
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
-    "VideosRow.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# 备份文件统计
+backup_count=$(find "$FANTASY_BV_TV_SOURCE_DIR" -name "*.kt.bak" -type f | wc -l)
+echo "📁 备份文件数: $backup_count"
+
+echo ""
+echo "🚀 脚本执行完成！建议进行以下验证："
+echo "1. 检查上述警告（如果有）"
+echo "2. 运行项目编译测试"
+echo "3. 确认焦点问题是否解决"
+echo "4. 确认其他页面（推荐、热门）加载是否正常"
+
+
+
+#ci_source_patch \
+#    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens" \
+#    "TagScreen.kt" \
+#    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+#
+#ci_source_patch \
+#    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/util" \
+#    "ProvideListBringIntoViewSpec.kt" \
+#    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+#
+#ci_source_patch \
+#    "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
+#    "DynamicViewModel.kt" \
+#    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+#
+#ci_source_patch \
+#    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
+#    "SmallVideoCard.kt" \
+#    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+#
+#ci_source_patch \
+#    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
+#    "LargeVideoCard.kt" \
+#    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+#
+#ci_source_patch \
+#    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
+#    "VideosRow.kt" \
+#    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
