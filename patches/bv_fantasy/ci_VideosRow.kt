@@ -115,6 +115,7 @@ fun VideosRow(
                         }
                     },
                     onLongClick = { onLongClickVideo(videoData) },
+                    onFocus = {}, // 空实现，兼容旧代码
                     showScaleAnimation = false // 在行中禁用缩放动画，避免布局跳动
                 )
             }
