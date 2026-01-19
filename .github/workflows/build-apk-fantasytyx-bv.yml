@@ -14,11 +14,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Clean runner environment
-        run: |
-          # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
-          rm -rf ~/.android/build-cache/
+      # - name: Clean runner environment
+      #   run: |
+      #     # 清理可能存在的全局缓存文件
+      #     rm -rf ~/.gradle/caches/transforms-*
+      #     rm -rf ~/.android/build-cache/
  
        # 检出ci仓库，以便在runner中调用sh脚本
       - name: Checkout ci source repo (self)
