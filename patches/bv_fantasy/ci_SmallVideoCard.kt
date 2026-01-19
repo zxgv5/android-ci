@@ -26,9 +26,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,20 +56,41 @@ fun SmallVideoCard(
     data: VideoCardData,
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {},
-    // 移除initialFocus参数，让系统管理焦点
-    showScaleAnimation: Boolean = true  // 添加缩放动画选项
+    onFocus: () -> Unit = {}, // 重新添加onFocus参数以兼容其他文件
+    initialFocus: Boolean = false,
+    showScaleAnimation: Boolean = true
 ) {
-    var hasFocus by remember { mutableStateOf(false) }
+    var hasFocus by remember { mutableStateOf(initialFocus) }
     val scale by animateFloatAsState(
         targetValue = if (hasFocus && showScaleAnimation) 1.05f else 1f,
         label = "small video card scale"
     )
 
+    LaunchedEffect(hasFocus) {
+        if (hasFocus) onFocus()
+    }
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .onFocusChanged { hasFocus = it.isFocused }
-            .then(if (showScaleAnimation) Modifier.scale(scale) else Modifier),
+            .graphicsLayer {
+                if (showScaleAnimation) {
+                    scaleX = scale
+                    scaleY = scale
+                }
+            }
+            .drawWithContent {
+                if (hasFocus) {
+                    // 绘制焦点边框
+                    drawRect(
+                        color = MaterialTheme.colorScheme.primary,
+                        size = size,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+                    )
+                }
+                drawContent()
+            },
         onClick = onClick,
         onLongClick = onLongClick,
         colors = ClickableSurfaceDefaults.colors(
