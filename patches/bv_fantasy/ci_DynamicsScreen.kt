@@ -58,23 +58,25 @@ fun DynamicsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // 核心优化：监听可见项，提前15项预加载（比20项更均衡，避免频繁请求）
+    // 修复：snapshotFlow 明确泛型+完整导入，解决所有类型推断错误
     LaunchedEffect(lazyGridState) {
-        snapshotFlow { lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .distinctUntilChanged()
-            .filter { index ->
-                index != null && dynamicViewModel.dynamicVideoList.isNotEmpty() 
-                        && index >= dynamicViewModel.dynamicVideoList.size - 15
-                        && !dynamicViewModel.loading // 防止重复加载
+        snapshotFlow<Int?> {
+            lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+        }
+        .distinctUntilChanged()
+        .filter { index ->
+            index != null 
+            && dynamicViewModel.dynamicVideoList.isNotEmpty() 
+            && index >= dynamicViewModel.dynamicVideoList.size - 15
+            && !dynamicViewModel.loading
+        }
+        .collect {
+            scope.launch(Dispatchers.IO) {
+                dynamicViewModel.loadMore()
             }
-            .collect {
-                scope.launch(Dispatchers.IO) {
-                    dynamicViewModel.loadMore()
-                }
-            }
+        }
     }
 
-    // 视频点击/长按逻辑保留
     val onClickVideo: (DynamicVideo) -> Unit = { dynamic ->
         VideoInfoActivity.actionStart(
             context = context,
@@ -82,6 +84,7 @@ fun DynamicsScreen(
             proxyArea = ProxyArea.checkProxyArea(dynamic.title)
         )
     }
+
     val onLongClickVideo: (DynamicVideo) -> Unit = { dynamic ->
         UpInfoActivity.actionStart(
             context,
@@ -99,7 +102,7 @@ fun DynamicsScreen(
             LazyVerticalGrid(
                 modifier = modifier
                     .fillMaxSize()
-                    .onFocusChanged { /* 移除焦点索引更新逻辑，不处理焦点 */ }
+                    .onFocusChanged {}
                     .onPreviewKeyEvent {
                         if (it.type == KeyEventType.KeyUp && it.key == Key.Menu) {
                             context.startActivity(Intent(context, FollowActivity::class.java))
@@ -116,13 +119,13 @@ fun DynamicsScreen(
                 itemsIndexed(dynamicViewModel.dynamicVideoList) { _, item ->
                     SmallVideoCard(
                         data = remember(item.aid) {
-                            // 优化：过滤无效数据，减少UI渲染耗时
+                            // 修复：Long/Int 类型匹配（item.play 是 Long，用 -1L）
                             VideoCardData(
                                 avid = item.aid,
                                 title = item.title,
                                 cover = item.cover,
-                                play = item.play.takeIf { it != -1 },
-                                danmaku = item.danmaku.takeIf { it != -1 },
+                                play = item.play.takeIf { it != -1L },
+                                danmaku = item.danmaku.takeIf { it != -1L },
                                 upName = item.author,
                                 time = item.duration * 1000L,
                                 pubTime = item.pubTime,
@@ -132,11 +135,10 @@ fun DynamicsScreen(
                         },
                         onClick = { onClickVideo(item) },
                         onLongClick = { onLongClickVideo(item) },
-                        onFocus = {} // 移除焦点回调，不处理焦点索引
+                        onFocus = {}
                     )
                 }
 
-                // 加载中状态：简化布局，减少层级
                 if (dynamicViewModel.loading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
@@ -148,7 +150,6 @@ fun DynamicsScreen(
                     }
                 }
 
-                // 无更多数据状态：简化样式
                 if (!dynamicViewModel.hasMore && !dynamicViewModel.loading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
