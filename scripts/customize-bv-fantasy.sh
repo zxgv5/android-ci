@@ -90,6 +90,18 @@ ci_source_patch \
 
 # - - - - - - - - - - - - - - - - - -使用 awk 注释kt文件中的所有logger代码 - - - - - - - - - - - - - - - - - -
 # 在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有logger相关内容的行
+# import io.github.oshai.kotlinlogging.KotlinLogging
+# import dev.aaa1115910.bv.util.fInfo
+# KotlinLogging.logger {}
+# androidLogger
+# logger.info              147
+# logger.fInfo             219
+# logger.warn               24
+# logger.fWarn              16
+# logger.error              10
+# logger.fError              9
+# logger.exception           0
+# logger.fException          9
 echo "注释logger相关代码..."
 find "${FANTASY_BV_SOURCE_ROOT}" -name "*.kt" -type f | while read kt_file; do
     # 检查文件是否存在
@@ -120,6 +132,24 @@ find "${FANTASY_BV_SOURCE_ROOT}" -name "*.kt" -type f | while read kt_file; do
                 should_comment = 1
             }
             if (line ~ /logger\.info/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.fWarn/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.warn/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.fError/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.error/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.fException/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.exception/) {
                 should_comment = 1
             }
             # 检查是否包含androidLogger（全字匹配，大小写敏感）
