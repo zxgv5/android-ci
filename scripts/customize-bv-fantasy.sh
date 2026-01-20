@@ -106,15 +106,24 @@ find "${FANTASY_BV_SOURCE_ROOT}" -name "*.kt" -type f | while read kt_file; do
         {
             line = $0
             should_comment = 0
-            # 检查是否包含logger（全字匹配，严格区分大小写）
-            if (containsExactWord(line, "logger")) {
-                should_comment = 1
-            }
-            # 检查是否包含特定的导入语句（精确匹配，严格区分大小写）
+            # 检查是否包含特定内容（部分匹配，大小写敏感）
             if (line ~ /import[[:space:]]+io\.github\.oshai\.kotlinlogging\.KotlinLogging/) {
                 should_comment = 1
             }
             if (line ~ /import[[:space:]]+dev\.aaa1115910\.bv\.util\.fInfo/) {
+                should_comment = 1
+            }
+            if (line ~ /KotlinLogging\.logger[[:space:]]*\{/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.fInfo/) {
+                should_comment = 1
+            }
+            if (line ~ /logger\.info/) {
+                should_comment = 1
+            }
+            # 检查是否包含androidLogger（全字匹配，大小写敏感）
+            if (containsExactWord(line, "androidLogger")) {
                 should_comment = 1
             }
             # 如果应该注释且尚未被注释，则注释它
