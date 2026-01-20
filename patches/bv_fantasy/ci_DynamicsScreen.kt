@@ -114,10 +114,13 @@ fun DynamicsScreen(
                 itemsIndexed(dynamicViewModel.dynamicVideoList) { _, item ->
                     SmallVideoCard(
                         data = remember(item.aid) {
-                            // 最后一处修改：item.play 是 Int 类型，用 -1 匹配（解决最后一个类型错误）
-                            val playValue = if (item.play != -1) item.play else null
-                            val danmakuValue = if (item.danmaku != -1) item.danmaku else null
-                            
+                            // 核心修复：先把 Long 转 Int，再判断（兼容类型+可空）
+                            val playInt = item.play.toIntOrNull() // Long -> Int?（转换失败返回null）
+                            val danmakuInt = item.danmaku.toIntOrNull()
+                            // 再用 Int 类型的 -1 比较（和 VideoCardData 参数类型一致）
+                            val playValue = if (playInt != null && playInt != -1) playInt else null
+                            val danmakuValue = if (danmakuInt != null && danmakuInt != -1) danmakuInt else null
+
                             VideoCardData(
                                 avid = item.aid,
                                 title = item.title,
