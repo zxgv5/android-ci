@@ -90,9 +90,11 @@ ci_source_patch \
 
 # - - - - - - - - - - - - - - - - - -使用 awk 注释kt文件中的所有logger代码 - - - - - - - - - - - - - - - - - -
 # 在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有logger相关内容的行
+# 其中app/shared/src/main/kotlin/dev/aaa1115910/bv/repository/UserRepository.kt需要特殊处理，里面有跨行的logger.info{}表达式
+
 # import io.github.oshai.kotlinlogging.KotlinLogging
 # import dev.aaa1115910.bv.util.fInfo
-# KotlinLogging.logger {}
+# KotlinLogging.logger
 # logger("BvVideoPlayer")
 # logger("BvPlayer")
 # androidLogger
@@ -130,7 +132,10 @@ find "${FANTASY_BV_SOURCE_ROOT}" -name "*.kt" -type f | while read kt_file; do
             if (line ~ /import[[:space:]]+dev\.aaa1115910\.bv\.util\.fInfo/) {
                 should_comment = 1
             }
-            if (line ~ /KotlinLogging\.logger[[:space:]]*\{/) {
+            # if (line ~ /KotlinLogging\.logger[[:space:]]*\{/) {
+            #     should_comment = 1
+            # }
+            if (line ~ /KotlinLogging\.logger/) {
                 should_comment = 1
             }
             if (line ~ /logger\("BvVideoPlayer"\)/) {
@@ -195,3 +200,9 @@ find "${FANTASY_BV_SOURCE_ROOT}" -name "*.kt" -type f | while read kt_file; do
     fi
 done
 echo "logger相关代码注释完成！"
+
+# - - - - - - - - - - - - - - - - - -单独处理logger替换中给的特殊文件 - - - - - - - - - - - - - - - - - -
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/repository" \
+    "UserRepository.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
