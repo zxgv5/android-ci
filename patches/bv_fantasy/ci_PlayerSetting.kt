@@ -195,7 +195,7 @@ fun PlayerSetting(
                     supportText = stringResource(R.string.settings_player_default_playback_speed_text),
                     value = defaultPlaybackSpeed,
                     minValue = 0.2,
-                    maxValue = 5,
+                    maxValue = 5.0,
                     isInteger = false,
                     step = 0.2,
                     onValueChange = {
