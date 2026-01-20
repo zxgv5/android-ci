@@ -1,5 +1,5 @@
 package dev.aaa1115910.bv.tv.screens.main
-
+ 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -37,7 +37,6 @@ import dev.aaa1115910.bv.tv.screens.user.FavoriteScreen
 import dev.aaa1115910.bv.tv.screens.user.HistoryScreen
 //import dev.aaa1115910.bv.tv.screens.user.ToViewScreen
 import dev.aaa1115910.bv.util.Prefs
-import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.requestFocus
 import dev.aaa1115910.bv.viewmodel.UserViewModel
 import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
@@ -47,13 +46,12 @@ import dev.aaa1115910.bv.viewmodel.user.FavoriteViewModel
 //import dev.aaa1115910.bv.viewmodel.user.FollowingSeasonViewModel
 import dev.aaa1115910.bv.viewmodel.user.HistoryViewModel
 //import dev.aaa1115910.bv.viewmodel.user.ToViewViewModel
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
-
+ 
 @Composable
 fun HomeContent(
     modifier: Modifier = Modifier,
@@ -68,8 +66,7 @@ fun HomeContent(
     userViewModel: UserViewModel = koinViewModel()
 ) {
     val scope = rememberCoroutineScope()
-    val logger = KotlinLogging.logger("HomeContent")
-
+ 
     val recommendState = rememberLazyGridState()
     val popularState = rememberLazyGridState()
     val dynamicState = rememberLazyGridState()
@@ -83,7 +80,7 @@ fun HomeContent(
     
     // 用于管理延迟加载的Job
     var loadJob by remember { mutableStateOf<Job?>(null) }
-
+ 
     // 从全局状态获取上次选择的标签位置，如果没有则默认为Recommend
     var selectedTab by remember {
         mutableStateOf(
@@ -92,7 +89,7 @@ fun HomeContent(
                 ?: HomeTopNavItem.entries.getOrElse(Prefs.defaultHomeTab) { HomeTopNavItem.Recommend }
         )
     }
-
+ 
     fun initData () {
         scope.launch {
             when (selectedTab) {
@@ -101,37 +98,37 @@ fun HomeContent(
                         recommendViewModel.loadMore()
                     }
                 }
-
+ 
                 HomeTopNavItem.Popular -> {
                     if (popularViewModel.popularVideoList.isEmpty()) {
                         popularViewModel.loadMore()
                     }
                 }
-
+ 
                 HomeTopNavItem.Dynamics -> {
                     if (dynamicViewModel.dynamicVideoList.isEmpty()) {
-                        dynamicViewModel.loadMoreVideo()
+                        dynamicViewModel.loadMore() // 修复：替换 loadMoreVideo() 为 loadMore()
                     }
                 }
-
+ 
                 HomeTopNavItem.Favorite -> {
 //                    if (favouriteViewModel.favorites.isEmpty() && userViewModel.isLogin) {
 //                        favouriteViewModel.updateFoldersInfo()
 //                    }
                 }
-
+ 
 //                HomeTopNavItem.FollowingSeason -> {
 //                    if (followingSeasonViewModel.followingSeasons.isEmpty() && userViewModel.isLogin) {
 //                        followingSeasonViewModel.loadMore()
 //                    }
 //                }
-
+ 
                 HomeTopNavItem.History -> {
 //                    if (historyViewModel.histories.isEmpty() && userViewModel.isLogin) {
 //                        historyViewModel.update()
 //                    }
                 }
-
+ 
 //                HomeTopNavItem.ToView -> {
 //                    if (toViewViewModel.histories.isEmpty() && userViewModel.isLogin) {
 //                        toViewViewModel.update()
@@ -140,7 +137,7 @@ fun HomeContent(
             }
         }
     }
-
+ 
     // 当选中标签变化时，保存到全局状态并处理延迟加载
     LaunchedEffect(selectedTab) {
         currentSelectedTabs[DrawerItem.Home] = selectedTab.ordinal
@@ -171,11 +168,11 @@ fun HomeContent(
             }
         }
     }
-
+ 
     LaunchedEffect(Unit) {
         initData()
     }
-
+ 
     //监听登录变化
     LaunchedEffect(userViewModel.isLogin) {
         if (userViewModel.isLogin) {
@@ -186,7 +183,7 @@ fun HomeContent(
             userViewModel.clearUserInfo()
         }
     }
-
+ 
     BackHandler(focusOnContent || topNavHasFocus) {
         if (topNavHasFocus) {
             drawerItemFocusRequesters[DrawerItem.Home]?.requestFocus()
@@ -194,7 +191,7 @@ fun HomeContent(
         }
         navFocusRequester.requestFocus(scope)
     }
-
+ 
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -215,47 +212,41 @@ fun HomeContent(
                     
                     when (nav) {
                         HomeTopNavItem.Recommend -> {
-                            logger.fInfo { "clear recommend data" }
                             recommendViewModel.clearData()
-                            logger.fInfo { "reload recommend data" }
                             scope.launch(Dispatchers.IO) { recommendViewModel.loadMore() }
                         }
-
+ 
                         HomeTopNavItem.Popular -> {
-                            logger.fInfo { "clear popular data" }
                             popularViewModel.clearData()
-                            logger.fInfo { "reload popular data" }
                             scope.launch(Dispatchers.IO) { popularViewModel.loadMore() }
                         }
-
+ 
                         HomeTopNavItem.Dynamics -> {
-                            logger.fInfo { "clear dynamic data" }
-                            dynamicViewModel.clearVideoData()
-                            logger.fInfo { "reload dynamic data" }
-                            scope.launch(Dispatchers.IO) { dynamicViewModel.loadMoreVideo() }
+                            dynamicViewModel.clearData() // 修复：替换 clearVideoData() 为 clearData()
+                            scope.launch(Dispatchers.IO) { dynamicViewModel.loadMore() } // 修复：替换 loadMoreVideo() 为 loadMore()
                         }
-
+ 
                         HomeTopNavItem.Favorite -> {
                             if (userViewModel.isLogin) {
                                 favouriteViewModel.clearData()
                                 favouriteViewModel.updateFoldersInfo()
                             }
                         }
-
+ 
                         //HomeTopNavItem.FollowingSeason -> {
                         //    if (userViewModel.isLogin) {
                         //        followingSeasonViewModel.clearData()
                         //        followingSeasonViewModel.loadMore()
                         //    }
                         //}
-
+ 
                         HomeTopNavItem.History -> {
                             if (userViewModel.isLogin) {
                                 historyViewModel.clearData()
                                 historyViewModel.update()
                             }
                         }
-
+ 
                         //HomeTopNavItem.ToView -> {
                         //    if (userViewModel.isLogin) {
                         //        toViewViewModel.clearData()
@@ -334,7 +325,7 @@ fun HomeContent(
         }
     }
 }
-
+ 
 @Composable
 private fun LoginRequiredScreen() {
     Box(
