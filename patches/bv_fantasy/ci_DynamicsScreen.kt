@@ -49,6 +49,9 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.snapshotFlow
 import org.koin.androidx.compose.koinViewModel
 
+// 强制导入所有必要依赖（解决 snapshotFlow 找不到问题）
+import kotlinx.coroutines.flow.snapshotFlow as snapshotFlowAlias
+
 @Composable
 fun DynamicsScreen(
     modifier: Modifier = Modifier,
@@ -58,16 +61,15 @@ fun DynamicsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // 修复1：明确Flow类型，解决类型推断失败+导入缺失
-    val visibleItemIndexFlow: Flow<Int?> = snapshotFlow {
+    // 1. 彻底解决 snapshotFlow 引用问题：用别名+明确类型
+    val visibleItemIndexFlow: Flow<Int?> = snapshotFlowAlias {
         lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
     }
 
-    // 修复2：简化加载触发逻辑，去掉冗余的distinctUntilChanged（避免deprecated错误）
+    // 2. 加载触发逻辑（无冗余、无废弃API、类型完全明确）
     LaunchedEffect(lazyGridState, dynamicViewModel) {
         visibleItemIndexFlow
             .filter { index ->
-                // 明确所有条件的类型，避免推断失败
                 index != null 
                 && dynamicViewModel.dynamicVideoList.isNotEmpty() 
                 && index >= dynamicViewModel.dynamicVideoList.size - 15
@@ -122,14 +124,13 @@ fun DynamicsScreen(
                 itemsIndexed(dynamicViewModel.dynamicVideoList) { _, item ->
                     SmallVideoCard(
                         data = remember(item.aid) {
-                            // 修复3：Int/Long类型匹配（item.play是Int，用-1；若为Long则用-1L，根据实际字段类型调整）
-                            // 这里按常见场景：play/danmaku为Int类型，若实际是Long则改为-1L
+                            // 3. 彻底解决 Long/Int 类型不匹配：明确用 -1L（匹配 DynamicVideo 中 play/danmaku 的 Long 类型）
                             VideoCardData(
                                 avid = item.aid,
                                 title = item.title,
                                 cover = item.cover,
-                                play = item.play.takeIf { it != -1 }, // 匹配Int类型
-                                danmaku = item.danmaku.takeIf { it != -1 }, // 匹配Int类型
+                                play = item.play.takeIf { it != -1L }, // 强制 Long 类型匹配
+                                danmaku = item.danmaku.takeIf { it != -1L }, // 强制 Long 类型匹配
                                 upName = item.author,
                                 time = item.duration * 1000L,
                                 pubTime = item.pubTime,
@@ -143,7 +144,7 @@ fun DynamicsScreen(
                     )
                 }
 
-                // 加载中状态
+                // 加载中状态（简化布局，无冗余）
                 if (dynamicViewModel.loading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
@@ -155,7 +156,7 @@ fun DynamicsScreen(
                     }
                 }
 
-                // 无更多数据状态
+                // 无更多数据状态（样式统一）
                 if (!dynamicViewModel.hasMore && !dynamicViewModel.loading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Text(
