@@ -53,6 +53,7 @@ ci_source_patch \
     "MainScreen.kt" \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 # 6、对HomeContent.kt进行覆盖，配合上面对隐藏顶部“追番”和“稍后看”两个导航标签所作修改
+# 同时配合对视频列表的加载优化，辅助解决长按下方向键的焦点漂移问题
 ci_source_patch \
     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main" \
     "HomeContent.kt" \
