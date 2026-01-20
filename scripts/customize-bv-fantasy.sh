@@ -137,7 +137,6 @@ find "${FANTASY_BV_SOURCE_ROOT}" -name "*.kt" -type f | while read kt_file; do
             if (line ~ /logger\("BvPlayer"\)/) {
                 should_comment = 1
             }
-            logger("BvPlayer")
             if (line ~ /logger\.fInfo/) {
                 should_comment = 1
             }
