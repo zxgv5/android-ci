@@ -11,11 +11,9 @@ import dev.aaa1115910.biliapi.repositories.RecommendVideoRepository
 import dev.aaa1115910.bv.BVApp
 import dev.aaa1115910.bv.util.Prefs
 import dev.aaa1115910.bv.util.addAllWithMainContext
-import dev.aaa1115910.bv.util.fError
-import dev.aaa1115910.bv.util.fInfo
 import dev.aaa1115910.bv.util.toast
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.koin.android.annotation.KoinViewModel
 
@@ -23,76 +21,144 @@ import org.koin.android.annotation.KoinViewModel
 class RecommendViewModel(
     private val recommendVideoRepository: RecommendVideoRepository
 ) : ViewModel() {
-    private val logger = KotlinLogging.logger {}
+    // TV端核心列表
     val recommendVideoList = mutableStateListOf<UgcItem>()
 
+    // 分页状态
     private var nextPage = RecommendPage()
-    var refreshing by mutableStateOf(true)
+    
+    // 加载状态：private set 防止多线程乱改
     var loading by mutableStateOf(false)
-    var hasMore by mutableStateOf(true) // 添加hasMore状态
+        private set
+    var hasMore by mutableStateOf(true)
+        private set
+        
+    // 刷新状态
+    var refreshing by mutableStateOf(false)
+        private set
 
-    suspend fun loadMore(
-        beforeAppendData: () -> Unit = {}
-    ) {
-        var loadCount = 0
-        val maxLoadMoreCount = 3
-        if (!loading && hasMore) { // 添加hasMore检查
-            if (recommendVideoList.size == 0) {
-                // first load data
-                while (recommendVideoList.size < 24 && loadCount < maxLoadMoreCount && hasMore) {
-                    val emptyFun: () -> Unit = {}
-                    loadData(beforeAppendData = if (loadCount == 0) beforeAppendData else emptyFun)
-                    if (loadCount != 0) logger.fInfo { "Load more recommend videos because items too less" }
-                    loadCount++
-                }
+    // TV端核心加载方法（优化后）
+    suspend fun loadMore() {
+        if (!loading && hasMore) {
+            // 首次加载时确保有足够数据（至少24个）
+            if (recommendVideoList.isEmpty()) {
+                loadInitialData()
             } else {
-                val emptyFun: () -> Unit = {}
-                loadData(beforeAppendData = if (loadCount == 0) beforeAppendData else emptyFun)
+                loadData()
             }
         }
     }
 
-    private suspend fun loadData(
-        beforeAppendData: () -> Unit
+    // 首次加载：连续加载直到至少有24个item或没有更多数据
+    private suspend fun loadInitialData() {
+        val minItems = 24
+        var loadCount = 0
+        val maxLoadCount = 3 // 最多尝试3次
+        
+        while (recommendVideoList.size < minItems && loadCount < maxLoadCount && hasMore) {
+            loadData()
+            loadCount++
+        }
+    }
+
+    // mobile端兼容：保留旧加载方法（转发到新方法）
+    suspend fun loadMore(
+        beforeAppendData: () -> Unit = {}
     ) {
+        if (!loading && hasMore) {
+            loadDataWithCallback(beforeAppendData)
+        }
+    }
+
+    private suspend fun loadData() {
         loading = true
-        logger.fInfo { "Load more recommend videos" }
-        runCatching {
-            val recommendData = recommendVideoRepository.getRecommendVideos(
-                page = nextPage,
-                preferApiType = Prefs.apiType
-            )
-            beforeAppendData()
-            
-            // 获取新数据
-            val newItems = recommendData.items
-            
-            // 如果没有获取到新数据，则认为没有更多了
-            if (newItems.isEmpty()) {
-                hasMore = false
-            } else {
-                // 更新下一页参数
-                nextPage = recommendData.nextPage
-                recommendVideoList.addAllWithMainContext(newItems)
-            }
-        }.onFailure {
-            logger.fError { "Load recommend video list failed: ${it.stackTraceToString()}" }
-            withContext(Dispatchers.Main) {
-                "加载推荐视频失败: ${it.localizedMessage}".toast(BVApp.context)
+        // 最多重试2次，解决单次网络波动
+        repeat(2) { retryCount ->
+            runCatching {
+                val recommendData = recommendVideoRepository.getRecommendVideos(
+                    page = nextPage,
+                    preferApiType = Prefs.apiType
+                )
+                
+                // 成功加载：更新状态并退出重试
+                val newItems = recommendData.items
+                if (newItems.isNotEmpty()) {
+                    recommendVideoList.addAllWithMainContext(newItems)
+                    nextPage = recommendData.nextPage
+                    hasMore = true
+                } else {
+                    // 返回空列表，认为没有更多数据
+                    hasMore = false
+                }
+                return@repeat
+            }.onFailure { e ->
+                // 最后一次重试失败才提示
+                if (retryCount == 1) {
+                    withContext(Dispatchers.Main) {
+                        "加载推荐视频失败: ${e.localizedMessage ?: "未知错误"}"
+                            .toast(BVApp.context)
+                    }
+                } else {
+                    delay(800) // 缩短重试间隔
+                }
             }
         }
         loading = false
     }
 
+    // mobile端兼容：保留带回调的加载方法
+    private suspend fun loadDataWithCallback(
+        beforeAppendData: () -> Unit = {}
+    ) {
+        loading = true
+        // 最多重试2次
+        repeat(2) { retryCount ->
+            runCatching {
+                val recommendData = recommendVideoRepository.getRecommendVideos(
+                    page = nextPage,
+                    preferApiType = Prefs.apiType
+                )
+                
+                beforeAppendData()
+                val newItems = recommendData.items
+                if (newItems.isNotEmpty()) {
+                    recommendVideoList.addAllWithMainContext(newItems)
+                    nextPage = recommendData.nextPage
+                    hasMore = true
+                } else {
+                    hasMore = false
+                }
+                return@repeat
+            }.onFailure { e ->
+                if (retryCount == 1) {
+                    withContext(Dispatchers.Main) {
+                        "加载推荐视频失败: ${e.localizedMessage ?: "未知错误"}"
+                            .toast(BVApp.context)
+                    }
+                } else {
+                    delay(800)
+                }
+            }
+        }
+        loading = false
+    }
+
+    // TV端核心清空方法（优化后）
     fun clearData() {
         recommendVideoList.clear()
         resetPage()
         loading = false
+        hasMore = true
     }
 
+    // 重置分页（用于刷新）
     fun resetPage() {
         nextPage = RecommendPage()
         refreshing = true
-        hasMore = true // 重置hasMore状态
+    }
+
+    // 完成刷新
+    fun finishRefreshing() {
+        refreshing = false
     }
 }
