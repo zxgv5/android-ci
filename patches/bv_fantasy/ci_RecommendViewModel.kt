@@ -27,15 +27,14 @@ class RecommendViewModel(
     // 分页状态
     private var nextPage = RecommendPage()
     
-    // 加载状态：private set 防止多线程乱改
+    // 加载状态：保持 private set 防止外部误改
     var loading by mutableStateOf(false)
         private set
     var hasMore by mutableStateOf(true)
         private set
         
-    // 刷新状态
+    // 刷新状态：保持 public set，因为 mobile 端需要访问
     var refreshing by mutableStateOf(false)
-        private set
 
     // TV端核心加载方法（优化后）
     suspend fun loadMore() {
@@ -155,10 +154,5 @@ class RecommendViewModel(
     fun resetPage() {
         nextPage = RecommendPage()
         refreshing = true
-    }
-
-    // 完成刷新
-    fun finishRefreshing() {
-        refreshing = false
     }
 }
