@@ -29,7 +29,6 @@ class PopularViewModel(
     private var nextPage = PopularVideoPage()
     var refreshing by mutableStateOf(false)
     var loading by mutableStateOf(false)
-    var hasMore by mutableStateOf(true) // 添加hasMore状态
 
     init {
         println("=====init PopularViewModel")
@@ -38,7 +37,7 @@ class PopularViewModel(
     suspend fun loadMore(
         beforeAppendData: () -> Unit = {}
     ) {
-        if (!loading && hasMore) loadData( // 添加hasMore检查
+        if (!loading) loadData(
             beforeAppendData = beforeAppendData
         )
     }
@@ -54,18 +53,8 @@ class PopularViewModel(
                 preferApiType = Prefs.apiType
             )
             beforeAppendData()
-            
-            // 获取新数据
-            val newItems = popularVideoData.list
-            
-            // 如果没有获取到新数据，则认为没有更多了
-            if (newItems.isEmpty()) {
-                hasMore = false
-            } else {
-                // 更新下一页参数
-                nextPage = popularVideoData.nextPage
-                popularVideoList.addAllWithMainContext(newItems)
-            }
+            nextPage = popularVideoData.nextPage
+            popularVideoList.addAllWithMainContext(popularVideoData.list)
         }.onFailure {
             logger.fError { "Load popular video list failed: ${it.stackTraceToString()}" }
             withContext(Dispatchers.Main) {
@@ -84,6 +73,5 @@ class PopularViewModel(
     fun resetPage() {
         nextPage = PopularVideoPage()
         refreshing = true
-        hasMore = true // 重置hasMore状态
     }
 }

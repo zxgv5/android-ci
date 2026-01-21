@@ -100,15 +100,15 @@ ci_source_patch \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 #10、尝试修复“热门”页长按下方向键焦点左移出区问题
-# ci_source_patch \
-#     "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
-#     "PopularViewModel.kt" \
-#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
+    "PopularViewModel.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
-# ci_source_patch \
-#     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-#     "PopularScreen.kt" \
-#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+    "PopularScreen.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 # - - - - - - - - - - - - - - - - - -使用 awk 注释kt文件中的所有logger代码 - - - - - - - - - - - - - - - - - -
 # 在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有logger相关内容的行
