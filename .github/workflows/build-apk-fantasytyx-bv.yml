@@ -2,7 +2,35 @@ name: build-apk-fantasytyx-bv
 
 on:
   workflow_dispatch:
+    inputs:
+      incremental_build:
+        description: '是否启用增量构建（仅重新构建修改过的代码）'
+        type: choice
+        required: true
+        default: 'true'
+        options:
+          - 'true'
+          - 'false'
+      force_clean_build:
+        description: '是否强制清理缓存（忽略增量构建）'
+        type: choice
+        required: false
+        default: 'false'
+        options:
+          - 'true'
+          - 'false'
   workflow_call:
+    inputs:
+      incremental_build:
+        description: '是否启用增量构建'
+        type: string
+        required: false
+        default: 'true'
+      force_clean_build:
+        description: '是否强制清理缓存'
+        type: string
+        required: false
+        default: 'false'
 
 env:
   JDK_VERSION: '21'
@@ -14,24 +42,32 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Clean runner environment
+      - name: Show build configuration
         run: |
-          # 清理可能存在的全局缓存文件
+          echo "=== 构建配置 ==="
+          echo "增量构建模式: ${{ inputs.incremental_build }}"
+          echo "强制清理缓存: ${{ inputs.force_clean_build }}"
+          echo "Runner: ${{ runner.os }}"
+
+      # 条件性清理：仅在强制清理时执行
+      - name: Conditional clean runner environment
+        if: ${{ inputs.force_clean_build == 'true' || inputs.incremental_build == 'false' }}
+        run: |
+          echo "⚠️ 强制清理缓存，增量构建将失效"
           rm -rf ~/.gradle/caches/transforms-*
           rm -rf ~/.android/build-cache/
- 
-       # 检出ci仓库，以便在runner中调用sh脚本
+          echo "缓存已清理"
+
+      # 检出ci仓库
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
-          # 指定一个子目录放ci仓库，避免与源仓库混淆
           path: ci_source
 
       # 并行克隆两个仓库
       - name: Checkout source repo (fantasy-bv)
         uses: actions/checkout@main
         with:
-          # repository: zxgv5/fantasy-bv
           repository: fantasytyx/bv
           ref: develop
           path: fantasy-bv-source
@@ -49,39 +85,49 @@ jobs:
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "INCREMENTAL_BUILD=${{ inputs.incremental_build }}" >> $GITHUB_ENV
+          echo "FORCE_CLEAN=${{ inputs.force_clean_build }}" >> $GITHUB_ENV
 
-      # 安装python3（改用官方action，避免apt兼容性问题）
-      - name: Set up python 3.12
-        uses: actions/setup-python@main
-        with:
-          python-version: '3.12'
-
-      # 验证版本（无需手动配置python3命令，action已自动处理）
-      - name: Verify python and pip versions
-        run: |
-          python3 --version
-          pip3 --version
-
-      - name: Install python dependencies
-        run: |
-          # 目前的脚本无第三方依赖，此步骤仅保留作环境校验
-          echo "python环境已就绪，无第三方依赖需安装"
-
+      # 先运行customize脚本，然后计算哈希
       - name: Customize scripts
         run: |
+          echo "=== 运行customize脚本 ==="
           chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-fantasy.sh
           $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-fantasy.sh
 
-      # 从Monorepo精确合并每个库（核心改进）
+      # 恢复Gradle缓存（条件性）
+      - name: Restore Gradle cache
+        if: ${{ inputs.incremental_build == 'true' && inputs.force_clean_build != 'true' }}
+        uses: actions/cache@main
+        id: gradle-cache
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            fantasy-bv-source/.gradle
+            fantasy-bv-source/build-cache
+            fantasy-bv-source/build
+          key: ${{ runner.os }}-gradle-cache-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-cache-
+
+      # 恢复源代码哈希缓存（条件性）
+      - name: Restore source hash cache
+        if: ${{ inputs.incremental_build == 'true' && inputs.force_clean_build != 'true' }}
+        uses: actions/cache@main
+        id: source-hash-cache
+        with:
+          path: fantasy-bv-source/.incremental
+          key: ${{ runner.os }}-source-hash-${{ github.ref_name }}
+          restore-keys: |
+            ${{ runner.os }}-source-hash-
+
+      # 从Monorepo合并库
       - name: Merge libraries from monorepo structure
         run: |
           echo "=== 从 bv-libs Monorepo 复制各子库 ==="
           cd fantasy-bv-source
-          
-          # 确保主项目的 libs 目录存在
           mkdir -p libs
-          
-          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
           declare -A LIB_PATHS
           LIB_PATHS=(
             ["akDanmaku"]="akDanmaku"
@@ -90,90 +136,109 @@ jobs:
             ["libVLC"]="libVLC"
             ["media3Container"]="media3Container"
           )
-          
           for LIB_NAME in "${!LIB_PATHS[@]}"; do
             SRC_PATH="../bv-libs-source/${LIB_PATHS[$LIB_NAME]}"
             DEST_PATH="libs/$LIB_NAME"
-            
-            echo "处理库: $LIB_NAME"
-            echo "  源路径: $SRC_PATH"
-            
             if [ -d "$SRC_PATH" ]; then
-              # 删除目标目录，确保干净复制
-              rm -rf "$DEST_PATH"
-              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
-              cp -r "$SRC_PATH" "$DEST_PATH"
-              echo "  已复制到: $DEST_PATH"
-              # 显示复制后的关键文件
-              if [ -f "$DEST_PATH"/*.aar ]; then
-                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
+              # 比较内容而非时间戳
+              if [ -d "$DEST_PATH" ]; then
+                # 使用diff -r比较目录内容
+                if diff -r --brief "$SRC_PATH" "$DEST_PATH" > /dev/null 2>&1; then
+                  echo "✅ 库 '$LIB_NAME' 内容未变化，跳过复制"
+                  continue
+                fi
               fi
+              echo "🔄 库 '$LIB_NAME' 有变化，更新中..."
+              rm -rf "$DEST_PATH"
+              cp -r "$SRC_PATH" "$DEST_PATH"
             else
-              echo "  错误：源路径不存在！"
-              echo "  当前bv-libs-source目录内容:"
-              ls -la "../bv-libs-source/" || true
+              echo "❌ 错误：源路径不存在: $SRC_PATH"
               exit 1
             fi
-            echo ""
           done
-          
-          echo "=== 合并完成，最终 libs/ 目录结构 ==="
-          ls -la libs/
- 
-      # 设置构建环境
-      - name: Cache gradle
-        uses: actions/cache@main
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            fantasy-bv-source/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
- 
+          echo "=== 库合并完成 ==="
+
       - name: Set up jdk 21
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
-      # 验证与准备构建
-      - name: Validate final project structure
+      # 检查源代码变更（仅在增量构建模式且未强制清理时）
+      - name: Check source changes for incremental build
+        id: check-source-changes
+        if: ${{ inputs.incremental_build == 'true' && inputs.force_clean_build != 'true' }}
         working-directory: ./fantasy-bv-source
         run: |
-          echo "=== 最终项目完整性验证 ==="
-          echo ""
-          # echo "1. 验证预编译库:"
-          for lib_dir in libs/*; do
-            if [ -d "$lib_dir" ]; then
-              lib_name=$(basename "$lib_dir")
-              aar_count=$(find "$lib_dir" -name "*.aar" -type f | wc -l)
-              kts_count=$(find "$lib_dir" -name "*.kts" -type f | wc -l)
-              echo "  $lib_name: $aar_count个AAR文件, $kts_count个KTS文件"
+          echo "=== 增量构建模式：检查源代码变更 ==="
+          # 确保.incremental目录存在
+          mkdir -p .incremental
+          # 计算当前源代码哈希（基于文件内容，忽略时间戳）
+          echo "计算当前源代码内容哈希..."
+          # 创建临时文件列表
+          find . -type f \
+            \( -name "*.kt" -o -name "*.java" -o -name "*.gradle" -o -name "*.gradle.kts" \
+               -o -name "*.xml" -o -name "*.pro" -o -name "*.mk" -o -name "*.txt" \
+               -o -name "*.json" -o -name "*.properties" -o -name "*.aar" -o -name "*.jar" \
+               -o -name "*.so" -o -name "*.cpp" -o -name "*.c" -o -name "*.h" \) \
+            -not -path "./.git/*" \
+            -not -path "./build/*" \
+            -not -path "./.gradle/*" \
+            -not -path "./.incremental/*" \
+            -not -path "./*.apk" \
+            -not -path "./keystore.p12" \
+            -not -path "./signing.properties" | \
+            sort > .incremental/file_list.txt
+          # 计算每个文件的哈希（只基于内容，忽略时间戳）
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" >> .incremental/file_hashes.txt
             fi
-          done
-          # 已在build-lib-akdanmaku工作流中构建并提交，此处不再验证，节约资源，减少时间
-          # echo ""
-          # echo "2. 验证源码模块:"
-          # if [ -f "akdanmaku/build.gradle.kts" ] || [ -f "akdanmaku/build.gradle" ]; then
-          #   echo "  akdanmaku - 找到构建文件"
-          # else
-          #   echo "  akdanmaku - 缺少构建文件！"
-          #   exit 1
-          # fi
- 
+          done < .incremental/file_list.txt
+          # 计算总哈希
+          sha256sum .incremental/file_hashes.txt | awk '{print $1}' > .incremental/current_content_hash.txt
+          CURRENT_HASH=$(cat .incremental/current_content_hash.txt)
+          echo "当前源代码内容哈希: $CURRENT_HASH"
+          # 检查是否有上次构建的哈希
+          if [ -f ".incremental/previous_content_hash.txt" ]; then
+            PREVIOUS_HASH=$(cat .incremental/previous_content_hash.txt)
+            echo "上次构建内容哈希: $PREVIOUS_HASH"
+            if [ "$CURRENT_HASH" = "$PREVIOUS_HASH" ]; then
+              echo "✅ 源代码内容完全一致，可以跳过完整构建"
+              echo "skip_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "🔄 源代码内容有变化，需要重新构建"
+              echo "skip_build=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "📝 首次构建或未找到上次构建哈希"
+            echo "skip_build=false" >> $GITHUB_OUTPUT
+          fi
+          echo "current_content_hash=$CURRENT_HASH" >> $GITHUB_OUTPUT
+
       - name: Prepare gradle environment
         working-directory: ./fantasy-bv-source
         run: |
-          chmod +x gradlew
-          echo "Gradle 版本信息:"
+          chmod +x ./gradlew
           ./gradlew --version
+          # 如果强制清理，则清理本地gradle缓存
+          if [ "${{ inputs.force_clean_build }}" = "true" ]; then
+            echo "清理本地Gradle缓存..."
+            ./gradlew cleanBuildCache --no-daemon || true
+          fi
 
-      # ========== 新增步骤：编译 player.tv 模块 ==========
+      # 编译 player.tv 模块（条件性）
       - name: Build player.tv module
         working-directory: ./fantasy-bv-source
         run: |
-          echo "=== 编译 player.tv 模块，验证 TV 依赖 ==="
-          ./gradlew :player:tv:assembleRelease --refresh-dependencies --no-daemon
+          echo "=== 编译 player.tv 模块 ==="
+          # 根据构建模式决定是否跳过
+          if [ "${{ inputs.incremental_build }}" = "true" ] && [ "${{ steps.check-source-changes.outputs.skip_build }}" = "true" ]; then
+            echo "跳过player.tv模块构建（增量模式且内容无变化）"
+          else
+            echo "构建player.tv模块..."
+            ./gradlew :player:tv:assembleRelease --no-daemon --build-cache
+          fi
 
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./fantasy-bv-source
@@ -186,33 +251,94 @@ jobs:
           keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
 
-      # 顺序构建（先编译akdanmaku，再构建主应用）
-      # 已在build-lib-akdanmaku工作流中构建并提交，此处不再单独构建，节约资源，减少时间
-      # - name: Build danmaku module (akdanmaku)
-      #   working-directory: ./fantasy-bv-source
-      #   run: |
-      #     echo "=== 开始编译弹幕库 (akdanmaku) ==="
-      #     ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
-      #     echo "=== akdanmaku 编译完成 ==="
- 
-      - name: Build release apk files
+      # 根据构建模式执行构建
+      - name: Build apk based on mode
+        id: build-apk
         working-directory: ./fantasy-bv-source
         run: |
-          echo "=== 开始构建主应用 (所有依赖已就位) ==="
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
-          
+          echo "=== 开始构建APK ==="
+          if [ "${{ inputs.incremental_build }}" = "true" ] && [ "${{ steps.check-source-changes.outputs.skip_build }}" = "true" ]; then
+            echo "✅ 增量构建模式：源代码内容无变化"
+            echo "尝试复用最近的成功构建..."
+            # 查找最近构建的APK（基于时间戳）
+            LATEST_APK=$(find . -name "fantasybv-*.apk" -type f -printf "%T@ %p\n" 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+            if [ -n "$LATEST_APK" ] && [ -f "$LATEST_APK" ]; then
+              echo "📦 找到最近APK: $(basename "$LATEST_APK")"
+              mkdir -p ./app/build/outputs/apk/default/release/
+              cp "$LATEST_APK" "./app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk"
+              echo "✅ 已复用现有APK"
+              echo "build_type=reused" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ 未找到可用APK，执行快速构建..."
+              # 使用缓存，跳过测试，快速构建
+              ./gradlew :app:assembleRelease --no-daemon --build-cache --offline --rerun-tasks
+              echo "build_type=fast" >> $GITHUB_OUTPUT
+            fi
+          else
+            # 完整构建或内容有变化
+            if [ "${{ inputs.incremental_build }}" = "true" ]; then
+              echo "🔄 增量构建模式：源代码内容有变化"
+              ./gradlew :app:assembleRelease --no-daemon --build-cache
+              echo "build_type=incremental" >> $GITHUB_OUTPUT
+            else
+              echo "🔨 完整构建模式"
+              ./gradlew :app:assembleRelease --no-daemon --refresh-dependencies
+              echo "build_type=full" >> $GITHUB_OUTPUT
+            fi
+          fi
           echo ""
-          echo "=== 构建完成！查找APK产物 ==="
-          find . -name "*.apk" -type f | grep -i release | while read apk; do
-            echo "  $(ls -lh "$apk")"
-          done || echo "未找到APK文件，请检查构建日志。"
-          
-          mv ./app/build/outputs/apk/default/release/*.apk ./app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk
- 
+          echo "=== 构建完成 ==="
+          # 确保APK文件存在并重命名
+          if ls ./app/build/outputs/apk/default/release/*.apk 1>/dev/null 2>&1; then
+            mv ./app/build/outputs/apk/default/release/*.apk "./app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk"
+            echo "✅ APK: fantasybv-${{ env.BUILD_DATE }}.apk"
+            echo "apk_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ 错误：未生成APK文件"
+            exit 1
+          fi
+
+      # 保存哈希和缓存
+      - name: Save content hash for next build
+        if: ${{ inputs.incremental_build == 'true' && inputs.force_clean_build != 'true' && steps.build-apk.outputs.apk_exists == 'true' }}
+        working-directory: ./fantasy-bv-source
+        run: |
+          echo "=== 保存内容哈希供下次构建使用 ==="
+          mkdir -p .incremental
+          if [ -f ".incremental/current_content_hash.txt" ]; then
+            cp .incremental/current_content_hash.txt .incremental/previous_content_hash.txt
+            echo "✅ 内容哈希已保存: $(cat .incremental/previous_content_hash.txt)"
+            # 保存构建信息
+            echo "构建时间: $(date)" > .incremental/build_info.txt
+            echo "构建日期: ${{ env.BUILD_DATE }}" >> .incremental/build_info.txt
+            echo "构建模式: ${{ steps.build-apk.outputs.build_type }}" >> .incremental/build_info.txt
+            echo "提交哈希: ${{ github.sha }}" >> .incremental/build_info.txt
+          fi
+
+      # 保存Gradle缓存
+      - name: Save Gradle cache
+        if: ${{ inputs.incremental_build == 'true' && inputs.force_clean_build != 'true' }}
+        uses: actions/cache/save@main
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            fantasy-bv-source/.gradle
+            fantasy-bv-source/build-cache
+            fantasy-bv-source/build
+          key: ${{ steps.gradle-cache.outputs.cache-primary-key }}
+
+      # 保存源代码内容哈希缓存
+      - name: Save source content hash cache
+        if: ${{ inputs.incremental_build == 'true' && inputs.force_clean_build != 'true' && steps.build-apk.outputs.apk_exists == 'true' }}
+        uses: actions/cache/save@main
+        with:
+          path: fantasy-bv-source/.incremental
+          key: ${{ runner.os }}-source-hash-${{ github.ref_name }}-${{ steps.check-source-changes.outputs.current_content_hash }}
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 文件路径为基于github.workspace的绝对路径
           P12_KEYSTORE_PATH: "./fantasy-bv-source/keystore.p12 ./fantasy-bv-source/signing.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./fantasy-bv-source/app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk"

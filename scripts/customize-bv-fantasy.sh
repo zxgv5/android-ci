@@ -88,6 +88,12 @@ ci_source_patch \
     "SmallVideoCard.kt" \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
+# 9、配置基于文件内容变化检测的增量构建
+ci_source_patch \
+    "${FANTASY_BV_SOURCE_ROOT}" \
+    "gradle.properties" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+
 # - - - - - - - - - - - - - - - - - -使用 awk 注释kt文件中的所有logger代码 - - - - - - - - - - - - - - - - - -
 # 在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有logger相关内容的行
 # 其中app/shared/src/main/kotlin/dev/aaa1115910/bv/repository/UserRepository.kt需要特殊处理，里面有跨行的logger.info{}表达式
