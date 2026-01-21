@@ -36,7 +36,7 @@ class RecommendViewModel(
     ) {
         var loadCount = 0
         val maxLoadMoreCount = 3
-        if (!loading) {
+        if (!loading && hasMore) { // 添加hasMore检查
             if (recommendVideoList.size == 0) {
                 // first load data
                 while (recommendVideoList.size < 24 && loadCount < maxLoadMoreCount && hasMore) {
@@ -63,12 +63,17 @@ class RecommendViewModel(
                 preferApiType = Prefs.apiType
             )
             beforeAppendData()
-            nextPage = recommendData.nextPage
-            recommendVideoList.addAllWithMainContext(recommendData.items)
             
-            // 如果没有获取到新数据或数据为空，则认为没有更多了
-            if (recommendData.items.isEmpty() || nextPage.hasNext == false) {
+            // 获取新数据
+            val newItems = recommendData.items
+            
+            // 如果没有获取到新数据，则认为没有更多了
+            if (newItems.isEmpty()) {
                 hasMore = false
+            } else {
+                // 更新下一页参数
+                nextPage = recommendData.nextPage
+                recommendVideoList.addAllWithMainContext(newItems)
             }
         }.onFailure {
             logger.fError { "Load recommend video list failed: ${it.stackTraceToString()}" }
