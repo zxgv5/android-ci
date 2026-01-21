@@ -152,6 +152,9 @@ def process_file(filepath):
                 should_comment = True
             elif re.search(r'\bKotlinLogging\.logger\s*\{', line):
                 should_comment = True
+            # 添加对KotlinLogging.logger("...")的注释
+            elif re.search(r'\bKotlinLogging\.logger\s*\(', line):
+                should_comment = True
             elif re.search(r'\blogger\s*\(\s*["\']BvVideoPlayer["\']\s*\)', line):
                 should_comment = True
             elif re.search(r'\bandroidLogger\b', line):
