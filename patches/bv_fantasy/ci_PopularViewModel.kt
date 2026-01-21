@@ -27,15 +27,14 @@ class PopularViewModel(
     // 分页状态
     private var nextPage = PopularVideoPage()
     
-    // 加载状态：private set 防止多线程乱改
+    // 加载状态：保持 private set 防止外部误改
     var loading by mutableStateOf(false)
         private set
     var hasMore by mutableStateOf(true)
         private set
         
-    // 刷新状态（保留用于可能的刷新功能）
-    var refreshing by mutableStateOf(false)
-        private set
+    // 刷新状态：保持 public set，因为 mobile 端需要访问
+    var refreshing by mutableStateOf(true)
 
     // TV端核心加载方法（优化后）
     suspend fun loadMore() {
@@ -68,7 +67,6 @@ class PopularViewModel(
                 if (newItems.isNotEmpty()) {
                     popularVideoList.addAllWithMainContext(newItems)
                     nextPage = popularVideoData.nextPage
-                    // 假设热门视频总是有更多数据，但如果返回为空则认为没有更多
                     hasMore = true
                 } else {
                     // 返回空列表，认为没有更多数据
@@ -139,10 +137,5 @@ class PopularViewModel(
     fun resetPage() {
         nextPage = PopularVideoPage()
         refreshing = true
-    }
-
-    // 完成刷新
-    fun finishRefreshing() {
-        refreshing = false
     }
 }
