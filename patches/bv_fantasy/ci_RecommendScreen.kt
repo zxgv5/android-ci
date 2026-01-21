@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.unit.dp
 import dev.aaa1115910.biliapi.entity.ugc.UgcItem
 import dev.aaa1115910.bv.tv.component.LoadingTip
 import dev.aaa1115910.bv.entity.carddata.VideoCardData
@@ -26,35 +27,35 @@ import dev.aaa1115910.bv.tv.activities.video.UpInfoActivity
 import dev.aaa1115910.bv.tv.activities.video.VideoInfoActivity
 import dev.aaa1115910.bv.tv.component.videocard.SmallVideoCard
 import dev.aaa1115910.bv.tv.util.ProvideListBringIntoViewSpec
-import dev.aaa1115910.bv.viewmodel.home.PopularViewModel
+import dev.aaa1115910.bv.viewmodel.home.RecommendViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun PopularScreen(
+fun RecommendScreen(
     modifier: Modifier = Modifier,
     lazyGridState: LazyGridState = rememberLazyGridState(),
-    popularViewModel: PopularViewModel = koinViewModel()
+    recommendViewModel: RecommendViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     // 纯基础API预加载逻辑：延迟循环检查，无任何冷门依赖
-    LaunchedEffect(lazyGridState, popularViewModel) {
+    LaunchedEffect(lazyGridState, recommendViewModel) {
         while (true) {
             delay(300L)
-            val listSize = popularViewModel.popularVideoList.size
+            val listSize = recommendViewModel.recommendVideoList.size
             // 跳过无数据/加载中/无更多的情况
-            if (listSize == 0 || popularViewModel.loading || !popularViewModel.hasMore) continue
+            if (listSize == 0 || recommendViewModel.loading || !recommendViewModel.hasMore) continue
             
             // 获取可见区域最后一个item索引
             val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            // 提前24项触发加载
-            if (lastVisibleIndex >= listSize - 24) {
+            // 提前15项触发加载
+            if (lastVisibleIndex >= listSize - 15) {
                 scope.launch(Dispatchers.IO) {
-                    popularViewModel.loadMore()
+                    recommendViewModel.loadMore()
                 }
             }
         }
@@ -84,7 +85,7 @@ fun PopularScreen(
             verticalArrangement = Arrangement.spacedBy(spacedBy),
             horizontalArrangement = Arrangement.spacedBy(spacedBy)
         ) {
-            itemsIndexed(popularViewModel.popularVideoList) { _, item ->
+            itemsIndexed(recommendViewModel.recommendVideoList) { _, item ->
                 SmallVideoCard(
                     data = remember(item.aid) {
                         // 核心修复：处理Java Long类型到目标类型的转换，无高阶函数
@@ -97,7 +98,7 @@ fun PopularScreen(
 
                         // 2. danmaku字段：转为Int?，匹配VideoCardData的Int?参数
                         val danmakuValue: Int? = if (item.danmaku != null) {
-                            val danmakuLong = item.danmaku
+                            val danmakuLong = item.danmaku.toLong()
                             // 安全转换：判断是否在Int范围内，避免溢出
                             if (danmakuLong >= Int.MIN_VALUE && danmakuLong <= Int.MAX_VALUE) {
                                 val danmakuInt = danmakuLong.toInt()
@@ -126,26 +127,13 @@ fun PopularScreen(
                 )
             }
 
-            // 加载中占位
-            if (popularViewModel.loading) {
+            if (recommendViewModel.loading) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         LoadingTip()
-                    }
-                }
-            }
-
-            // 无更多数据提示
-            if (!popularViewModel.hasMore && !popularViewModel.loading) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingTip(text = "没有更多了")
                     }
                 }
             }
