@@ -231,7 +231,7 @@ fun CardCover(
             )
             CoverBottomInfo(
                 play = play,
-                danmaku = danmaku,
+                danmaku = danmaku
                 //time = time
             )
         }
