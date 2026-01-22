@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import dev.aaa1115910.bv.util.Prefs
 
 @Composable
 fun DynamicsScreen(
@@ -96,8 +97,9 @@ fun DynamicsScreen(
     }
 
     if (dynamicViewModel.isLogin) {
-        val padding = dimensionResource(R.dimen.grid_padding)
-        val spacedBy = dimensionResource(R.dimen.grid_spacedBy)
+        val padding = dimensionResource(R.dimen.grid_padding) / 2
+        val spacedBy = dimensionResource(R.dimen.grid_spacedBy) / 2
+        val gridColumns = Prefs.gridColumns
 
         ProvideListBringIntoViewSpec {
             LazyVerticalGrid(
@@ -112,7 +114,7 @@ fun DynamicsScreen(
                         }
                         false
                     },
-                columns = GridCells.Fixed(4),
+                columns = GridCells.Fixed(gridColumns),
                 state = lazyGridState,
                 contentPadding = PaddingValues(padding),
                 verticalArrangement = Arrangement.spacedBy(spacedBy),

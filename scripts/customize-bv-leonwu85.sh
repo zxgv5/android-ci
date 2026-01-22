@@ -27,7 +27,6 @@ LEONWU85_BV_CONTROLLERVIDEOINFO_KT="$LEONWU85_BV_SOURCE_ROOT/player/tv/src/main/
 sed -i 's/down = focusRequesters\[if (showNextVideoBtn) "nextVideo" else "speed"\] ?: FocusRequester()/down = focusRequesters["danmaku"] ?: FocusRequester()/' "$LEONWU85_BV_CONTROLLERVIDEOINFO_KT"
 
 # 5、TV端倍速调整，并调整“设置”中的倍速范围
-# 1. 替换第一个文件
 LEONWU85_BV_PLAYERSETTING_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/settings/content/PlayerSetting.kt"
 sed -i \
   -e 's/minValue = 0.25,/minValue = 0.2,/' \
@@ -40,3 +39,32 @@ sed -i \
   -e 's/step = 0.25f,/step = 0.2f,/' \
   -e 's/range = 0.25f..3f,/range = 0.2f..5f,/' \
   "$LEONWU85_BV_PICTUREMENU_KT"
+
+# - - - - - - - - - - - - - - - - - -复杂或容易歧义的修改，用源文件替换实现 - - - - - - - - - - - - - - - - - -
+CI_FILE_UTILS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${CI_FILE_UTILS_SCRIPT_DIR}/ci_file_utils.sh"
+
+# 6、尝试修复“动态”页长按下方向键焦点左移出区问题
+ci_source_patch \
+    "${LEONWU85_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
+    "DynamicViewModel.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_leonwu85"
+
+ci_source_patch \
+    "${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+    "DynamicsScreen.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_leonwu85"
+
+ci_source_patch \
+    "${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
+    "SmallVideoCard.kt" \
+    "${GITHUB_WORKSPACE}/ci_source/patches/bv_leonwu85"
+
+# - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
+# 使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
+echo "注释全部日志记录代码..."
+
+PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${LEONWU85_BV_SOURCE_ROOT}"
+
+echo "logger相关代码注释完成！"
