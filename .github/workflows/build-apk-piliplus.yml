@@ -1,4 +1,4 @@
-name: build-apk-bggrgjqaubcoe-piliplus
+name: build-apk-piliplus
 
 on:
   workflow_dispatch:

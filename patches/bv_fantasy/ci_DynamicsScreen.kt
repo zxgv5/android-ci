@@ -63,7 +63,8 @@ fun DynamicsScreen(
             delay(1L)
             val listSize = dynamicViewModel.dynamicVideoList.size
             // 跳过无数据/加载中/无更多的情况
-            if (listSize == 0 || dynamicViewModel.loading || !dynamicViewModel.hasMore) continue
+            //if (listSize == 0 || dynamicViewModel.loading || !dynamicViewModel.hasMore) continue
+            if (listSize == 0) continue
             
             // 获取可见区域最后一个item索引
             val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -164,29 +165,29 @@ fun DynamicsScreen(
                 }
 
                 // 加载中占位
-                if (dynamicViewModel.loading) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            LoadingTip()
-                        }
-                    }
-                }
+                //if (dynamicViewModel.loading) {
+                //    item(span = { GridItemSpan(maxLineSpan) }) {
+                //        Box(
+                //            modifier = Modifier.fillMaxSize(),
+                //            contentAlignment = Alignment.Center
+                //        ) {
+                //            LoadingTip()
+                //        }
+                //    }
+                //}
 
                 // 无更多数据提示
-                if (!dynamicViewModel.hasMore && !dynamicViewModel.loading) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Text(
-                            modifier = Modifier.fillMaxWidth(),
-                            text = "没有更多了捏",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                //if (!dynamicViewModel.hasMore && !dynamicViewModel.loading) {
+                //    item(span = { GridItemSpan(maxLineSpan) }) {
+                //        Text(
+                //            modifier = Modifier.fillMaxWidth(),
+                //            text = "没有更多了捏",
+                //            color = Color.White,
+                //            fontSize = 14.sp,
+                //            textAlign = TextAlign.Center
+                //        )
+                //    }
+                //}
             }
         }
     } else {

@@ -1,4 +1,4 @@
-name: build-apk-leonwu85-bv
+name: build-apk-bv-leonwu85
 
 on:
   workflow_dispatch:
