@@ -83,10 +83,10 @@ ci_source_patch \
     "DynamicsScreen.kt" \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
-ci_source_patch \
+# ci_source_patch \
     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
-    "SmallVideoCard.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+#     "SmallVideoCard.kt" \
+#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 # 9、尝试修复“推荐”页长按下方向键焦点左移出区问题
 ci_source_patch \
