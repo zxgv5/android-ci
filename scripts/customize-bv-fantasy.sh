@@ -84,7 +84,7 @@ ci_source_patch \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 # ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
+#     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
 #     "SmallVideoCard.kt" \
 #     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
