@@ -40,31 +40,27 @@ sed -i \
   -e 's/range = 0.25f..3f,/range = 0.2f..5f,/' \
   "$LEONWU85_BV_PICTUREMENU_KT"
 
-# - - - - - - - - - - - - - - - - - -复杂或容易歧义的修改，用源文件替换实现 - - - - - - - - - - - - - - - - - -
-CI_FILE_UTILS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${CI_FILE_UTILS_SCRIPT_DIR}/ci_file_utils.sh"
+# - - - - - - - - - - - - - - - - - -更加灵活和后期易变的修改，用python处理实现 - - - - - - - - - - - - - - - - - -
+# 使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
+echo "处理*Screen.kt代码..."
 
-# 6、尝试修复“动态”页长按下方向键焦点左移出区问题
-ci_source_patch \
-    "${LEONWU85_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
-    "DynamicViewModel.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_leonwu85"
+PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ci_source_patch \
-    "${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-    "DynamicsScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_leonwu85"
+LEONWU85_BV_DYNAMICSSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${LEONWU85_BV_DYNAMICSSCREEN_KT}"
 
-ci_source_patch \
-    "${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
-    "SmallVideoCard.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_leonwu85"
+LEONWU85_BV_POPULARSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/PopularScreen.kt"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_popularscreen_kt.py" "${LEONWU85_BV_POPULARSCREEN_KT}"
+
+LEONWU85_BV_RECOMMENDSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/RecommendScreen.kt"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_recommendscreen_kt.py" "${LEONWU85_BV_RECOMMENDSCREEN_KT}"
+
+echo "*Screen.kt代码处理完成..."
 
 # - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
 # 使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
 echo "注释全部日志记录代码..."
 
-PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${LEONWU85_BV_SOURCE_ROOT}"
 
 echo "logger相关代码注释完成！"

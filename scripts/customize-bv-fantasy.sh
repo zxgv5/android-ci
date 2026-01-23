@@ -28,12 +28,12 @@ FANTASY_BV_CONTROLLERVIDEOINFO_KT="$FANTASY_BV_SOURCE_ROOT/player/tv/src/main/ko
 sed -i 's/^\([[:space:]]*\)down = focusRequesters\[if (showNextVideoBtn) "nextVideo" else "speed"\] ?: FocusRequester()/\1down = focusRequesters["danmaku"] ?: FocusRequester()/' "$FANTASY_BV_CONTROLLERVIDEOINFO_KT"
 
 # 5、隐藏左侧边栏中的“搜索”、“UGC”和“PGC”三个页面导航按钮，尤其是UGC和PGC，太卡了
-FANTASY_BV_SOURCE_ATSMKDABTSM_DRAWERCONTENT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+FANTASY_BV_DRAWERCONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
 sed -i \
   -e 's/^\([[:space:]]*\)DrawerItem\.Search,/\1\/\/DrawerItem.Search,/' \
   -e 's/^\([[:space:]]*\)DrawerItem\.UGC,/\1\/\/DrawerItem.UGC,/' \
   -e 's/^\([[:space:]]*\)DrawerItem\.PGC,/\1\/\/DrawerItem.PGC,/' \
-  "$FANTASY_BV_SOURCE_ATSMKDABTSM_DRAWERCONTENT"
+  "$FANTASY_BV_DRAWERCONTENT_KT"
 
 # 6、隐藏顶部“追番”和“稍后看”两个导航标签
 FANTASY_BV_TOPNAV_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/TopNav.kt"
@@ -72,16 +72,32 @@ ci_source_patch \
     "PlayerSetting.kt" \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
+# - - - - - - - - - - - - - - - - - -更加灵活和后期易变的修改，用python处理实现 - - - - - - - - - - - - - - - - - -
+# 使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
+echo "处理*Screen.kt代码..."
+
+PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+FANTASY_BV_DYNAMICSSCREEN_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${FANTASY_BV_DYNAMICSSCREEN_KT}"
+
+FANTASY_BV_POPULARSCREEN_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/PopularScreen.kt"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_popularscreen_kt.py" "${FANTASY_BV_POPULARSCREEN_KT}"
+
+FANTASY_BV_RECOMMENDSCREEN_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/RecommendScreen.kt"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_recommendscreen_kt.py" "${FANTASY_BV_RECOMMENDSCREEN_KT}"
+
+echo "*Screen.kt代码处理完成..."
 # 8、尝试修复“动态”页长按下方向键焦点左移出区问题
 # ci_source_patch \
 #     "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
 #     "DynamicViewModel.kt" \
 #     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-    "DynamicsScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# ci_source_patch \
+#     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+#     "DynamicsScreen.kt" \
+#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 # ci_source_patch \
 #     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/videocard" \
@@ -89,26 +105,26 @@ ci_source_patch \
 #     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 # 9、尝试修复“推荐”页长按下方向键焦点左移出区问题
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
-    "RecommendViewModel.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# ci_source_patch \
+#     "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
+#     "RecommendViewModel.kt" \
+#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-    "RecommendScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# ci_source_patch \
+#     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+#     "RecommendScreen.kt" \
+#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 #10、尝试修复“热门”页长按下方向键焦点左移出区问题
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
-    "PopularViewModel.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# ci_source_patch \
+#     "${FANTASY_BV_SOURCE_ROOT}/app/shared/src/main/kotlin/dev/aaa1115910/bv/viewmodel/home" \
+#     "PopularViewModel.kt" \
+#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-    "PopularScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
+# ci_source_patch \
+#     "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
+#     "PopularScreen.kt" \
+#     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 # - - - - - - - - - - - - - - - - - -使用 awk 注释kt文件中的所有logger代码 - - - - - - - - - - - - - - - - - -
 # 在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有logger相关内容的行
@@ -135,7 +151,7 @@ ci_source_patch \
 # 使用python在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
 echo "注释全部日志记录代码..."
 
-PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${FANTASY_BV_SOURCE_ROOT}"
 
 echo "logger相关代码注释完成！"
