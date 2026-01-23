@@ -71,7 +71,7 @@ fun DynamicsScreen(
             // 提前24项触发加载
             if (lastVisibleIndex >= listSize - 24) {
                 scope.launch(Dispatchers.IO) {
-                    dynamicViewModel.loadMore()
+                    dynamicViewModel.loadMoreVideo()
                 }
             }
         }
