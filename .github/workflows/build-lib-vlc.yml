@@ -38,11 +38,11 @@ jobs:
           rm -rf "${{ env.BUILD_DIR }}"
           git clone --depth 1 --branch "${{ env.SOURCE_BRANCH }}" "${{ env.SOURCE_REPO }}" "${{ env.BUILD_DIR }}"
 
-      - name: Setup java 17
+      - name: Setup java 21
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
           cache: 'gradle'
 
       - name: Install system dependencies
