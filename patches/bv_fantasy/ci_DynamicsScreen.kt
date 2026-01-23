@@ -60,7 +60,7 @@ fun DynamicsScreen(
     // 纯基础API预加载逻辑：延迟循环检查，无任何冷门依赖
     LaunchedEffect(lazyGridState, dynamicViewModel) {
         while (true) {
-            delay(600L)
+            delay(1L)
             val listSize = dynamicViewModel.dynamicVideoList.size
             // 跳过无数据/加载中/无更多的情况
             if (listSize == 0 || dynamicViewModel.loading || !dynamicViewModel.hasMore) continue
