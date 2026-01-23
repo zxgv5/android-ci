@@ -24,11 +24,11 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      - name: Setup jdk 17
+      - name: Setup jdk 21
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Clone androidx media repository
         run: |
