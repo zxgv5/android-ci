@@ -119,7 +119,7 @@ fun DynamicsScreen(
                     //#-s2        currentFocusedIndex = -1
                     //#-s2    }
                     //#-s2}
-                    .onFocusChanged {}
+                    .onFocusChanged {} //#+s2
                     .onPreviewKeyEvent {
                         if(it.type == KeyEventType.KeyUp && it.key == Key.Menu) {
                             context.startActivity(Intent(context, FollowActivity::class.java))
