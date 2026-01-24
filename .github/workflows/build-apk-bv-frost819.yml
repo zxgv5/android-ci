@@ -47,6 +47,23 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
+      # 安装python3（改用官方action，避免apt兼容性问题）
+      - name: Set up python 3.12
+        uses: actions/setup-python@main
+        with:
+          python-version: '3.12'
+
+      # 验证版本（无需手动配置python3命令，action已自动处理）
+      - name: Verify python and pip versions
+        run: |
+          python3 --version
+          pip3 --version
+
+      - name: Install python dependencies
+        run: |
+          # 目前的脚本无第三方依赖，此步骤仅保留作环境校验
+          echo "python环境已就绪，无第三方依赖需安装"
+
       - name: Customize scripts
         run: |
           chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-frost819.sh
