@@ -55,7 +55,7 @@ import dev.aaa1115910.bv.viewmodel.home.DynamicViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
-
+import kotlinx.coroutines.delay //#+ s3
 @Composable
 fun DynamicsScreen(
     modifier: Modifier = Modifier,
@@ -64,14 +64,26 @@ fun DynamicsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var currentFocusedIndex by remember { mutableIntStateOf(-1) }
-    val shouldLoadMore by remember {
-        derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex + 12 > dynamicViewModel.dynamicVideoList.size }
-    }
-    val showTip by remember {
-        derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0 }
-    }
-
+    //#-s3 var currentFocusedIndex by remember { mutableIntStateOf(-1) }
+    //#-s3 val shouldLoadMore by remember {
+    //#-s3     derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex + 12 > dynamicViewModel.dynamicVideoList.size }
+    //#-s3 }
+    //#-s3 val showTip by remember {
+    //#-s3     derivedStateOf { dynamicViewModel.dynamicVideoList.isNotEmpty() && currentFocusedIndex >= 0 }
+    //#-s3 }
+    LaunchedEffect(lazyGridState, dynamicViewModel) {
+        while (true) {
+            delay(1L)
+            val listSize = dynamicViewModel.dynamicVideoList.size
+            if (listSize == 0) continue
+            val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            if (lastVisibleIndex >= listSize - 24) {
+                scope.launch(Dispatchers.IO) {
+                    dynamicViewModel.loadMoreVideo()
+                }
+            }
+        }
+    } //#+ s3
     val onClickVideo: (DynamicVideo) -> Unit = { dynamic ->
         VideoInfoActivity.actionStart(
             context = context,
@@ -90,13 +102,13 @@ fun DynamicsScreen(
     }
 
     //不能直接使用 LaunchedEffect(currentFocusedIndex)，会导致整个页面重组
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) {
-            scope.launch(Dispatchers.IO) {
-                dynamicViewModel.loadMoreVideo()
-            }
-        }
-    }
+    //#-s3 LaunchedEffect(shouldLoadMore) {
+    //#-s3     if (shouldLoadMore) {
+    //#-s3         scope.launch(Dispatchers.IO) {
+    //#-s3             dynamicViewModel.loadMoreVideo()
+    //#-s3         }
+    //#-s3     }
+    //#-s3 }
 
     if (dynamicViewModel.isLogin) {
         val padding = dimensionResource(R.dimen.grid_padding)
@@ -119,7 +131,7 @@ fun DynamicsScreen(
                     //#-s2        currentFocusedIndex = -1
                     //#-s2    }
                     //#-s2}
-                    .onFocusChanged {} //#+s2
+                    .onFocusChanged {} //#+s2 s2+s1未起效
                     .onPreviewKeyEvent {
                         if(it.type == KeyEventType.KeyUp && it.key == Key.Menu) {
                             context.startActivity(Intent(context, FollowActivity::class.java))
