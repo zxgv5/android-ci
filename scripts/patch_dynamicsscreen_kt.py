@@ -9,11 +9,7 @@ def process_kt_file(filename):
     lines_to_delete = []
     for i, line in enumerate(lines):
         line_content = line.strip()
-        # 删除第一个函数
-        if "var currentFocusedIndex by remember { mutableIntStateOf(-1) }" in line_content:
-            lines_to_delete.append(i)
-        
-        # 删除第二个函数（可能跨行）
+        # 1. 删除shouldLoadMore函数
         if "val shouldLoadMore by remember {" in line_content:
             # 找到这个函数的结束位置
             j = i
@@ -33,25 +29,7 @@ def process_kt_file(filename):
                     break
                 j += 1
         
-        # 删除第三个函数
-        if "val showTip by remember {" in line_content:
-            j = i
-            brace_count = 0
-            in_braces = False
-            while j < len(lines):
-                if "{" in lines[j]:
-                    brace_count += 1
-                    in_braces = True
-                if "}" in lines[j]:
-                    brace_count -= 1
-                if in_braces and brace_count == 0:
-                    for k in range(i, j + 1):
-                        if k not in lines_to_delete:
-                            lines_to_delete.append(k)
-                    break
-                j += 1
-        
-        # 删除第四个函数
+        # 2. 删除LaunchedEffect函数
         if "LaunchedEffect(shouldLoadMore) {" in line_content:
             j = i
             brace_count = 0
@@ -68,47 +46,6 @@ def process_kt_file(filename):
                             lines_to_delete.append(k)
                     break
                 j += 1
-        
-        # 删除第一个语句块（if (showTip) { ... }）
-        if "if (showTip) {" in line_content:
-            j = i
-            brace_count = 0
-            in_braces = False
-            while j < len(lines):
-                if "{" in lines[j]:
-                    brace_count += 1
-                    in_braces = True
-                if "}" in lines[j]:
-                    brace_count -= 1
-                if in_braces and brace_count == 0:
-                    for k in range(i, j + 1):
-                        if k not in lines_to_delete:
-                            lines_to_delete.append(k)
-                    break
-                j += 1
-        
-        # 删除第二个语句块（.onFocusChanged{ ... }）
-        if ".onFocusChanged{" in line_content or ".onFocusChanged{" in line:
-            j = i
-            brace_count = 0
-            in_braces = False
-            while j < len(lines):
-                if "{" in lines[j]:
-                    brace_count += 1
-                    in_braces = True
-                if "}" in lines[j]:
-                    brace_count -= 1
-                if in_braces and brace_count == 0:
-                    for k in range(i, j + 1):
-                        if k not in lines_to_delete:
-                            lines_to_delete.append(k)
-                    break
-                j += 1
-        
-        # 删除第三个语句块（onFocus = { currentFocusedIndex = index }）
-        if "onFocus = { currentFocusedIndex = index }" in line_content:
-            lines_to_delete.append(i)
-    
     # 删除所有标记的行（从后往前删除，避免索引问题）
     lines_to_delete.sort(reverse=True)
     for idx in lines_to_delete:
@@ -126,9 +63,47 @@ def process_kt_file(filename):
         if "import org.koin.androidx.compose.koinViewModel" in line.strip():
             new_lines.append("import kotlinx.coroutines.delay\n")
         
-        # 2. 在val scope = rememberCoroutineScope()后插入LaunchedEffect代码块
-        if "val scope = rememberCoroutineScope()" in line.strip():
-            launcher_code = """    LaunchedEffect(lazyGridState, dynamicViewModel) {
+        i += 1
+    
+    # 第三部分：在showTip语句后插入LaunchedEffect代码块
+    # 重新处理new_lines，因为之前已经在其中插入了import
+    temp_lines = []
+    i = 0
+    while i < len(new_lines):
+        line = new_lines[i]
+        temp_lines.append(line)
+        
+        # 查找val showTip by remember语句
+        if "val showTip by remember {" in line.strip():
+            # 找到这个多行语句的结束位置
+            brace_count = 0
+            found_start = False
+            
+            # 首先找到语句的开始大括号
+            for char in line:
+                if char == '{':
+                    brace_count += 1
+                    found_start = True
+            
+            # 继续查找直到所有大括号匹配完成
+            j = i
+            while j < len(new_lines) and brace_count > 0:
+                if j != i:  # 第一行已经处理过了
+                    temp_lines.append(new_lines[j])
+                    # 统计这一行中的大括号
+                    for char in new_lines[j]:
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                j += 1
+                
+            # 更新i到语句的结束位置
+            i = j - 1  # 因为循环末尾会i+=1
+            
+            # 在showTip语句结束后插入LaunchedEffect代码
+            if brace_count == 0:  # 确保括号匹配完成
+                launcher_code = """    LaunchedEffect(lazyGridState, dynamicViewModel) {
         while (true) {
             delay(1L)
             val listSize = dynamicViewModel.dynamicVideoList.size
@@ -142,43 +117,16 @@ def process_kt_file(filename):
         }
     }
 """
-            # 检查下一行是否为空行，如果不是则添加空行
-            if i + 1 < len(lines) and lines[i + 1].strip() != "":
-                new_lines.append("\n")
-            new_lines.append(launcher_code)
-        
-        # 3. 在.onPreviewKeyEvent {前一行插入.onFocusChanged {}
-        if ".onPreviewKeyEvent {" in line.strip() and i > 0:
-            # 在前一行插入
-            new_lines.insert(-1, "                    .onFocusChanged {}\n")
-        
-        # 4. 在data = remember(item.aid) {后一行插入变量声明代码块
-        if "data = remember(item.aid) {" in line.strip() and i + 1 < len(lines):
-            data_code = """                            val playValue: Long? = if (item.play != null && item.play != -1L) {
-                                item.play
-                            } else {
-                                null
-                            }
-                            val danmakuValue: Int? = if (item.danmaku != null) {
-                                val danmakuLong = item.danmaku
-                                if (danmakuLong >= Int.MIN_VALUE && danmakuLong <= Int.MAX_VALUE) {
-                                    val danmakuInt = danmakuLong.toInt()
-                                    if (danmakuInt != -1) danmakuInt else null
-                                } else {
-                                    null
-                                }
-                            } else {
-                                null
-                            }
-"""
-            # 插入到当前行之后
-            new_lines.append(data_code)
-        
-        # 5. 在onLongClick = {onLongClickVideo(item) },后一行插入onFocus = {}
-        if "onLongClick = {onLongClickVideo(item) }," in line.strip() and i + 1 < len(lines):
-            new_lines.append("                        onFocus = {}\n")
+                # 检查下一行是否为空行，如果不是则添加空行
+                if i + 1 < len(new_lines) and new_lines[i + 1].strip() != "":
+                    temp_lines.append("\n")
+                temp_lines.append(launcher_code)
         
         i += 1
+    
+    # 如果temp_lines不为空，使用它作为最终结果
+    if temp_lines:
+        new_lines = temp_lines
     
     # 写入文件
     with open(filename, 'w', encoding='utf-8') as f:

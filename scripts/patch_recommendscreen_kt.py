@@ -9,11 +9,7 @@ def process_kt_file(filename):
     lines_to_delete = []
     for i, line in enumerate(lines):
         line_content = line.strip()
-        # 删除第一个函数
-        if "var currentFocusedIndex by remember { mutableIntStateOf(0) }" in line_content:
-            lines_to_delete.append(i)
-        
-        # 删除第二个函数（可能跨行）
+        # 删除shouldLoadMore函数
         if "val shouldLoadMore by remember {" in line_content:
             # 找到这个函数的结束位置
             j = i
@@ -32,7 +28,7 @@ def process_kt_file(filename):
                             lines_to_delete.append(k)
                     break
                 j += 1
-        # 删除第三个函数
+        # 删除LaunchedEffect函数
         if "LaunchedEffect(shouldLoadMore) {" in line_content:
             j = i
             brace_count = 0
@@ -50,10 +46,6 @@ def process_kt_file(filename):
                     break
                 j += 1
 
-        # 删除第一个语句块（onFocus = { currentFocusedIndex = index }）
-        if "onFocus = { currentFocusedIndex = index }" in line_content:
-            lines_to_delete.append(i)
-    
     # 删除所有标记的行（从后往前删除，避免索引问题）
     lines_to_delete.sort(reverse=True)
     for idx in lines_to_delete:
@@ -65,14 +57,14 @@ def process_kt_file(filename):
     i = 0
     while i < len(lines):
         line = lines[i]
-        new_lines.append(line)
         
         # 1. 在import org.koin.androidx.compose.koinViewModel后插入import kotlinx.coroutines.delay
         if "import org.koin.androidx.compose.koinViewModel" in line.strip():
+            new_lines.append(line)
             new_lines.append("import kotlinx.coroutines.delay\n")
         
-        # 2. 在val scope = rememberCoroutineScope()后插入LaunchedEffect代码块
-        if "val scope = rememberCoroutineScope()" in line.strip():
+        # 2. 在val padding = dimensionResource(R.dimen.grid_padding)前一行插入LaunchedEffect代码块
+        elif "val padding = dimensionResource(R.dimen.grid_padding)" in line.strip():
             launcher_code = """    LaunchedEffect(lazyGridState, recommendViewModel) {
         while (true) {
             delay(1L)
@@ -87,36 +79,15 @@ def process_kt_file(filename):
         }
     }
 """
-            # 检查下一行是否为空行，如果不是则添加空行
-            if i + 1 < len(lines) and lines[i + 1].strip() != "":
+            # 检查前一行是否为空行，如果不是则添加空行
+            if len(new_lines) > 0 and new_lines[-1].strip() != "":
                 new_lines.append("\n")
             new_lines.append(launcher_code)
+            new_lines.append("\n")  # 在代码块后添加一个空行
+            new_lines.append(line)
         
-        # 3. 在data = remember(item.aid) {后一行插入变量声明代码块
-        if "data = remember(item.aid) {" in line.strip() and i + 1 < len(lines):
-            data_code = """                        val playValue: Long? = if (item.play != null && item.play != -1L) {
-                            item.play
-                        } else {
-                            null
-                        }
-                        val danmakuValue: Int? = if (item.danmaku != null) {
-                            val danmakuLong = item.danmaku
-                            if (danmakuLong >= Int.MIN_VALUE && danmakuLong <= Int.MAX_VALUE) {
-                                val danmakuInt = danmakuLong.toInt()
-                                if (danmakuInt != -1) danmakuInt else null
-                            } else {
-                                null
-                            }
-                        } else {
-                            null
-                        }
-"""
-            # 插入到当前行之后
-            new_lines.append(data_code)
-            
-        # 4. 在onLongClick = {onLongClickVideo(item) },后一行插入onFocus = {}
-        if "onLongClick = {onLongClickVideo(item) }," in line.strip() and i + 1 < len(lines):
-            new_lines.append("                    onFocus = {}\n")
+        else:
+            new_lines.append(line)
         
         i += 1
     

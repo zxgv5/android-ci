@@ -97,8 +97,8 @@ echo "*Screen.kt代码处理完成..."
 # 目前可以确定仅修改*Screen.kt即可解决加载慢和焦点漂移问题
 # 下面进行进一步进一步调试，以便找到最小有效修改
 ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home" \
-    "DynamicsScreen.kt" \
+    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/user" \
+    "HistoryScreen.kt" \
     "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
 
 
