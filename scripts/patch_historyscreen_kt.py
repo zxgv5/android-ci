@@ -130,7 +130,7 @@ import kotlinx.coroutines.launch
 
     LaunchedEffect(lazyGridState, historyViewModel) {
         while (true) {
-            delay(200L)
+            delay(100L)
             val listSize = historyViewModel.histories.size
             if (listSize == 0) continue
             val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
