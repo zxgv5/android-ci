@@ -32,7 +32,7 @@ sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV R8 Test.*<\/string
 # 使用python在${FROST819_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
 echo "注释全部日志记录代码..."
 
-#PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${FROST819_BV_SOURCE_ROOT}"
 
 echo "logger相关代码注释完成！"
