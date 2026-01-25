@@ -67,8 +67,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.debounce
+
 """
             new_lines.append(new_imports)
         
@@ -99,21 +98,16 @@ import kotlinx.coroutines.flow.debounce
             
             # 插入新的代码
             scaffold_code = """    val lazyGridState = rememberLazyGridState()
-    LaunchedEffect(lazyGridState) {
-        snapshotFlow { 
-            lazyGridState.firstVisibleItemIndex 
-        }
-        .drop(1) // 跳过初始值
-        .debounce(100) // 100ms防抖
-        .collect { firstVisibleIndex ->
+    LaunchedEffect(lazyGridState, recommendViewModel) {
+        while (true) {
+            delay(100L)
             val visibleCount = lazyGridState.layoutInfo.visibleItemsInfo.size
             val lastVisibleIndex = firstVisibleIndex + visibleCount - 1
             val totalItems = historyViewModel.histories.size
-            // 当接近底部且还有更多数据时触发加载
             if (lastVisibleIndex >= totalItems - 24 && 
-                !historyViewModel.noMore) {
-                // 移除loading检查
-                historyViewModel.update()
+               !historyViewModel.noMore) {
+               historyViewModel.update()
+               //historyViewModel.loadMoreVideo()
             }
         }
     }
