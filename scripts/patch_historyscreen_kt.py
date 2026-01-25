@@ -10,37 +10,8 @@ def process_kt_file(filename):
     for i, line in enumerate(lines):
         line_content = line.strip()
         
-        # 1. 删除函数LaunchedEffect(Unit)
-        if "LaunchedEffect(Unit)" in line_content and "{" in line_content:
-            # 找到这个函数的结束位置
-            j = i
-            brace_count = 0
-            in_braces = False
-            
-            # 统计当前行的大括号
-            for char in line_content:
-                if char == '{':
-                    brace_count += 1
-                    in_braces = True
-            
-            # 继续查找直到所有大括号匹配完成
-            while j < len(lines) and brace_count > 0:
-                if j != i:  # 第一行已经处理过了
-                    # 统计这一行中的大括号
-                    for char in lines[j]:
-                        if char == '{':
-                            brace_count += 1
-                        elif char == '}':
-                            brace_count -= 1
-                
-                # 标记要删除的行
-                if j not in lines_to_delete:
-                    lines_to_delete.append(j)
-                
-                j += 1
-        
-        # 2. 删除onFocus代码块
-        elif "onFocus = {" in line_content:
+        # 1. 删除onFocus代码块
+        if "onFocus = {" in line_content:
             # 找到这个代码块的结束位置
             j = i
             brace_count = 0
@@ -126,21 +97,20 @@ import kotlinx.coroutines.launch
             
             # 插入新的代码
             scaffold_code = """    val lazyGridState = rememberLazyGridState()
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(lazyGridState, historyViewModel) {
-        while (true) {
-            delay(100L)
-            val listSize = historyViewModel.histories.size
-            if (listSize == 0) continue
-            val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            if (lastVisibleIndex >= listSize - 24 && !historyViewModel.noMore) {
-                scope.launch(Dispatchers.IO) {
+    LaunchedEffect(lazyGridState.isScrollInProgress) {
+        if (lazyGridState.isScrollInProgress) {
+            val lastVisibleItem = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()
+            if (lastVisibleItem != null) {
+                val lastIndex = lastVisibleItem.index
+                if (lastIndex >= historyViewModel.histories.size - 24 && 
+                    !historyViewModel.noMore && 
+                    !historyViewModel.loading) {
                     historyViewModel.update()
                 }
             }
         }
     }
+
 """
             new_lines.append(scaffold_code)
             
