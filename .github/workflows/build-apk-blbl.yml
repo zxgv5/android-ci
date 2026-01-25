@@ -8,10 +8,12 @@ on:
         description: "Version name (e.g. 0.1.1)"
         required: true
         default: "0.1.1"
+        type: string
       changelog:
         description: "Release notes/changelog (optional; supports multiline)"
         required: false
         default: ""
+        type: string
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
@@ -54,11 +56,13 @@ jobs:
           distribution: "temurin"
 
       - name: Decode keystore
+        working-directory: ./blbl_source
         run: |
           mkdir -p keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
 
       - name: Build release apk
+        working-directory: ./blbl_source
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -68,12 +72,6 @@ jobs:
           ./gradlew assembleRelease -PversionName=${{ inputs.version_name }} -PversionCode=${{ github.run_number }}
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/blbl-${{ env.BUILD_DATE }}.apk"
-
-      - name: Upload release apk
-        uses: actions/upload-artifact@main
-        with:
-          name: app-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
