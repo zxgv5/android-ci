@@ -106,8 +106,8 @@ import kotlinx.coroutines.launch
             val totalItems = historyViewModel.histories.size
             if (lastVisibleIndex >= totalItems - 24 && 
                !historyViewModel.noMore) {
-               historyViewModel.update()
-               //historyViewModel.loadMoreVideo()
+               // historyViewModel.update()
+               historyViewModel.loadMoreVideo()
             }
         }
     }
