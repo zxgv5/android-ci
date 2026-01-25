@@ -98,16 +98,17 @@ import kotlinx.coroutines.launch
             
             # 插入新的代码
             scaffold_code = """    val lazyGridState = rememberLazyGridState()
+    val scope = rememberCoroutineScope()
     LaunchedEffect(lazyGridState, historyViewModel) {
         while (true) {
             delay(100L)
-            val visibleCount = lazyGridState.layoutInfo.visibleItemsInfo.size
+            val listSize = historyViewModel.histories.size
+            if (listSize == 0) continue
             val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            val totalItems = historyViewModel.histories.size
-            if (lastVisibleIndex >= totalItems - 24 && 
-               !historyViewModel.noMore) {
-               // historyViewModel.update()
-               historyViewModel.loadMore()
+            if (lastVisibleIndex >= listSize - 24 && !historyViewModel.noMore) {
+                scope.launch(Dispatchers.IO) {
+                    historyViewModel.update()
+                }
             }
         }
     }
