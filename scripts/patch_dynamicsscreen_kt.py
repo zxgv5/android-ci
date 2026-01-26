@@ -105,7 +105,7 @@ def process_kt_file(filename):
             if brace_count == 0:  # 确保括号匹配完成
                 launcher_code = """    LaunchedEffect(lazyGridState, dynamicViewModel) {
         while (true) {
-            delay(500L)
+            delay(50L)
             val listSize = dynamicViewModel.dynamicVideoList.size
             if (listSize == 0) continue
             val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
