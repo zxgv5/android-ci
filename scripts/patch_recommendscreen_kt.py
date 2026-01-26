@@ -67,7 +67,7 @@ def process_kt_file(filename):
         elif "val padding = dimensionResource(R.dimen.grid_padding)" in line.strip():
             launcher_code = """    LaunchedEffect(lazyGridState, recommendViewModel) {
         while (true) {
-            delay(50L)
+            delay(150L)
             val listSize = recommendViewModel.recommendVideoList.size
             if (listSize == 0) continue
             val lastVisibleIndex = lazyGridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
