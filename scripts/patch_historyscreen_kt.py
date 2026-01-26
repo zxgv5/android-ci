@@ -83,12 +83,12 @@ import kotlinx.coroutines.launch
         line = lines[i]
         
         # 替换padding和spacing的值，这3句替换都是针对leonwu85版本的修改，不对fantasy-bv起作用
-        if "contentPadding = PaddingValues(12.dp)" in line.strip():
-            line = line.replace("12.dp", "24.dp")
-        elif "verticalArrangement = Arrangement.spacedBy(12.dp)" in line.strip():
-            line = line.replace("12.dp", "24.dp")
-        elif "horizontalArrangement = Arrangement.spacedBy(12.dp)" in line.strip():
-            line = line.replace("12.dp", "24.dp")
+        # if "contentPadding = PaddingValues(12.dp)" in line.strip():
+        #     line = line.replace("12.dp", "24.dp")
+        # elif "verticalArrangement = Arrangement.spacedBy(12.dp)" in line.strip():
+        #     line = line.replace("12.dp", "24.dp")
+        # elif "horizontalArrangement = Arrangement.spacedBy(12.dp)" in line.strip():
+        #     line = line.replace("12.dp", "24.dp")
         
         new_lines.append(line)
         
