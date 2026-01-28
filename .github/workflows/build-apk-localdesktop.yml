@@ -60,7 +60,8 @@ jobs:
 
       - name: Update manifest.yaml to target api 35
         run: |
-          sed -i 's/target_sdk_version: 33/target_sdk_version: 36/' manifest.yaml
+          sed -i 's/target_sdk_version: 33/target_sdk_version: 36/'  
+"${{ github.workspace }}/localdesktop_source/manifest.yaml"
 
       - name: Install llvm
         run: sudo apt-get update && sudo apt-get install -y llvm
