@@ -2,7 +2,6 @@ name: build-apk-bv-leonwu85
 
 on:
   workflow_dispatch:
-  workflow_call:
     inputs:
       repo_branch:
         type: string
