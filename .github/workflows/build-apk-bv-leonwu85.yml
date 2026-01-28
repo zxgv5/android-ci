@@ -5,7 +5,7 @@ on:
   workflow_call:
     inputs:
       repo_branch:
-        type: choice
+        type: string
         description: '分支'
         required: true
         default: 'feature-customisation-0001'
