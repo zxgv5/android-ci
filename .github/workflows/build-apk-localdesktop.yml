@@ -219,5 +219,5 @@ jobs:
         with:
           P12_KEYSTORE_PATH: "./target/x/release/android/gradle/app/release-key.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "${{ github.workspace }}/dist/localdesktop-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "$./dist/localdesktop-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-localdesktop"
