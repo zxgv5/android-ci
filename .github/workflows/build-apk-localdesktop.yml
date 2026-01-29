@@ -35,7 +35,13 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
+      - name: Debug directory structure
+        run: |
+          echo "Workspace: ${{ github.workspace }}"
+          echo "ci_source contents:"
+          find "${{ github.workspace }}/ci_source" -type f -name "*.rs" -o -name "*.toml" | head -10
+
       - name: Initialize build environment
         id: init
         run: |
@@ -94,15 +100,31 @@ jobs:
       # - name: Build xbuild
       #   working-directory: patches/xbuild
       #   run: cargo install --path xbuild
- 
-      - name: Build xbuild
-        working-directory: ${{ github.workspace }}/ci_source/patches/xbuild
+
+      - name: Build or install xbuild
         run: |
-          # 确保在正确的目录
-          pwd
-          ls -la
-          cargo install --path .
- 
+          echo "Looking for xbuild source..."
+          
+          # 检查可能的路径
+          POSSIBLE_PATHS=(
+            "${{ github.workspace }}/ci_source/patches/xbuild"
+            "${{ github.workspace }}/ci_source"
+            "${{ github.workspace }}/localdesktop_source/patches/xbuild"
+            "${{ github.workspace }}/localdesktop_source"
+          )
+          for path in "${POSSIBLE_PATHS[@]}"; do
+            if [ -f "$path/Cargo.toml" ]; then
+              echo "Found Cargo.toml at: $path"
+              cd "$path"
+              echo "Building xbuild from $path"
+              cargo install --path .
+              exit 0
+            fi
+          done
+          
+          echo "No xbuild source found, installing from crates.io"
+          cargo install xbuild
+
       - name: Build apk
         run: x build --release --platform=android --arch=arm64 --format=apk
  
