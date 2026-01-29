@@ -175,8 +175,7 @@ jobs:
           find . -path "*/build/outputs/bundle/*" -name "*.aab" 2>/dev/null | head -10
  
       - name: Sign the apk (pkcs12)
-        # working-directory: ./localdesktop_source
-        working-directory: ${{ github.workspace }}/localdesktop_source
+        working-directory: ${{ github.workspace }}
         run: |
           # 设置Android build-tools路径
           export ANDROID_HOME=/usr/local/lib/android/sdk
@@ -191,10 +190,10 @@ jobs:
             --ks-pass "pass:${{ env.ANDROID_KEYSTORE_PASSWORD }}" \
             --ks-key-alias "${{ env.ANDROID_KEY_ALIAS }}" \
             --ks-type PKCS12 \
-            --out "../dist/localdesktop-${{ env.BUILD_DATE }}.apk" \
+            --out "./dist/localdesktop-${{ env.BUILD_DATE }}.apk" \
             "$./target/x/release/android/gradle/app/build/outputs/apk/release/app-release-unsigned.apk"
           # 验证签名
-          apksigner verify --verbose "../dist/localdesktop-${{ env.BUILD_DATE }}.apk"
+          apksigner verify --verbose "./dist/localdesktop-${{ env.BUILD_DATE }}.apk"
  
       # - name: Build AAB
       #   run: x build --release --platform=android --arch=arm64 --format=aab
