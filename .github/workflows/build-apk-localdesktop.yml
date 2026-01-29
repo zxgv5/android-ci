@@ -36,12 +36,6 @@ jobs:
         with:
           path: ci_source
 
-      - name: Debug directory structure
-        run: |
-          echo "Workspace: ${{ github.workspace }}"
-          echo "ci_source contents:"
-          find "${{ github.workspace }}/ci_source" -type f -name "*.rs" -o -name "*.toml" | head -10
-
       - name: Initialize build environment
         id: init
         run: |
@@ -102,7 +96,33 @@ jobs:
       #   run: cargo install --path xbuild
 
       - name: Build xbuild
-        run: cargo install --path "${{ github.workspace }}/localdesktop_source/patches/xbuild" --package xbuild
+        run: |
+          WORKSPACE_DIR="${{ github.workspace }}/localdesktop_source/patches/xbuild"
+          
+          echo "Current directory: $(pwd)"
+          echo "Workspace directory: $WORKSPACE_DIR"
+          
+          # 检查目录结构
+          if [ -d "$WORKSPACE_DIR/xbuild" ] && [ -f "$WORKSPACE_DIR/xbuild/Cargo.toml" ]; then
+            echo "Found xbuild package in subdirectory"
+            cargo install --path "$WORKSPACE_DIR/xbuild"
+          elif [ -d "$WORKSPACE_DIR/src" ] && [ -f "$WORKSPACE_DIR/Cargo.toml" ]; then
+            echo "Found package in workspace root"
+            cargo install --path "$WORKSPACE_DIR"
+          else
+            echo "Trying to build from workspace..."
+            cd "$WORKSPACE_DIR"
+            
+            # 尝试不同的方法
+            echo "Method 1: cargo install (without --path)"
+            if cargo install 2>/dev/null; then
+              echo "Success with method 1"
+              exit 0
+            fi
+            
+            echo "Method 2: cargo install from crates.io"
+            cargo install xbuild
+          fi
 
       - name: Build apk
         run: x build --release --platform=android --arch=arm64 --format=apk
