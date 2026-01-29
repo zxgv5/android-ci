@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Initialize build environment
         id: init
         run: |
@@ -94,7 +94,7 @@ jobs:
       # - name: Build xbuild
       #   working-directory: patches/xbuild
       #   run: cargo install --path xbuild
-
+ 
       - name: Build xbuild
         run: |
           WORKSPACE_DIR="${{ github.workspace }}/localdesktop_source/patches/xbuild"
@@ -123,7 +123,7 @@ jobs:
             echo "Method 2: cargo install from crates.io"
             cargo install xbuild
           fi
-
+ 
       - name: Ensure xbuild installed
         run: |
           # 确保安装了 xbuild
@@ -133,7 +133,7 @@ jobs:
           else
             echo "xbuild already installed"
           fi
-
+ 
       - name: Check project structure
         run: |
           echo "=== Checking project structure ==="
@@ -147,7 +147,7 @@ jobs:
             echo "Searching recursively..."
             find "${{ github.workspace }}/localdesktop_source" -name "Cargo.toml" -type f | head -5
           fi
-
+ 
       - name: Build apk
         working-directory: ${{ github.workspace }}/localdesktop_source
         run: |
@@ -156,10 +156,10 @@ jobs:
           ls -la
           echo "Running x build..."
           x build --release --platform=android --arch=arm64 --format=apk
-
+ 
       # - name: Build apk
       #   run: x build --release --platform=android --arch=arm64 --format=apk
-
+ 
       - name: Find generated apk files
         working-directory: ${{ github.workspace }}/localdesktop_source
         run: |
@@ -173,7 +173,7 @@ jobs:
           # 检查可能的其他路径
           find . -path "*/build/outputs/apk/*" -name "*.apk" 2>/dev/null | head -10
           find . -path "*/build/outputs/bundle/*" -name "*.aab" 2>/dev/null | head -10
-
+ 
       - name: Sign the apk (pkcs12)
         run: |
           # 设置Android build-tools路径
@@ -190,7 +190,7 @@ jobs:
             --ks-key-alias "${{ env.ANDROID_KEY_ALIAS }}" \
             --ks-type PKCS12 \
             --out "${{ github.workspace }}/dist/localdesktop-${{ env.BUILD_DATE }}.apk" \
-            "${{ github.workspace }}/target/x/release/android/gradle/app/build/outputs/apk/release/app-release-unsigned.apk"
+            "${{ github.workspace }}/localdesktop_source/target/x/release/android/gradle/app/build/outputs/apk/release/app-release-unsigned.apk"
           # 验证签名
           apksigner verify --verbose "${{ github.workspace }}/dist/localdesktop-${{ env.BUILD_DATE }}.apk"
  
@@ -213,7 +213,7 @@ jobs:
       #       target/x/localdesktop-${{ steps.extract_version.outputs.version }}-debug.apk
       #       target/x/localdesktop-${{ steps.extract_version.outputs.version }}.aab
       #       target/x/localdesktop-${{ steps.extract_version.outputs.version }}-debug.aab
-      
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
