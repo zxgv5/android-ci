@@ -203,7 +203,6 @@ jobs:
           # 验证apksigner可用
           which apksigner
           apksigner --version
-          mkdir -p "${{ github.workspace }}/dist"
           # 使用apksigner对APK签名
           apksigner sign \
             --ks "${{ env.STORE_FILE_PATH }}" \
