@@ -61,6 +61,8 @@ jobs:
         working-directory: ./zipxtract_source
         run: |
           sed -i '/^package /a\'$'\n'"import java.nio.file.Files"'\n'"import java.nio.file.attribute.BasicFileAttributes"'\n' "${{ env.PATCH_FILE_PATH }}"
+          # 删除冲突的androidx.core.content.Files导入
+          sed -i '/import androidx.core.content.Files/d' "${{ env.PATCH_FILE_PATH }}"
 
       - name: Build ps release
         working-directory: ./zipxtract_source
