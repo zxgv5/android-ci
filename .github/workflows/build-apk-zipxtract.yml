@@ -3,11 +3,12 @@ name: build-apk-zipxtract
 on:
   workflow_dispatch:
 env:
-  ANDROID_COMPILE_SDK: '35'
-  ANDROID_BUILD_TOOLS: '35.0.0'
-  JDK_VERSION: '17'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
-  KEYSTORE_PATH: "$GITHUB_WORKSPACE/zipxtract_source/keystore.p12"
+  KEYSTORE_PATH: "./keystore.p12"
+  PATCH_FILE_PATH: "./app/src/ps/java/com/wirelessalien/zipxtract/fragment/MainFragment.kt"
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -50,6 +51,16 @@ jobs:
           VERSION_NAME=$(grep 'versionName' app/build.gradle | head -1 | awk -F\" '{print $2}')
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
           echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+
+      - name: Decode keystore file
+        working-directory: ./zipxtract_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ env.KEYSTORE_PATH }}
+
+      - name: Patch source files
+        working-directory: ./zipxtract_source
+        run: |
+          sed -i '/^package /a\'$'\n'"import java.nio.file.Files"'\n'"import java.nio.file.attribute.BasicFileAttributes"'\n' "${{ env.PATCH_FILE_PATH }}"
 
       - name: Build ps release
         working-directory: ./zipxtract_source
