@@ -1,0 +1,148 @@
+name: build-apk-imagetoolbox-market
+
+on:
+  workflow_dispatch:
+
+env:
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest-8-cores  # 使用更多核心以加速构建
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: T8RIN/ImageToolbox
+          ref: master
+          path: imagetoolbox_source
+          fetch-depth: 0
+          submodules: recursive  # 如果有子模块需要拉取
+
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Initialization values
+        id: init
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          echo "APK_NAME=imagetoolbox-${{ env.BUILD_DATE }}" >> $GITHUB_ENV
+          echo "APK_NAME_FINAL=${{ env.APK_NAME }}.apk" >> $GITHUB_ENV
+
+      - name: Set up jdk 21
+        uses: actions/setup-java@main
+        with:
+          distribution: '${{ env.JDK_DISTRIBUTION }}'
+          java-version: '${{ env.JDK_VERSION }}'
+
+      - name: Decode keystore and create signing.properties
+        working-directory: ./imagetoolbox_source
+        run: |
+          # 解码keystore文件
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
+          # 获取keystore的绝对路径
+          KEYSTORE_PATH=$(realpath keystore.p12)
+          # 创建signing.properties文件
+          cat > signing.properties << EOF
+          storeFile=$KEYSTORE_PATH
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
+          # 设置环境变量
+          echo "STORE_FILE=$KEYSTORE_PATH" >> $GITHUB_ENV
+          echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
+          echo "Created signing.properties with signing configuration"
+          echo "Store file path: $KEYSTORE_PATH"
+
+      - name: Build market release apk
+        id: build
+        working-directory: ./imagetoolbox_source
+        env:
+          STORE_FILE: ${{ env.STORE_FILE }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
+          ORG_GRADLE_PROJECT_VERSION_NAME: ${{ env.BUILD_DATE }}-market  # 覆盖版本名
+        run: |
+          chmod +x ./gradlew
+          # 清理并构建market release版本
+          ./gradlew clean
+          # 只构建market flavor的release版本（不构建foss）
+          ./gradlew assembleMarketRelease --no-daemon --scan
+          # 验证构建是否成功
+          if find . -name "*.apk" -path "*/market/*" -path "*/release/*" | grep -q .; then
+            echo "APK build successful"
+            echo "apk_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "APK build failed - no APK files found"
+            echo "apk_exists=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Find and rename apk files
+        id: find-apk
+        working-directory: ./imagetoolbox_source
+        if: steps.build.outputs.apk_exists == 'true'
+        run: |
+          # 查找所有market release APK文件
+          echo "Searching for APK files..."
+          find . -name "*.apk" -path "*/market/*" -path "*/release/*" -type f | while read -r apk; do
+            echo "Found APK: $apk"
+            # 获取文件名和目录
+            filename=$(basename "$apk")
+            dir=$(dirname "$apk")
+            # 创建目标文件名
+            new_filename="${filename%.apk}-${{ env.BUILD_DATE }}.apk"
+            # 重命名文件
+            mv "$apk" "$dir/$new_filename"
+            echo "Renamed to: $dir/$new_filename"
+            # 设置输出变量
+            echo "APK_PATH=$(realpath "$dir/$new_filename")" >> $GITHUB_ENV
+            echo "APK_BASENAME=$new_filename" >> $GITHUB_ENV
+          done
+          # 如果没有找到文件，尝试在标准位置查找
+          if [ -z "$APK_PATH" ]; then
+            echo "Trying standard APK locations..."
+            if [ -d "app/build/outputs/apk/market/release" ]; then
+              APK_FILE=$(find app/build/outputs/apk/market/release -name "*.apk" -type f | head -1)
+              if [ -n "$APK_FILE" ]; then
+                new_name="app/build/outputs/apk/market/release/imagetoolbox-${{ env.BUILD_DATE }}.apk"
+                mv "$APK_FILE" "$new_name"
+                echo "APK_PATH=$(realpath "$new_name")" >> $GITHUB_ENV
+                echo "APK_BASENAME=imagetoolbox-${{ env.BUILD_DATE }}.apk" >> $GITHUB_ENV
+              fi
+            fi
+          fi
+          if [ -n "$APK_PATH" ]; then
+            echo "Final APK path: $APK_PATH"
+            echo "Final APK name: $APK_BASENAME"
+            # 计算APK大小
+            apk_size=$(stat -c%s "$APK_PATH")
+            echo "APK size: $((apk_size / 1024 / 1024)) MB"
+            echo "APK_SIZE=$apk_size" >> $GITHUB_ENV
+          else
+            echo "ERROR: No APK files found after build!"
+            exit 1
+          fi
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./imagetoolbox_source/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./imagetoolbox_source/imagetoolbox-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-imagetoolbox"
