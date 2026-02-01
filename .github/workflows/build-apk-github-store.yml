@@ -63,15 +63,27 @@ jobs:
           ./gradlew assembleRelease
           mkdir -p "${{ github.workspace }}/dist"
           # mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/github-store-${{ env.BUILD_DATE }}.apk"
-          echo "✅ Android Release APK 构建完成！"
-          echo "APK 文件位置:"
-          find androidApp/build/outputs/apk/release -name "*.apk" 2>/dev/null || echo "未找到APK文件"
-          echo ""
-          echo "📱 构建信息:"
-          echo "- 分支: ${{ github.ref_name }}"
-          echo "- Commit: ${{ github.sha }}"
-          echo "- 触发者: ${{ github.actor }}"
-          echo "- 时间: $(date)"
+          # 查找APK文件并复制到dist目录
+          APK_FILE=$(find composeApp/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -1)
+          if [ -n "$APK_FILE" ]; then
+            APK_NAME=$(basename "$APK_FILE")
+            echo "✅ 找到APK文件: $APK_FILE"
+            echo "📄 复制APK文件到: ${{ github.workspace }}/dist/github-store-${{ env.BUILD_DATE }}.apk"
+            cp "$APK_FILE" "${{ github.workspace }}/dist/github-store-${{ env.BUILD_DATE }}.apk"
+            # 验证文件已复制
+            if [ -f "${{ github.workspace }}/dist/github-store-${{ env.BUILD_DATE }}.apk" ]; then
+              echo "✅ APK文件复制成功！"
+              ls -la "${{ github.workspace }}/dist/"
+            else
+              echo "❌ APK文件复制失败！"
+            fi
+          else
+            echo "❌ 未找到APK文件！"
+            echo "📁 搜索目录结构:"
+            find . -name "*.apk" -type f 2>/dev/null || echo "未找到任何APK文件"
+            echo "📁 composeApp目录结构:"
+            find composeApp/build -type f -name "*.apk" 2>/dev/null || echo "composeApp目录中未找到APK文件"
+          fi
         shell: bash
 
 
