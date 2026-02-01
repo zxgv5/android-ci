@@ -49,8 +49,8 @@ jobs:
       - name: Decode keystore
         working-directory: ./ghstore_source
         run: |
-          mkdir -p keystore
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
+          mkdir -p ./keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore/release.keystore
 
       - name: Build release apk
         working-directory: ./ghstore_source
@@ -61,7 +61,7 @@ jobs:
       - name: Sign the apk (pkcs12)
         working-directory: ./ghstore_source
         env:
-          ANDROID_KEYSTORE_PATH: "./ghstore_source/release.keystore"
+          ANDROID_KEYSTORE_PATH: "./ghstore_source/keystore/release.keystore"
           ANDROID_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
