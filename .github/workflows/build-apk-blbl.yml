@@ -3,17 +3,7 @@ name: build-apk-blbl
 on:
   workflow_dispatch:
   workflow_call:
-    inputs:
-      version_name:
-        description: "Version name (e.g. 0.1.1)"
-        required: true
-        default: "0.1.1"
-        type: string
-      changelog:
-        description: "Release notes/changelog (optional; supports multiline)"
-        required: false
-        default: ""
-        type: string
+
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
@@ -69,7 +59,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease -PversionName=${{ inputs.version_name }} -PversionCode=${{ github.run_number }}
+          ./gradlew assembleRelease -PversionName="0.1.11" -PversionCode="57"
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/blbl-${{ env.BUILD_DATE }}.apk"
 
