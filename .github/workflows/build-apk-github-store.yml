@@ -60,7 +60,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew :androidApp:assembleRelease
+          ./gradlew assembleRelease
           mkdir -p "${{ github.workspace }}/dist"
           # mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/github-store-${{ env.BUILD_DATE }}.apk"
           echo "✅ Android Release APK 构建完成！"
