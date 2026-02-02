@@ -48,9 +48,14 @@ sed -i \
 
 # 5、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
 FANTASY_BV_DRAWERCONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+sed -i \
+  -e 's/^\([[:space:]]*\)DrawerItem\.Search,/\1\/\/DrawerItem.Search,/' \
+  -e 's/^\([[:space:]]*\)DrawerItem\.UGC,/\1\/\/DrawerItem.UGC,/' \
+  -e 's/^\([[:space:]]*\)DrawerItem\.PGC,/\1\/\/DrawerItem.PGC,/' \
+  -e 's/^\([[:space:]]*\)DrawerItem\.Live,/\1\/\/DrawerItem.Live,/' \
+  "$FANTASY_BV_DRAWERCONTENT_KT"
+# 配套修改
 FANTASY_BV_MAINSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
-# 名为patch_mainscreen_kt，实际也能处理DrawerContent.kt
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_DRAWERCONTENT_KT}"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_MAINSCREEN_KT}"
 
 # 6、隐藏顶部“追番”和“稍后看”两个导航标签
