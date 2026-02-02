@@ -76,11 +76,11 @@ jobs:
           mkdir -p libs
           
           # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
+          # 由于该fork已内部实现了对libVLC的支持，在此去掉libVCL的相关代码
           declare -A LIB_PATHS
           LIB_PATHS=(
             ["av1Decoder"]="av1Decoder"
             ["ffmpegDecoder"]="ffmpegDecoder"
-            ["libVLC"]="libVLC"
             ["media3Container"]="media3Container"
           )
           

@@ -3,6 +3,7 @@
 
 set -e  # 遇到错误立即退出，避免ci静默失败
 FANTASY_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/fantasy-bv-source"
+PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # - - - - - - - - - - - - - - - - - -简单且无模糊的修改用sed等实现 - - - - - - - - - - - - - - - - - -
 # 1、版本号规则调整，避免负数
 # 2、修改包名
@@ -32,13 +33,25 @@ sed -i -e 's/^\([[:space:]]*\)down = firstVisibleButtonId?.let { focusRequesters
        -e 's/^\([[:space:]]*\)min: Float = 0\.25f,/\1min: Float = 0.2f,/' \
        -e 's/^\([[:space:]]*\)max: Float = 3f,/\1max: Float = 5f,/' "$FANTASY_BV_CONTROLLERVIDEOINFO_KT"
 
-# 5、隐藏左侧边栏中的“搜索”、“UGC”和“PGC”三个页面导航按钮，尤其是UGC和PGC，太卡了
-FANTASY_BV_DRAWERCONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+FANTASY_BV_PLAYERSETTING_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/settings/content/PlayerSetting.kt"
 sed -i \
-  -e 's/^\([[:space:]]*\)DrawerItem\.Search,/\1\/\/DrawerItem.Search,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.UGC,/\1\/\/DrawerItem.UGC,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.PGC,/\1\/\/DrawerItem.PGC,/' \
-  "$FANTASY_BV_DRAWERCONTENT_KT"
+  -e 's/minValue = 0.25,/minValue = 0.2,/' \
+  -e 's/maxValue = 2.5,/maxValue = 5.0,/' \
+  -e 's/step = 0.25,/step = 0.2,/' \
+  "$FANTASY_BV_PLAYERSETTING_KT"
+
+FANTASY_BV_PICTUREMENU_KT="${FANTASY_BV_SOURCE_ROOT}/player/tv/src/main/kotlin/dev/aaa1115910/bv/player/tv/controller/playermenu/PictureMenu.kt"
+sed -i \
+  -e 's/step = 0.25f,/step = 0.2f,/' \
+  -e 's/range = 0.25f..3f,/range = 0.2f..5f,/' \
+  "$FANTASY_BV_PICTUREMENU_KT"
+
+# 5、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
+FANTASY_BV_DRAWERCONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+FANTASY_BV_MAINSCREEN_KT= "$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
+# 名为patch_mainscreen_kt，实际也能处理DrawerContent.kt
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_DRAWERCONTENT_KT}"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_MAINSCREEN_KT}"
 
 # 6、隐藏顶部“追番”和“稍后看”两个导航标签
 FANTASY_BV_TOPNAV_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/TopNav.kt"
@@ -48,40 +61,11 @@ sed -i \
   -e 's/^\([[:space:]]*\)ToView("稍后看");[[:space:]]*$/\/\/\1ToView("稍后看");/' \
   "$FANTASY_BV_TOPNAV_KT"
 
-# - - - - - - - - - - - - - - - - - -复杂或容易歧义的修改，用源文件替换实现 - - - - - - - - - - - - - - - - - -
-CI_FILE_UTILS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${CI_FILE_UTILS_SCRIPT_DIR}/ci_file_utils.sh"
+FANTASY_BV_HOMECONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_homecontent_kt.py" "${FANTASY_BV_HOMECONTENT_KT}"
 
-# 5、对MainScreen.kt进行覆盖，配合上面对隐藏左侧边栏中的“搜索”、“UGC”和“PGC”三个页面导航按钮所作修改
-#    同时注释掉其中的logger和finfo
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens" \
-    "MainScreen.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
-
-# 6、对HomeContent.kt进行覆盖，配合上面对隐藏顶部“追番”和“稍后看”两个导航标签所作修改
-#    同时注释掉其中的logger和finfo
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main" \
-    "HomeContent.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
-
-# 7、TV端倍速调整，对PictureMenu.kt进行覆盖，调整倍速设置
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/player/tv/src/main/kotlin/dev/aaa1115910/bv/player/tv/controller/playermenu" \
-    "PictureMenu.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
-
-ci_source_patch \
-    "${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/settings/content" \
-    "PlayerSetting.kt" \
-    "${GITHUB_WORKSPACE}/ci_source/patches/bv_fantasy"
-
-# - - - - - - - - - - - - - - - - - -更加灵活和后期易变的修改，用python处理实现 - - - - - - - - - - - - - - - - - -
-# 使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
+# 解决视频列表加载和焦点左漂问题
 echo "处理*Screen.kt代码..."
-
-PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 FANTASY_BV_DYNAMICSSCREEN_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${FANTASY_BV_DYNAMICSSCREEN_KT}"
