@@ -50,7 +50,7 @@ sed -i \
 
 # 6、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
 LEONWU85_BV_DRAWERCONTENT_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
-LEONWU85_BV_MAINSCREEN_KT= "$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
+LEONWU85_BV_MAINSCREEN_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
 # 名为patch_mainscreen_kt，实际也能处理DrawerContent.kt
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_DRAWERCONTENT_KT}"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_MAINSCREEN_KT}"
