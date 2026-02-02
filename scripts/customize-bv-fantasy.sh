@@ -64,7 +64,7 @@ sed -i \
 FANTASY_BV_HOMECONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_homecontent_kt.py" "${FANTASY_BV_HOMECONTENT_KT}"
 
-# 解决视频列表加载和焦点左漂问题
+# 7、解决视频列表加载和焦点左漂问题
 echo "处理*Screen.kt代码..."
 
 FANTASY_BV_DYNAMICSSCREEN_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
@@ -81,7 +81,7 @@ python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_historyscreen_kt.py" "${FANTASY_BV
 
 echo "*Screen.kt代码处理完成..."
 # - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
-# 使用python在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
+# 8、使用python在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
 echo "注释全部日志记录代码..."
 
 #PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -3,6 +3,7 @@
 
 set -e  # 遇到错误立即退出，避免ci静默失败
 LEONWU85_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/leonwu85-bv-source"
+PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # - - - - - - - - - - - - - - - - - -简单且无模糊的修改用sed等实现 - - - - - - - - - - - - - - - - - -
 # 1、版本号规则调整，避免负数
 # 2、修改包名
@@ -47,11 +48,15 @@ sed -i \
   -e 's/range = 0.25f..3f,/range = 0.2f..5f,/' \
   "$LEONWU85_BV_PICTUREMENU_KT"
 
+# 6、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
+LEONWU85_BV_DRAWERCONTENT_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+LEONWU85_BV_MAINSCREEN_KT= "$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
+# 名为patch_mainscreen_kt，实际也能处理DrawerContent.kt
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_DRAWERCONTENT_KT}"
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_MAINSCREEN_KT}"
 # - - - - - - - - - - - - - - - - - -更加灵活和后期易变的修改，用python处理实现 - - - - - - - - - - - - - - - - - -
-# 使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
+# 7、使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
 echo "处理*Screen.kt代码..."
-
-PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 LEONWU85_BV_DYNAMICSSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${LEONWU85_BV_DYNAMICSSCREEN_KT}"
@@ -66,9 +71,8 @@ LEONWU85_BV_HISTORYSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_historyscreen_kt.py" "${LEONWU85_BV_HISTORYSCREEN_KT}"
 
 echo "*Screen.kt代码处理完成..."
-
 # - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
-# 使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
+# 8、使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
 echo "注释全部日志记录代码..."
 
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${LEONWU85_BV_SOURCE_ROOT}"
