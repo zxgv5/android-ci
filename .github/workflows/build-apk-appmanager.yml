@@ -1,0 +1,87 @@
+name: build-apk-appmanager
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: MuntashirAkon/AppManager
+          ref: master
+          fetch-depth: 0
+
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+
+      - name: Decode keystore
+        run: |
+          mkdir -p ./keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore/keystore.p12
+
+      - name: Build release apk
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease
+
+      - name: Sign the apk (pkcs12)
+        env:
+          ANDROID_KEYSTORE_PATH: "./keystore/keystore.p12"
+          ANDROID_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
+          mkdir -p "${{ github.workspace }}/dist"
+          ls -a app/build/outputs/apk/release/*.apk
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK file found!"
+            exit 1
+          fi
+          echo "Found APK: $APK_PATH"
+          apksigner sign \
+            --ks "${{ env.ANDROID_KEYSTORE_PATH }}" \
+            --ks-pass "pass:${{ env.ANDROID_STORE_PASSWORD }}" \
+            --ks-key-alias "${{ env.ANDROID_KEY_ALIAS }}" \
+            --ks-type PKCS12 \
+            --out "${{ github.workspace }}/dist/appmanager-${{ env.BUILD_DATE }}.apk" \
+            "$APK_PATH"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./keystore/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/appmanager-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-appmanager"
