@@ -59,15 +59,15 @@ FANTASY_BV_MAINSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_MAINSCREEN_KT}"
 
 # 6、隐藏顶部“追番”和“稍后看”两个导航标签
-FANTASY_BV_TOPNAV_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/TopNav.kt"
-sed -i \
-  -e 's/^\([[:space:]]*\)Favorite("收藏"),[[:space:]]*$/\1Favorite("收藏");/' \
-  -e 's/^\([[:space:]]*\)FollowingSeason("追番"),[[:space:]]*$/\/\/\1FollowingSeason("追番"),/' \
-  -e 's/^\([[:space:]]*\)ToView("稍后看");[[:space:]]*$/\/\/\1ToView("稍后看");/' \
-  "$FANTASY_BV_TOPNAV_KT"
-
-FANTASY_BV_HOMECONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_homecontent_kt.py" "${FANTASY_BV_HOMECONTENT_KT}"
+# 源仓库已增加可见设置项，此处的修改不再保留
+# FANTASY_BV_TOPNAV_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/TopNav.kt"
+# sed -i \
+#   -e 's/^\([[:space:]]*\)Favorite("收藏"),[[:space:]]*$/\1Favorite("收藏");/' \
+#   -e 's/^\([[:space:]]*\)FollowingSeason("追番"),[[:space:]]*$/\/\/\1FollowingSeason("追番"),/' \
+#   -e 's/^\([[:space:]]*\)ToView("稍后看");[[:space:]]*$/\/\/\1ToView("稍后看");/' \
+#   "$FANTASY_BV_TOPNAV_KT"
+# FANTASY_BV_HOMECONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_homecontent_kt.py" "${FANTASY_BV_HOMECONTENT_KT}"
 
 # 7、解决视频列表加载和焦点左漂问题
 echo "处理*Screen.kt代码..."
