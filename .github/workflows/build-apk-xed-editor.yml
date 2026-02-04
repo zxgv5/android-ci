@@ -55,6 +55,8 @@ jobs:
         run: git submodule update --init --recursive
 
       - name: Build release apk files
+        # 增加超时时间
+        timeout-minutes: 30
         working-directory: ./xed_editor_source
         run: |
           chmod +x ./gradlew
@@ -66,8 +68,6 @@ jobs:
             --build-cache \
             --configure-on-demand \
             --parallel
-        # 增加超时时间
-        timeout-minutes: 25
           mkdir -p ./release-apks
           mv ./app/build/outputs/apk/release/*.apk ./release-apks/xed-editor-${{env.BUILD_DATE}}.apk
 
