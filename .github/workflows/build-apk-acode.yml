@@ -21,9 +21,17 @@ jobs:
     steps:
       - name: Clean runner environment
         run: |
-          # 清理可能存在的全局缓存文件
+          # 清理 Android/Gradle 缓存
           rm -rf ~/.gradle/caches/transforms-*
           rm -rf ~/.android/build-cache/
+          # 清理 Node.js/npm 缓存
+          rm -rf ~/.npm/
+          rm -rf ~/.cordova/
+          rm -rf ~/.cache/
+          # 清理项目内的 node_modules（如果存在）
+          if [ -d "./acode_source/node_modules" ]; then
+            rm -rf ./acode_source/node_modules
+          fi
 
       - name: Checkout source repo
         uses: actions/checkout@main
