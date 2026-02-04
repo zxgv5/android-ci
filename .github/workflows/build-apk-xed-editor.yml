@@ -58,7 +58,16 @@ jobs:
         working-directory: ./xed_editor_source
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon -Pandroid.ndk.abiFilters=arm64-v8a
+          # ./gradlew assembleRelease --no-daemon -Pandroid.ndk.abiFilters=arm64-v8a
+          # 添加重试和超时参数
+          ./gradlew assembleRelease \
+            --no-daemon \
+            -Pandroid.ndk.abiFilters=arm64-v8a \
+            --build-cache \
+            --configure-on-demand \
+            --parallel
+        # 增加超时时间
+        timeout-minutes: 25
           mkdir -p ./release-apks
           mv ./app/build/outputs/apk/release/*.apk ./release-apks/xed-editor-${{env.BUILD_DATE}}.apk
 
