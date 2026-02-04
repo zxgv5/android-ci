@@ -10,12 +10,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Clean runner environment
-        run: |
-          # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
-          rm -rf ~/.android/build-cache/
-
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -39,6 +33,16 @@ jobs:
           java-version: "21"
           distribution: "temurin"
           cache: gradle
+
+      - name: Cache gradle build files
+        uses: actions/cache@main
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
       # "/tmp/signing.properties"和"/tmp/xed.keystore"
