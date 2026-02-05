@@ -53,7 +53,7 @@ jobs:
           # 核心修复：彻底关闭快照仓库，不再请求s01.oss.sonatype.org
           repositories.snapshots.enabled=false
           # 覆盖jvmargs：保留原有内存+编码，新增网络超时（后定义覆盖先定义）
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -Dhttp.connection.timeout=60000 -Dhttp.socket.timeout=60000 -Dhttps.connection.timeout=60000 -Dhttps.socket.timeout=60000
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           # 关闭守护进程，和构建参数--no-daemon保持一致
           org.gradle.daemon=false
           EOF
@@ -63,7 +63,7 @@ jobs:
           // 修复Sonatype 504：全局强制Gson版本，跳过版本元数据解析
           allprojects {
              configurations.all {
-                 resolutionStrategy.force("com.google.code.gson:gson:2.10.1")
+                 resolutionStrategy.force("com.google.code.gson:gson:2.13.2")
              }
           }
           EOF
