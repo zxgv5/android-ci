@@ -46,27 +46,27 @@ jobs:
 
       # 解决时常出现的maven快照站点连接失败导致的构建超时
       - name: Configure gradle for gradle9+
-         run: |
-           # 1. 追加gradle.properties配置：仅保留核心修复（关闭快照+网络强化），移除仓库相关
-           # 注意：删除了resolutionStrategy.force，改到build.gradle.kts中配置（更兼容Gradle9+）
-           cat >> ./xed_editor_source/gradle.properties << EOF
-           # 核心修复：彻底关闭快照仓库，不再请求s01.oss.sonatype.org
-           repositories.snapshots.enabled=false
-           # 覆盖jvmargs：保留原有内存+编码，新增网络超时（后定义覆盖先定义）
-           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -Dhttp.connection.timeout=60000 -Dhttp.socket.timeout=60000 -Dhttps.connection.timeout=60000 -Dhttps.socket.timeout=60000
-           # 关闭守护进程，和构建参数--no-daemon保持一致
-           org.gradle.daemon=false
-           EOF
-           # 2. 向项目根build.gradle.kts末尾追加：全局强制Gson固定版本（核心修复）
-           # 无仓库配置，完全兼容Gradle9+的仓库管理限制
-           cat >> ./xed_editor_source/build.gradle.kts << EOF
-           // 修复Sonatype 504：全局强制Gson版本，跳过版本元数据解析
-           allprojects {
-               configurations.all {
-                   resolutionStrategy.force("com.google.code.gson:gson:2.10.1")
-               }
-           }
-           EOF
+        run: |
+          # 1. 追加gradle.properties配置：仅保留核心修复（关闭快照+网络强化），移除仓库相关
+          # 注意：删除了resolutionStrategy.force，改到build.gradle.kts中配置（更兼容Gradle9+）
+          cat >> ./xed_editor_source/gradle.properties << EOF
+          # 核心修复：彻底关闭快照仓库，不再请求s01.oss.sonatype.org
+          repositories.snapshots.enabled=false
+          # 覆盖jvmargs：保留原有内存+编码，新增网络超时（后定义覆盖先定义）
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -Dhttp.connection.timeout=60000 -Dhttp.socket.timeout=60000 -Dhttps.connection.timeout=60000 -Dhttps.socket.timeout=60000
+          # 关闭守护进程，和构建参数--no-daemon保持一致
+          org.gradle.daemon=false
+          EOF
+          # 2. 向项目根build.gradle.kts末尾追加：全局强制Gson固定版本（核心修复）
+          # 无仓库配置，完全兼容Gradle9+的仓库管理限制
+          cat >> ./xed_editor_source/build.gradle.kts << EOF
+          // 修复Sonatype 504：全局强制Gson版本，跳过版本元数据解析
+          allprojects {
+             configurations.all {
+                 resolutionStrategy.force("com.google.code.gson:gson:2.10.1")
+             }
+          }
+          EOF
 
       # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
       # "/tmp/signing.properties"和"/tmp/xed.keystore"
