@@ -46,6 +46,41 @@ jobs:
 
       # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
       # "/tmp/signing.properties"和"/tmp/xed.keystore"
+
+      # 解决时常出现的maven快照站点连接失败导致的构建超时
+      - name: Configure gradle to avoid sonatype snapshots
+        run: |
+          # 1. 追加配置到gradle.properties（保留原有所有内容，仅加末尾）
+          cat >> ./xed_editor_source/gradle.properties << EOF
+          # 修复Sonatype Snapshots仓库504超时：核心配置
+          repositories.snapshots.enabled=false
+          resolutionStrategy.force=com.google.code.gson:gson:2.10.1
+          # 网络重试配置
+          org.gradle.retry.max.retries=5
+          org.gradle.retry.max.delay=10000
+          # 覆盖jvmargs：保留原有内存+编码，新增网络超时（后定义覆盖先定义）
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -Dhttp.connection.timeout=60000 -Dhttp.socket.timeout=60000 -Dhttps.connection.timeout=60000 -Dhttps.socket.timeout=60000
+          # 关闭守护进程，和构建参数--no-daemon保持一致
+          org.gradle.daemon=false
+          EOF
+          # 2. 新建gradle_official.gradle.kts（纯海外仓库配置，无国内镜像）
+          cat > ./xed_editor_source/gradle_official.gradle.kts << EOF
+          allprojects {
+              repositories {
+                  // 纯海外官方仓库，仅拉取正式版，彻底跳过快照仓库
+                  google { mavenContent { releasesOnly() } }
+                  mavenCentral { mavenContent { releasesOnly() } }
+                  gradlePluginPortal()
+              }
+              // 全局强制Gson固定版本，双重保障跳过版本元数据解析
+              configurations.all {
+                  resolutionStrategy.force("com.google.code.gson:gson:2.10.1")
+              }
+          }
+          EOF
+          # 3. 在项目根build.gradle.kts第一行插入引入配置（语法兼容，无冲突）
+          sed -i '1i apply(from = "gradle_official.gradle.kts")' ./xed_editor_source/build.gradle.kts
+
       - name: Decode and create secrets
         run: |
           mkdir -p /tmp
