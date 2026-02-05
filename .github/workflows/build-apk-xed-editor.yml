@@ -44,9 +44,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
-      # "/tmp/signing.properties"和"/tmp/xed.keystore"
-
       # 解决时常出现的maven快照站点连接失败导致的构建超时
       - name: Configure gradle to avoid sonatype snapshots
         run: |
@@ -81,6 +78,8 @@ jobs:
           # 3. 在项目根build.gradle.kts第一行插入引入配置（语法兼容，无冲突）
           sed -i '1i apply(from = "gradle_official.gradle.kts")' ./xed_editor_source/build.gradle.kts
 
+      # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
+      # "/tmp/signing.properties"和"/tmp/xed.keystore"
       - name: Decode and create secrets
         run: |
           mkdir -p /tmp
