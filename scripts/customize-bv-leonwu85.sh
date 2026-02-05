@@ -17,7 +17,6 @@ sed -i \
   -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.leonwu85.bv"/' \
   "$LEONWU85_BV_APPCONFIGURATION_KT"
 
-
 # 3、修改应用名
 LEONWU85_BV_DEBUG_STRINGS_XML="$LEONWU85_BV_SOURCE_ROOT/app/shared/src/debug/res/values/strings.xml"
 sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV Debug.*<\/string>/<string name="app_name">leonwu85 Debug<\/string>/' "$LEONWU85_BV_DEBUG_STRINGS_XML"
