@@ -55,12 +55,12 @@ sed -i \
 # 6、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
 LEONWU85_BV_DRAWERCONTENT_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
 sed -i \
-  -e 's/^\([[:space:]]*\)DrawerItem\.Search,/\1\/\/DrawerItem.Search,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.Home,/\1DrawerItem.Home/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.UGC,/\1\/\/DrawerItem.UGC,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.PGC,/\1\/\/DrawerItem.PGC,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.Live/\1\/\/DrawerItem.Live/' \
+  -e 's/^\([[:space:]]*\)add(DrawerItem\.Search)/\1\/\/add(DrawerItem.Search)/' \
+  -e 's/^\([[:space:]]*\)add(DrawerItem\.UGC)/\1\/\/add(DrawerItem.UGC)/' \
+  -e 's/^\([[:space:]]*\)add(DrawerItem\.PGC)/\1\/\/add(DrawerItem.PGC)/' \
+  -e 's/^\([[:space:]]*\)add(DrawerItem\.Live)/\1\/\/add(DrawerItem.Live)/' \
   "$LEONWU85_BV_DRAWERCONTENT_KT"
+
 # 配套修改
 LEONWU85_BV_MAINSCREEN_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_MAINSCREEN_KT}"
