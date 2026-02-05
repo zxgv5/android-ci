@@ -8,8 +8,11 @@ PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 1、版本号规则调整，避免负数
 # 2、修改包名
 FANTASY_BV_APPCONFIGURATION_KT="$FANTASY_BV_SOURCE_ROOT/buildSrc/src/main/kotlin/AppConfiguration.kt"
-sed -i \
+# sed -i \
 #   -e 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' \
+#   -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.fantasy.bv"/' \
+#   "$FANTASY_BV_APPCONFIGURATION_KT"
+sed -i \
   -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.fantasy.bv"/' \
   "$FANTASY_BV_APPCONFIGURATION_KT"
 
