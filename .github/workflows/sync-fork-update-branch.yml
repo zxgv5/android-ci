@@ -33,33 +33,45 @@ jobs:
     - name: Sync ${{ matrix.source_repo }}
       env:
         SOURCE_REPO: ${{ matrix.source_repo }}
-        FORK_REPO: zxgv5/${{ github.event.repository.name }}
+        # 注意：此处假设Fork仓库名与源仓库名相同。如果不相同，请手动指定。
+        FORK_REPO: zxgv5/${{ matrix.source_repo.split('/')[1] }}
         # 使用个人访问令牌，需要有推送权限
         GH_TOKEN: ${{ secrets.SYNC_FORK_TOKEN }}
       run: |
-        # 克隆fork仓库
-        git clone --mirror "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
+        echo "正在同步仓库：$SOURCE_REPO -> $FORK_REPO"
+        # 1. 使用 --bare 克隆Fork仓库（关键修改）
+        git clone --bare "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
         cd sync-repo
-        # 添加源仓库为远程
+        
+        # 2. 添加源仓库为上游远程
         git remote add upstream "https://github.com/${SOURCE_REPO}.git"
-        # 获取所有分支和标签
-        git fetch upstream --tags
-        # 检查是否有新提交
-        git fetch upstream
-        # 获取所有分支
-        branches=$(git branch -r | grep 'upstream/' | sed 's/upstream\///')
+        
+        # 3. 获取上游所有分支和标签
+        echo "获取上游仓库更新..."
+        git fetch upstream --prune --tags
+        
+        # 4. 获取上游的所有分支列表
+        branches=$(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/upstream/)
+        
+        # 5. 遍历每个分支进行检查和同步
         for branch in $branches; do
-          echo "Checking branch: $branch"
-          # 检查源仓库分支是否有新提交
+          echo "检查分支: $branch"
+          # 检查上游分支与Fork分支是否有差异
           if ! git diff --quiet upstream/$branch origin/$branch 2>/dev/null; then
-            echo "Branch $branch has updates, syncing..."
-            git push origin "upstream/$branch:refs/heads/$branch"
+            echo "分支 $branch 有更新，正在同步..."
+            # 关键修改：将上游分支内容抓取到本地，然后推送到Fork
+            git fetch upstream $branch:$branch
+            git push origin $branch
           else
-            echo "Branch $branch is up to date"
+            echo "分支 $branch 已是最新。"
           fi
         done
-        # 推送所有标签
+        
+        # 6. 同步所有标签
+        echo "同步标签..."
         git push origin --tags --force
-        # 清理
+        
+        # 7. 清理
         cd ..
         rm -rf sync-repo
+        echo "同步完成！"
