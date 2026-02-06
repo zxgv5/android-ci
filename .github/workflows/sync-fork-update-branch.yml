@@ -1,0 +1,65 @@
+name: sync-fork-update-branch
+
+on:
+  schedule:
+    # 每12小时检查一次，可根据需要调整
+    - cron: '0 */12 * * *'
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  sync-forks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        source_repo:
+          - Acode-Foundation/Acode
+          - Xed-Editor/Xed-Editor
+          - bggRGjQaUbCoE/PiliPlus
+          - wgtunnel/wgtunnel
+          - fantasytyx/bv
+          - cat3399/blbl
+          - T8RIN/ImageToolbox
+          - rainxchzed/Github-Store
+          - MuntashirAkon/AppManager
+    steps:
+    - name: Checkout ci repository
+      uses: actions/checkout@main
+
+    - name: Setup git
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+    
+    - name: Sync ${{ matrix.source_repo }}
+      env:
+        SOURCE_REPO: ${{ matrix.source_repo }}
+        FORK_REPO: zxgv5/${{ github.event.repository.name }}
+        # 使用个人访问令牌，需要有推送权限
+        GH_TOKEN: ${{ secrets.SYNC_FORK_TOKEN }}
+      run: |
+        # 克隆fork仓库
+        git clone --mirror "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
+        cd sync-repo
+        # 添加源仓库为远程
+        git remote add upstream "https://github.com/${SOURCE_REPO}.git"
+        # 获取所有分支和标签
+        git fetch upstream --tags
+        # 检查是否有新提交
+        git fetch upstream
+        # 获取所有分支
+        branches=$(git branch -r | grep 'upstream/' | sed 's/upstream\///')
+        for branch in $branches; do
+          echo "Checking branch: $branch"
+          # 检查源仓库分支是否有新提交
+          if ! git diff --quiet upstream/$branch origin/$branch 2>/dev/null; then
+            echo "Branch $branch has updates, syncing..."
+            git push origin "upstream/$branch:refs/heads/$branch"
+          else
+            echo "Branch $branch is up to date"
+          fi
+        done
+        # 推送所有标签
+        git push origin --tags --force
+        # 清理
+        cd ..
+        rm -rf sync-repo
