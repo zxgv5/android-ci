@@ -1,0 +1,89 @@
+name: sync-fork
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # 每天中午12点定时触发
+  workflow_dispatch:
+
+jobs:
+  sync-forks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 定义源仓库与Fork仓库的映射关系
+        repo_pair:
+          - source: Acode-Foundation/Acode
+            fork: zxgv5/a-Acode
+          - source: Xed-Editor/Xed-Editor
+            fork: zxgv5/a-Xed-Editor
+          - source: bggRGjQaUbCoE/PiliPlus
+            fork: zxgv5/a-PiliPlus
+          - source: wgtunnel/wgtunnel
+            fork: zxgv5/a-wgtunnel
+          - source: fantasytyx/bv
+            fork: zxgv5/a-fantasy-bv
+          - source: cat3399/blbl
+            fork: zxgv5/a-blbl
+          - source: T8RIN/ImageToolbox
+            fork: zxgv5/a-ImageToolbox
+          - source: rainxchzed/Github-Store
+            fork: zxgv5/a-Github-Store
+          - source: MuntashirAkon/AppManager
+            fork: zxgv5/a-AppManager
+          - source: localdesktop/localdesktop
+            fork: zxgv5/a-localdesktop
+          - source: termux/termux-app
+            fork: zxgv5/a-termux-app
+          - source: WirelessAlien/ZipXtract
+            fork: zxgv5/a-ZipXtract
+          - source: softprops/action-gh-release
+            fork: zxgv5/gh-ReleaseAction
+          - source: slapperwan/gh4a
+            fork: zxgv5/a-gh4a
+          - source: zhanghai/MaterialFiles
+            fork: zxgv5/a-MaterialFiles
+
+    steps:
+      - name: Checkout ci repository
+        uses: actions/checkout@main
+
+      - name: Setup git and gh
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          # 安装 GitHub CLI 用于查询仓库默认分支
+          type -p gh >/dev/null || sudo apt-get install -y gh
+
+      - name: Sync ${{ matrix.repo_pair.source }} - default branch
+        env:
+          SOURCE_REPO: ${{ matrix.repo_pair.source }}
+          FORK_REPO: ${{ matrix.repo_pair.fork }}
+          GH_TOKEN: ${{ secrets.SYNC_FORK_TOKEN }}
+        run: |
+          # 1. 获取源仓库的默认分支名
+          echo "步骤1：获取源仓库默认分支..."
+          DEFAULT_BRANCH=$(gh api "repos/$SOURCE_REPO" --jq '.default_branch')
+          echo "默认分支为: $DEFAULT_BRANCH"
+          # 2. 克隆 Fork 仓库（完整克隆，非裸仓库，更简单）
+          echo "步骤2：克隆镜像仓库..."
+          git clone --depth=1 --branch="$DEFAULT_BRANCH" "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
+          cd sync-repo
+          # 3. 添加上游源仓库并拉取默认分支更新
+          echo "步骤3：拉取上游更新..."
+          git remote add upstream "https://github.com/${SOURCE_REPO}.git"
+          git fetch upstream "$DEFAULT_BRANCH"
+          # 4. 检查是否有新提交
+          echo "步骤4：检查差异..."
+          if git diff --quiet FETCH_HEAD "$DEFAULT_BRANCH"; then
+            echo "默认分支 [$DEFAULT_BRANCH] 已是最新，无需同步。"
+          else
+            echo "检测到更新，正在同步..."
+            # 5. 合并上游更新（快速转发）并推送
+            git merge --ff-only FETCH_HEAD
+            git push origin "$DEFAULT_BRANCH"
+            echo "默认分支 [$DEFAULT_BRANCH] 同步完成。"
+          fi
+          # 6. 清理
+          echo "步骤5：清理..."
+          cd ..
+          rm -rf sync-repo
