@@ -27,8 +27,6 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          # 安装 GitHub CLI 用于查询仓库默认分支
-          type -p gh >/dev/null || sudo apt-get install -y gh
 
       - name: Sync ${{ matrix.repo_pair.source }} - default branch
         env:
