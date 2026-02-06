@@ -2,7 +2,7 @@ name: sync-fork-update-branch
 
 on:
   schedule:
-    # 每12小时检查一次，可根据需要调整
+    # 每12小时检查一次
     - cron: '0 */12 * * *'
   workflow_dispatch: # 支持手动触发
 
@@ -11,67 +11,81 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        source_repo:
-          - Acode-Foundation/Acode
-          - Xed-Editor/Xed-Editor
-          - bggRGjQaUbCoE/PiliPlus
-          - wgtunnel/wgtunnel
-          - fantasytyx/bv
-          - cat3399/blbl
-          - T8RIN/ImageToolbox
-          - rainxchzed/Github-Store
-          - MuntashirAkon/AppManager
-    steps:
-    - name: Checkout ci repository
-      uses: actions/checkout@main
+        # 定义源仓库与你的Fork仓库的映射关系
+        # 请将‘fork’字段修改为你实际创建的Fork仓库全名
+        repo_pair:
+          - source: Acode-Foundation/Acode
+            fork: zxgv5/a-Acode
+          - source: Xed-Editor/Xed-Editor
+            fork: zxgv5/a-Xed-Editor
+          - source: bggRGjQaUbCoE/PiliPlus
+            fork: zxgv5/a-PiliPlus
+          - source: wgtunnel/wgtunnel
+            fork: zxgv5/a-wgtunnel
+          - source: fantasytyx/bv
+            fork: zxgv5/a-fantasy-bv
+          - source: cat3399/blbl
+            fork: zxgv5/a-blbl
+          - source: T8RIN/ImageToolbox
+            fork: zxgv5/a-ImageToolbox
+          - source: rainxchzed/Github-Store
+            fork: zxgv5/a-Github-Store
+          - source: MuntashirAkon/AppManager
+            fork: zxgv5/a-AppManager
 
-    - name: Setup git
-      run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
-    
-    - name: Sync ${{ matrix.source_repo }}
-      env:
-        SOURCE_REPO: ${{ matrix.source_repo }}
-        # 注意：此处假设Fork仓库名与源仓库名相同。如果不相同，请手动指定。
-        FORK_REPO: zxgv5/${{ matrix.source_repo.split('/')[1] }}
-        # 使用个人访问令牌，需要有推送权限
-        GH_TOKEN: ${{ secrets.SYNC_FORK_TOKEN }}
-      run: |
-        echo "正在同步仓库：$SOURCE_REPO -> $FORK_REPO"
-        # 1. 使用 --bare 克隆Fork仓库（关键修改）
-        git clone --bare "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
-        cd sync-repo
-        
-        # 2. 添加源仓库为上游远程
-        git remote add upstream "https://github.com/${SOURCE_REPO}.git"
-        
-        # 3. 获取上游所有分支和标签
-        echo "获取上游仓库更新..."
-        git fetch upstream --prune --tags
-        
-        # 4. 获取上游的所有分支列表
-        branches=$(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/upstream/)
-        
-        # 5. 遍历每个分支进行检查和同步
-        for branch in $branches; do
-          echo "检查分支: $branch"
-          # 检查上游分支与Fork分支是否有差异
-          if ! git diff --quiet upstream/$branch origin/$branch 2>/dev/null; then
-            echo "分支 $branch 有更新，正在同步..."
-            # 关键修改：将上游分支内容抓取到本地，然后推送到Fork
-            git fetch upstream $branch:$branch
-            git push origin $branch
-          else
-            echo "分支 $branch 已是最新。"
-          fi
-        done
-        
-        # 6. 同步所有标签
-        echo "同步标签..."
-        git push origin --tags --force
-        
-        # 7. 清理
-        cd ..
-        rm -rf sync-repo
-        echo "同步完成！"
+    steps:
+      - name: Checkout ci repository
+        uses: actions/checkout@main
+
+      - name: Setup git
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+      - name: Sync ${{ matrix.repo_pair.source }} to ${{ matrix.repo_pair.fork }}
+        env:
+          SOURCE_REPO: ${{ matrix.repo_pair.source }}
+          FORK_REPO: ${{ matrix.repo_pair.fork }}
+          GH_TOKEN: ${{ secrets.SYNC_FORK_TOKEN }}
+        run: |
+          echo "=========================================="
+          echo "开始同步：上游 [$SOURCE_REPO] -> 镜像 [$FORK_REPO]"
+          echo "=========================================="
+          # 1. 裸克隆Fork镜像仓库
+          echo "步骤1：克隆镜像仓库..."
+          git clone --bare "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
+          cd sync-repo
+          # 2. 添加上游源仓库
+          echo "步骤2：添加上游源仓库..."
+          git remote add upstream "https://github.com/${SOURCE_REPO}.git"
+          # 3. 获取上游所有更新（分支和标签）
+          echo "步骤3：获取上游仓库所有分支和标签..."
+          git fetch upstream --prune --tags
+          # 4. 获取上游分支列表
+          echo "步骤4：分析分支..."
+          upstream_branches=$(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/upstream/)
+          echo "找到上游分支：$(echo $upstream_branches | tr '\n' ' ')"
+          # 5. 遍历并同步每个分支
+          for branch in $upstream_branches; do
+            echo "--- 检查分支 [$branch] ---"
+            # 检查是否存在差异
+            if ! git diff --quiet upstream/$branch origin/$branch 2>/dev/null; then
+              echo "  检测到更新，正在同步..."
+              # 将上游分支抓取到本地临时分支，然后推送
+              git fetch upstream $branch:$branch
+              git push origin $branch
+              echo "  分支 [$branch] 同步完成。"
+            else
+              echo "  已是最新，无需同步。"
+            fi
+          done
+          # 6. 同步所有标签（强制覆盖）
+          echo "步骤5：同步标签..."
+          git push origin --tags --force
+          # 7. 清理工作目录
+          echo "步骤6：清理..."
+          cd ..
+          rm -rf sync-repo
+          echo "=========================================="
+          echo "仓库 [$SOURCE_REPO] 同步完成！"
+          echo "=========================================="
