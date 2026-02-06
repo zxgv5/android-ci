@@ -12,7 +12,6 @@ jobs:
     strategy:
       matrix:
         # 定义源仓库与你的Fork仓库的映射关系
-        # 请将‘fork’字段修改为你实际创建的Fork仓库全名
         repo_pair:
           - source: Acode-Foundation/Acode
             fork: zxgv5/a-Acode
@@ -35,14 +34,17 @@ jobs:
 
     steps:
       - name: Checkout ci repository
-        uses: actions/checkout@main
+        # 修正：使用正式版本号
+        uses: actions/checkout@v4
 
-      - name: Setup git
+      - name: Setup git and gh
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
+          # 安装 GitHub CLI 用于查询仓库默认分支
+          type -p gh >/dev/null || sudo apt-get install -y gh
 
-      - name: Sync ${{ matrix.repo_pair.source }} to ${{ matrix.repo_pair.fork }}
+      - name: Sync ${{ matrix.repo_pair.source }} (Default Branch)
         env:
           SOURCE_REPO: ${{ matrix.repo_pair.source }}
           FORK_REPO: ${{ matrix.repo_pair.fork }}
@@ -51,41 +53,39 @@ jobs:
           echo "=========================================="
           echo "开始同步：上游 [$SOURCE_REPO] -> 镜像 [$FORK_REPO]"
           echo "=========================================="
-          # 1. 裸克隆Fork镜像仓库
-          echo "步骤1：克隆镜像仓库..."
-          git clone --bare "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
+
+          # 1. 获取源仓库的默认分支名
+          echo "步骤1：获取源仓库默认分支..."
+          DEFAULT_BRANCH=$(gh api "repos/$SOURCE_REPO" --jq '.default_branch')
+          echo "默认分支为: $DEFAULT_BRANCH"
+
+          # 2. 克隆 Fork 仓库（完整克隆，非裸仓库，更简单）
+          echo "步骤2：克隆镜像仓库..."
+          git clone --depth=1 --branch="$DEFAULT_BRANCH" "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
           cd sync-repo
-          # 2. 添加上游源仓库
-          echo "步骤2：添加上游源仓库..."
+
+          # 3. 添加上游源仓库并拉取默认分支更新
+          echo "步骤3：拉取上游更新..."
           git remote add upstream "https://github.com/${SOURCE_REPO}.git"
-          # 3. 获取上游所有更新（分支和标签）
-          echo "步骤3：获取上游仓库所有分支和标签..."
-          git fetch upstream --prune --tags
-          # 4. 获取上游分支列表
-          echo "步骤4：分析分支..."
-          upstream_branches=$(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/upstream/)
-          echo "找到上游分支：$(echo $upstream_branches | tr '\n' ' ')"
-          # 5. 遍历并同步每个分支
-          for branch in $upstream_branches; do
-            echo "--- 检查分支 [$branch] ---"
-            # 检查是否存在差异
-            if ! git diff --quiet upstream/$branch origin/$branch 2>/dev/null; then
-              echo "  检测到更新，正在同步..."
-              # 将上游分支抓取到本地临时分支，然后推送
-              git fetch upstream $branch:$branch
-              git push origin $branch
-              echo "  分支 [$branch] 同步完成。"
-            else
-              echo "  已是最新，无需同步。"
-            fi
-          done
-          # 6. 同步所有标签（强制覆盖）
-          echo "步骤5：同步标签..."
-          git push origin --tags --force
-          # 7. 清理工作目录
-          echo "步骤6：清理..."
+          git fetch upstream "$DEFAULT_BRANCH"
+
+          # 4. 检查是否有新提交
+          echo "步骤4：检查差异..."
+          if git diff --quiet FETCH_HEAD "$DEFAULT_BRANCH"; then
+            echo "默认分支 [$DEFAULT_BRANCH] 已是最新，无需同步。"
+          else
+            echo "检测到更新，正在同步..."
+            # 5. 合并上游更新（快速转发）并推送
+            git merge --ff-only FETCH_HEAD
+            git push origin "$DEFAULT_BRANCH"
+            echo "默认分支 [$DEFAULT_BRANCH] 同步完成。"
+          fi
+
+          # 6. 清理
+          echo "步骤5：清理..."
           cd ..
           rm -rf sync-repo
+
           echo "=========================================="
           echo "仓库 [$SOURCE_REPO] 同步完成！"
           echo "=========================================="
