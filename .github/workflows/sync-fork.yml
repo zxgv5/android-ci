@@ -2,19 +2,17 @@ name: sync-fork
 
 on:
   schedule:
-    # 北京时间中午12点触发（UTC时间凌晨4点）
     - cron: '0 4 * * *'
   workflow_dispatch:
 
 jobs:
   sync-forks:
     runs-on: ubuntu-latest
-    # 移除 matrix 策略，改为串行执行
     steps:
       - name: Checkout ci repository
         uses: actions/checkout@main
 
-      - name: Setup git and gh
+      - name: Setup git
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
@@ -45,7 +43,7 @@ jobs:
             SOURCE_REPO="${pair%:*}"
             FORK_REPO="${pair#*:}"
             # 1. 获取源仓库默认分支
-            echo "1、获取源仓库默认分支..."
+            echo "1、获取 $SOURCE_REPO 默认分支..."
             DEFAULT_BRANCH_INFO=$(git ls-remote --symref "https://github.com/${SOURCE_REPO}.git" HEAD)
             DEFAULT_BRANCH=$(echo "$DEFAULT_BRANCH_INFO" | awk '/^ref:/ {sub(/refs\/heads\//, "", $2); print $2; exit}')
             if [ -z "$DEFAULT_BRANCH" ]; then
@@ -91,5 +89,5 @@ jobs:
             cd ..
             rm -rf sync-repo
             echo "$SOURCE_REPO 同步完成"
-            sleep 5
+            sleep 1
           done
