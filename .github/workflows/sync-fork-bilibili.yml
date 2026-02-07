@@ -1,4 +1,4 @@
-name: sync-fork
+name: sync-fork-bilibili
 
 on:
   schedule:
