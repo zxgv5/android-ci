@@ -2,47 +2,14 @@ name: sync-fork
 
 on:
   schedule:
-    - cron: '0 12 * * *' # 每天中午12点定时触发
+    # 北京时间中午12点触发（UTC时间凌晨4点）
+    - cron: '0 4 * * *'
   workflow_dispatch:
 
 jobs:
   sync-forks:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # 定义源仓库与Fork仓库的映射关系
-        repo_pair:
-          - source: Acode-Foundation/Acode
-            fork: zxgv5/a-Acode
-          - source: Xed-Editor/Xed-Editor
-            fork: zxgv5/a-Xed-Editor
-          - source: bggRGjQaUbCoE/PiliPlus
-            fork: zxgv5/a-PiliPlus
-          - source: wgtunnel/wgtunnel
-            fork: zxgv5/a-wgtunnel
-          - source: fantasytyx/bv
-            fork: zxgv5/a-fantasy-bv
-          - source: cat3399/blbl
-            fork: zxgv5/a-blbl
-          - source: T8RIN/ImageToolbox
-            fork: zxgv5/a-ImageToolbox
-          - source: rainxchzed/Github-Store
-            fork: zxgv5/a-Github-Store
-          - source: MuntashirAkon/AppManager
-            fork: zxgv5/a-AppManager
-          - source: localdesktop/localdesktop
-            fork: zxgv5/a-localdesktop
-          - source: termux/termux-app
-            fork: zxgv5/a-termux-app
-          - source: WirelessAlien/ZipXtract
-            fork: zxgv5/a-ZipXtract
-          - source: softprops/action-gh-release
-            fork: zxgv5/gh-ReleaseAction
-          - source: slapperwan/gh4a
-            fork: zxgv5/a-gh4a
-          - source: zhanghai/MaterialFiles
-            fork: zxgv5/a-MaterialFiles
-
+    # 移除 matrix 策略，改为串行执行
     steps:
       - name: Checkout ci repository
         uses: actions/checkout@main
@@ -51,48 +18,78 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          # 安装 GitHub CLI 用于查询仓库默认分支
-          type -p gh >/dev/null || sudo apt-get install -y gh
 
-      - name: Sync ${{ matrix.repo_pair.source }} - default branch
+      - name: Sync all repositories serially
         env:
-          SOURCE_REPO: ${{ matrix.repo_pair.source }}
-          FORK_REPO: ${{ matrix.repo_pair.fork }}
           GH_TOKEN: ${{ secrets.SYNC_FORK_TOKEN }}
         run: |
-          # 1. 使用 git ls-remote 获取源仓库的默认分支名
-          echo "步骤1：获取源仓库默认分支..."
-          # 查询上游仓库的HEAD引用，它指向默认分支
-          DEFAULT_BRANCH_INFO=$(git ls-remote --symref "https://github.com/${SOURCE_REPO}.git" HEAD)
-          # 从输出中提取分支名（例如：ref: refs/heads/main  HEAD）
-          DEFAULT_BRANCH=$(echo "$DEFAULT_BRANCH_INFO" | awk '/^ref:/ {sub(/refs\/heads\//, "", $2); print $2; exit}')
-          if [ -z "$DEFAULT_BRANCH" ]; then
-            # 备用方案：如果上述方法失败，尝试另一种解析方式
-            DEFAULT_BRANCH=$(echo "$DEFAULT_BRANCH_INFO" | grep -o 'refs/heads/[^ 	]*' | head -1 | sed 's|refs/heads/||')
-          fi
-          echo "默认分支为: $DEFAULT_BRANCH"
-          # 2. 克隆 Fork 仓库（浅克隆，指定默认分支）
-          echo "步骤2：克隆镜像仓库..."
-          # 先尝试克隆指定分支，如果分支不存在则退出
-          git clone --depth=1 --branch="$DEFAULT_BRANCH" "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
-          cd sync-repo
-          # 3. 添加上游源仓库并拉取默认分支更新
-          echo "步骤3：拉取上游更新..."
-          git remote add upstream "https://github.com/${SOURCE_REPO}.git"
-          git fetch upstream "$DEFAULT_BRANCH"
-          # 4. 检查是否有新提交
-          echo "步骤4：检查差异..."
-          # 比较上游拉取的内容与本地分支
-          if git diff --quiet FETCH_HEAD "$DEFAULT_BRANCH"; then
-            echo "默认分支 [$DEFAULT_BRANCH] 已是最新，无需同步。"
-          else
-            echo "检测到更新，正在同步..."
-            # 5. 合并上游更新（快速转发）并推送
-            git merge --ff-only FETCH_HEAD
-            git push origin "$DEFAULT_BRANCH"
-            echo "默认分支 [$DEFAULT_BRANCH] 同步完成。"
-          fi
-          # 6. 清理
-          echo "步骤5：清理..."
-          cd ..
-          rm -rf sync-repo
+          # 定义仓库对数组
+          repo_pairs=(
+            "Acode-Foundation/Acode:zxgv5/a-Acode"
+            "Xed-Editor/Xed-Editor:zxgv5/a-Xed-Editor"
+            "bggRGjQaUbCoE/PiliPlus:zxgv5/a-PiliPlus"
+            "wgtunnel/wgtunnel:zxgv5/a-wgtunnel"
+            "fantasytyx/bv:zxgv5/a-fantasy-bv"
+            "cat3399/blbl:zxgv5/a-blbl"
+            "T8RIN/ImageToolbox:zxgv5/a-ImageToolbox"
+            "rainxchzed/Github-Store:zxgv5/a-Github-Store"
+            "MuntashirAkon/AppManager:zxgv5/a-AppManager"
+            "localdesktop/localdesktop:zxgv5/a-localdesktop"
+            "termux/termux-app:zxgv5/a-termux-app"
+            "WirelessAlien/ZipXtract:zxgv5/a-ZipXtract"
+            "softprops/action-gh-release:zxgv5/gh-ReleaseAction"
+            "slapperwan/gh4a:zxgv5/a-gh4a"
+            "zhanghai/MaterialFiles:zxgv5/a-MaterialFiles"
+          )
+          for pair in "${repo_pairs[@]}"; do
+            SOURCE_REPO="${pair%:*}"
+            FORK_REPO="${pair#*:}"
+            # 1. 获取源仓库默认分支
+            echo "1、获取源仓库默认分支..."
+            DEFAULT_BRANCH_INFO=$(git ls-remote --symref "https://github.com/${SOURCE_REPO}.git" HEAD)
+            DEFAULT_BRANCH=$(echo "$DEFAULT_BRANCH_INFO" | awk '/^ref:/ {sub(/refs\/heads\//, "", $2); print $2; exit}')
+            if [ -z "$DEFAULT_BRANCH" ]; then
+              DEFAULT_BRANCH=$(echo "$DEFAULT_BRANCH_INFO" | grep -o 'refs/heads/[^ 	]*' | head -1 | sed 's|refs/heads/||')
+            fi
+            echo "默认分支: $DEFAULT_BRANCH"
+            # 2. 克隆 Fork 仓库
+            echo "2、克隆镜像仓库..."
+            if ! git clone --depth=1 --branch="$DEFAULT_BRANCH" "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo; then
+              echo "警告：克隆失败，尝试克隆默认分支..."
+              rm -rf sync-repo
+              git clone --depth=1 "https://${GH_TOKEN}@github.com/${FORK_REPO}.git" sync-repo
+              cd sync-repo
+              git checkout -b "$DEFAULT_BRANCH" origin/"$DEFAULT_BRANCH" 2>/dev/null || true
+            else
+              cd sync-repo
+            fi
+            # 3. 添加上游源仓库并拉取更新
+            echo "3、拉取上游更新..."
+            git remote add upstream "https://github.com/${SOURCE_REPO}.git" 2>/dev/null || git remote set-url upstream "https://github.com/${SOURCE_REPO}.git"
+            git fetch upstream "$DEFAULT_BRANCH"
+            # 4. 检查是否有新提交
+            echo "4、检查差异..."
+            # 比较上游拉取的内容与本地分支
+            if git diff --quiet FETCH_HEAD "$DEFAULT_BRANCH"; then
+              echo "[$DEFAULT_BRANCH] 已是最新，无需同步。"
+            else
+              echo "检测到更新，正在同步..."
+              # 5. 合并上游更新并推送
+              if git merge --ff-only FETCH_HEAD; then
+                git push origin "$DEFAULT_BRANCH"
+                echo "[$DEFAULT_BRANCH] 同步完成。"
+              else
+                echo "警告：快速合并失败，可能是分支历史有分歧。"
+                echo "尝试重置并强制推送..."
+                git reset --hard FETCH_HEAD
+                git push --force origin "$DEFAULT_BRANCH"
+                echo "[$DEFAULT_BRANCH] 已强制同步。"
+              fi
+            fi
+            # 6. 清理并返回上级目录
+            echo "5、清理..."
+            cd ..
+            rm -rf sync-repo
+            echo "$SOURCE_REPO 同步完成"
+            sleep 5
+          done
