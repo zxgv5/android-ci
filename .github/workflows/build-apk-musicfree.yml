@@ -69,9 +69,9 @@ jobs:
           chmod 600 android/keystore.properties android/app/release.keystore
 
       - name: Build apk
-        working-directory: ./musicfree_source
+        working-directory: ./musicfree_source/android
         run: | 
-          chmod +x android/gradlew
+          chmod +x ./gradlew
           ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
 
       - name: List generated apk
