@@ -64,7 +64,7 @@ jobs:
           RELEASE_STORE_FILE=release.keystore
           RELEASE_STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}
           RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          RELEASE_KEY_PASSWORD=${{ secrets.STORE_PASSWORD }}
           EOF
           chmod 600 android/keystore.properties android/app/release.keystore
 
