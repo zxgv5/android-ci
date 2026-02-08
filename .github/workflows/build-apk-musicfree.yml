@@ -3,16 +3,16 @@ name: build-apk-musicfree
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+
 permissions:
   contents: write
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -52,8 +52,9 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
+        working-directory: ./musicfree_source
         run: npm ci --prefer-offline --no-audit      
-        
+
       - name: Setup keystore
         working-directory: ./musicfree_source
         run: |
@@ -71,7 +72,7 @@ jobs:
         run: | 
           chmod +x android/gradlew
           ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
- 
+
       - name: List generated apk
         working-directory: ./musicfree_source
         run: |
