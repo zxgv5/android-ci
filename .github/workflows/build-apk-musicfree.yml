@@ -27,7 +27,8 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: maotoumao/MusicFree
-          ref: dev
+          ref: master
+          # ref: dev
           path: musicfree_source
           fetch-depth: 0
 
