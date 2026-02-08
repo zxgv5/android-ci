@@ -40,6 +40,7 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
+      - name: Setup java
       - uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
