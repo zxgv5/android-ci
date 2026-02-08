@@ -1,0 +1,79 @@
+name: build-apk-musicfree
+
+on:
+  workflow_dispatch:
+  workflow_call:
+ 
+env:
+  JDK_VERSION: '21'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+ 
+permissions:
+  contents: write
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          # 清理可能存在的全局缓存文件
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: maotoumao/MusicFree
+          ref: dev
+          path: musicfree_source
+          fetch-depth: 0
+
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+      - uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "temurin"
+
+      - name: Setup node.js
+        uses: actions/setup-node@main
+        with: 
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit      
+        
+      - name: Setup keystore
+        working-directory: ./musicfree_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          cat > android/keystore.properties << 'EOF'
+          RELEASE_STORE_FILE=release.keystore
+          RELEASE_STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          EOF
+          chmod 600 android/keystore.properties android/app/release.keystore
+
+      - name: Build apk
+        working-directory: ./musicfree_source
+        run: | 
+          chmod +x android/gradlew
+          ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
+ 
+      - name: List generated apk
+        working-directory: ./musicfree_source
+        run: |
+          echo "📱 Generated APK files:"
+          find android/app/build/outputs/apk/release -name "*.apk" -exec ls -lh {} \;
