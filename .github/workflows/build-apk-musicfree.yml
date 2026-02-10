@@ -56,11 +56,6 @@ jobs:
         working-directory: ./musicfree_source
         run: npm ci --prefer-offline --no-audit      
  
-      - name: Decode keystore
-        working-directory: ./musicfree_source
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
- 
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./musicfree_source
         run: |
@@ -76,9 +71,10 @@ jobs:
         working-directory: ./musicfree_source/android
         run: | 
           chmod +x ./gradlew
+          ./gradlew assembleArm64V8aRelease --parallel  --configure-on-demand
           # ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
           # ./gradlew assembleRelease -Pandroid.injected.abiFilters=arm64-v8a
-          ./gradlew assembleRelease -Psplits.abi.include=arm64-v8a -Psplits.abi.universalApk=false
+          # ./gradlew assembleRelease -Psplits.abi.include=arm64-v8a -Psplits.abi.universalApk=false
  
       - name: List generated apk and rename
         working-directory: ./musicfree_source
