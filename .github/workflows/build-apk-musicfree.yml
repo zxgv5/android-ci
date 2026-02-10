@@ -76,8 +76,9 @@ jobs:
         working-directory: ./musicfree_source/android
         run: | 
           chmod +x ./gradlew
-          ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
+          # ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
           # ./gradlew assembleRelease -Pandroid.injected.abiFilters=arm64-v8a
+          ./gradlew assembleRelease -Psplits.abi.include=arm64-v8a -Psplits.abi.universalApk=false
  
       - name: List generated apk and rename
         working-directory: ./musicfree_source
