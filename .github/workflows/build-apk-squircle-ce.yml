@@ -58,7 +58,7 @@ jobs:
           EOF
  
       - name: Build apk
-        working-directory: ./squircle_ce_source/android
+        working-directory: ./squircle_ce_source
         run: | 
           chmod +x ./gradlew
           ./gradlew :app:assembleGmsRelease --no-configuration-cache
