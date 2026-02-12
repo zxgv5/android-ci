@@ -19,13 +19,13 @@ jobs:
     steps:
       - name: Clean runner environment
         run: |
-          rm -rf ~/.gradle/caches/
-          rm -rf ~/.gradle/daemon/
-          rm -rf ~/.android/build-cache/
+          rm -rf ~/.gradle
+          rm -rf ~/.android
           rm -rf .gradle
  
+      # 🔴 改动1：只把 main → v6（和作者完全一致）
       - name: Checkout source repo
-        uses: actions/checkout@main
+        uses: actions/checkout@v6
         with:
           repository: massivemadness/Squircle-CE
           ref: master
@@ -34,7 +34,7 @@ jobs:
           submodules: recursive
  
       - name: Checkout ci source repo (self)
-        uses: actions/checkout@main
+        uses: actions/checkout@v6
         with:
           path: ci_source
  
@@ -43,10 +43,16 @@ jobs:
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
       - name: Setup java 17
-        uses: actions/setup-java@main
+        uses: actions/setup-java@v5
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: 'temurin'
+ 
+      # 🔴 改动2：只加这1行！强制Gradle自身用JDK17（之前我错加了一堆，现在只这一行）
+      - name: Force Gradle to use Java 17
+        working-directory: ./squircle_ce_source
+        run: |
+          echo "org.gradle.java.home=$JAVA_HOME_17_X64" >> gradle.properties
  
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./squircle_ce_source
@@ -59,11 +65,7 @@ jobs:
           KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
  
-      # ======================================================================
-      # 我只改这里！！！
-      # 完全跟作者官方 GMS CI 一样：只保留 --no-configuration-cache
-      # 删掉我之前错加的 --no-daemon --no-build-cache
-      # ======================================================================
+      # 🔴 改动3：完全和作者GMS CI命令一样，只留 --no-configuration-cache
       - name: Build apk
         working-directory: ./squircle_ce_source
         run: | 
