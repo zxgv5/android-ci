@@ -75,8 +75,7 @@ jobs:
         working-directory: ./squircle_ce_source
         run: |
           chmod +x ./gradlew
-          # 如果仍失败，可临时添加 -x :app:produceGmsReleaseComposeMapping（仅应急）
-          ./gradlew :app:bundleGmsRelease --no-configuration-cache --stacktrace
+          ./gradlew :app:bundleGmsRelease --no-configuration-cache --stacktrace -x :app:produceGmsReleaseComposeMapping
 
       - name: List generated apk and rename
         working-directory: ./squircle_ce_source
