@@ -5,7 +5,7 @@ on:
   workflow_call:
  
 env:
-  JDK_VERSION: '17'
+  JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -20,8 +20,10 @@ jobs:
       - name: Clean runner environment
         run: |
           # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
+          rm -rf .gradle
  
       - name: Checkout source repo
         uses: actions/checkout@main
@@ -62,7 +64,8 @@ jobs:
         working-directory: ./squircle_ce_source
         run: | 
           chmod +x ./gradlew
-          ./gradlew :app:assembleGmsRelease --no-configuration-cache
+          ./gradlew clean --no-daemon --no-build-cache --no-configuration-cache
+          ./gradlew :app:assembleGmsRelease --no-daemon --no-build-cache --no-configuration-cache
  
       - name: List generated apk and rename
         working-directory: ./squircle_ce_source
