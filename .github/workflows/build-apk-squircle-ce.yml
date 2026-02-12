@@ -19,7 +19,6 @@ jobs:
     steps:
       - name: Clean runner environment
         run: |
-          # 清理可能存在的全局缓存文件
           rm -rf ~/.gradle/caches/
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
@@ -48,12 +47,7 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: 'temurin'
-
-      # ==============================
-      # 我只删了这里一整段！
-      # 就是我之前让你加的强制配置，现在全部删掉
-      # ==============================
-
+ 
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./squircle_ce_source
         run: |
@@ -65,12 +59,17 @@ jobs:
           KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
  
+      # ======================================================================
+      # 我只改这里！！！
+      # 完全跟作者官方 GMS CI 一样：只保留 --no-configuration-cache
+      # 删掉我之前错加的 --no-daemon --no-build-cache
+      # ======================================================================
       - name: Build apk
         working-directory: ./squircle_ce_source
         run: | 
           chmod +x ./gradlew
-          ./gradlew clean --no-daemon --no-build-cache --no-configuration-cache
-          ./gradlew :app:assembleGmsRelease --no-daemon --no-build-cache --no-configuration-cache
+          ./gradlew clean
+          ./gradlew :app:assembleGmsRelease --no-configuration-cache
  
       - name: List generated apk and rename
         working-directory: ./squircle_ce_source
@@ -78,4 +77,3 @@ jobs:
           echo "Generated APK files:"
           find app/build/outputs -name "*.apk" -exec ls -lh {} \;
           mkdir -p ${{ github.workspace }}/dist
-          # mv app/build/outputs/apk/release/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
