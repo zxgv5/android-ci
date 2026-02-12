@@ -49,6 +49,10 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
  
+      - name: Force compile with jdk17
+         run: |
+           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
+ 
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./squircle_ce_source
         run: |
