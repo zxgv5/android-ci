@@ -1,30 +1,29 @@
 name: build-apk-squircle-ce
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+
 permissions:
   contents: write
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Clean runner environment
         run: |
-          # 清理可能存在的全局缓存文件
           rm -rf ~/.gradle/caches/
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
- 
+
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -33,22 +32,34 @@ jobs:
           path: squircle_ce_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
+
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
- 
+
+      # 🔧 新增：强制 Gradle 使用当前 JDK
+      - name: Force gradle to use jdk 21
+        working-directory: ./squircle_ce_source
+        run: |
+          echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> gradle.properties
+          echo "org.gradle.daemon=false" >> gradle.properties
+
+      # 🔧 新增：验证 Java 版本
+      - name: Verify java version
+        run: java -version
+
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./squircle_ce_source
         run: |
@@ -59,18 +70,16 @@ jobs:
           KEY_ALIAS=${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
- 
+
       - name: Build apk
         working-directory: ./squircle_ce_source
-        run: | 
+        run: |
           chmod +x ./gradlew
+          # 如果仍失败，可临时添加 -x :app:produceGmsReleaseComposeMapping（仅应急）
           ./gradlew :app:bundleGmsRelease --no-configuration-cache --stacktrace
- 
+
       - name: List generated apk and rename
         working-directory: ./squircle_ce_source
         run: |
           echo "Generated APK files:"
           find app/build/outputs -name "*.apk" -exec ls -lh {} \;
-          # mkdir -p ${{ github.workspace }}/dist
-          # mv app/build/outputs/apk/release/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
- 
