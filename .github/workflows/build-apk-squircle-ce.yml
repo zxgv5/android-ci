@@ -47,17 +47,13 @@ jobs:
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
-          distribution: "temurin"
- 
-      - name: Force gradle & kotlin jvm to java 17
-        working-directory: ./squircle_ce_source
-        run: |
-          echo "org.gradle.java.home=$JAVA_HOME_17_X64" >> ./gradle.properties
-          echo "org.gradle.jvmargs=-Xmx4096M" >> ./gradle.properties
-          echo "kotlin.jvm.target.validation.mode=warning" >> ./gradle.properties
-          echo "android.compileOptions.sourceCompatibility=17" >> ./gradle.properties
-          echo "android.compileOptions.targetCompatibility=17" >> ./gradle.properties
- 
+          distribution: 'temurin'
+
+      # ==============================
+      # 我只删了这里一整段！
+      # 就是我之前让你加的强制配置，现在全部删掉
+      # ==============================
+
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./squircle_ce_source
         run: |
@@ -83,4 +79,3 @@ jobs:
           find app/build/outputs -name "*.apk" -exec ls -lh {} \;
           mkdir -p ${{ github.workspace }}/dist
           # mv app/build/outputs/apk/release/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
- 
