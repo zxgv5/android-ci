@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: massivemadness/Squircle-CE
-          ref: master
+          ref: 2025.1.3
           path: squircle_ce_source
           fetch-depth: 0
  
