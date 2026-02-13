@@ -85,8 +85,12 @@ jobs:
             -x :app:produceGmsReleaseComposeMapping \
             -x :app:mergeGmsReleaseComposeMapping
 
-      - name: List generated apk and rename
+      - name: Locate and rename apk
         working-directory: ./squircle_ce_source
         run: |
-          echo "Generated APK files:"
-          find app/build/outputs -name "*.apk" -exec ls -lh {} \;
+          echo "Searching for apk files in app/build/outputs..."
+          find app/build/outputs -type f -name "*.apk" -exec ls -lh {} \; || echo "No apk found"
+          # mkdir -p ${{ github.workspace }}/dist
+          # DEST="${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
+          # cp "$APK_PATH" "$DEST"
+          # echo "📦 APK copied to: $DEST"
