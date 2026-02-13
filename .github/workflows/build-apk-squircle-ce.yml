@@ -86,8 +86,19 @@ jobs:
             -x :app:produceGmsReleaseComposeMapping \
             -x :app:mergeGmsReleaseComposeMapping
  
-      - name: List all generated apks
+      - name: List all generated apks and move to dist
         working-directory: ./squircle_ce_source
         run: |
           echo "All apk files in app/build/outputs:"
           find app/build/outputs -type f -name "*.apk" -exec ls -lh {} \; || echo "No apk found"
+          mkdir -p "${{ github.workspace }}/dist"
+          mv -f app/build/outputs/apk/gms/release/app-gms-release.apk "${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./squircle_ce_source/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-squircle-ce"
