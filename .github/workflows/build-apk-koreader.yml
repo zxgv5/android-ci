@@ -25,6 +25,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
+          rm -rf ~/.ccache # 清掉旧缓存，防止NDK不匹配残留
 
       - name: Checkout koreader source
         uses: actions/checkout@main
@@ -56,6 +57,12 @@ jobs:
           build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
           ndk-version: ${{ env.ANDROID_NDK_VERSION }}
           accept-licenses: true
+
+      # 强制用NDK 26.1，覆盖系统自带的27
+      - name: Force use ndk 26.1
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH" >> $GITHUB_ENV
 
       - name: Install system dependencies
         run: |
@@ -93,14 +100,11 @@ jobs:
           mv "$APK_FILE" "${{ github.workspace }}/dist/koreader-unsigned.apk"
 
       - name: Decode keystore
-        working-directory: ./koreader_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
 
       - name: Sign apk
-        working-directory: ./koreader_source
         run: |
-          export ANDROID_HOME=$ANDROID_HOME
           export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
           apksigner sign \
             --ks keystore.p12 \
