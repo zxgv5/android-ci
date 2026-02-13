@@ -52,12 +52,21 @@ jobs:
         run: |
           sudo apt-get install -y ispell
 
-      - name: Build apk
+      - name: Build release apk
         working-directory: ./markor_source
         run: |
-          make clean all
+          chmod +x gradlew
+          ./gradlew clean assembleRelease --stacktrace
 
-      - name: List dist files
+      - name: Locate and rename apk
         working-directory: ./markor_source
         run: |
-          find dist -type f -maxdepth 2
+          # 查找生成的 release APK（通常带 -release 后缀且不含 unsigned）
+          APK_PATH=$(find app/build/outputs -type f -name "*.apk" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "No release APK generated"
+            exit 1
+          fi
+          echo "found APK: $APK_PATH"
+          # mkdir -p ${{ github.workspace }}/dist
+          # mv "$APK_PATH" "${{ github.workspace }}/dist/markor-release.apk"
