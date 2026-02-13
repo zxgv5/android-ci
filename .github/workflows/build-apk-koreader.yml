@@ -7,6 +7,7 @@ env:
   JDK_VERSION: '17'
   ANDROID_COMPILE_SDK: '34'
   ANDROID_BUILD_TOOLS: '34.0.0'
+  ANDROID_NDK_VERSION: '26.1.10909125'
   ANDROID_ARCH: arm64
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -48,6 +49,14 @@ jobs:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
+      - name: Set up android sdk & ndk
+        uses: android-actions/setup-android@main
+        with:
+          api-level: ${{ env.ANDROID_COMPILE_SDK }}
+          build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
+          ndk-version: ${{ env.ANDROID_NDK_VERSION }}
+          accept-licenses: true
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -62,7 +71,7 @@ jobs:
           restore-keys: |
             android-ccache-
 
-      - name: Fetch third-party submodules
+      - name: Fetch 3rd party submodules
         working-directory: ./koreader_source
         run: make fetchthirdparty
 
