@@ -58,5 +58,6 @@ jobs:
           make clean all
 
       - name: List dist files
+        working-directory: ./markor_source
         run: |
           find dist -type f -maxdepth 2
