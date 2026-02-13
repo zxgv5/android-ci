@@ -58,8 +58,36 @@ jobs:
       - name: List generated apk and rename
         working-directory: ./pdfviewer_source
         run: |
-          echo "Generated APK files:"
-          find app/build/outputs -name "*.apk" -exec ls -lh {} \;
-          # mkdir -p ${{ github.workspace }}/dist
-          # mv app/build/outputs/apk/release/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/pdfviewer-${{ env.BUILD_DATE }}.apk"
- 
+          # echo "Generated APK files:"
+          # find app/build/outputs -name "*.apk" -exec ls -lh {} \;
+          mkdir -p ${{ github.workspace }}/dist
+          mv app/build/outputs/apk/release/app-release-unsigned.apk "${{ github.workspace }}/dist/pdfviewer-unsigned.apk"
+
+      - name: Decode keystore.p12
+        working-directory: ./pdfviewer_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+
+      - name: Sign the apk (pkcs12)
+        working-directory: ./pdfviewer_source
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
+          apksigner sign \
+            --ks "app/keystore.p12" \
+            --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
+            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
+            --ks-type PKCS12 \
+            --out "${{ github.workspace }}/dist/pdfviewer-${{ env.BUILD_DATE }}.apk" \
+            "${{ github.workspace }}/dist/pdfviewer-unsigned.apk"
+          # 验证签名
+          apksigner verify --verbose "${{ github.workspace }}/dist/pdfviewer-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./pdfviewer_source/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/pdfviewer-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-pdfviewer"
