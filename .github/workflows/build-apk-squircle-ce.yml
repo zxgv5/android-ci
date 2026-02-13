@@ -72,14 +72,14 @@ jobs:
 
       - name: List all compose mapping
         working-directory: ./squircle_ce_source
-      - run: |
+        run: |
           echo ./gradlew tasks --all | grep -i "compose.*mapping"
 
       - name: Build apk
         working-directory: ./squircle_ce_source
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:bundleGmsRelease \
+          ./gradlew :app:buildGmsRelease \
             --no-configuration-cache \
             --stacktrace \
             -x :app:produceGmsReleaseComposeMapping \
