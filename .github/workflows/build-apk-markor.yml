@@ -62,11 +62,40 @@ jobs:
         working-directory: ./markor_source
         run: |
           # 查找生成的 release APK（通常带 -release 后缀且不含 unsigned）
-          APK_PATH=$(find app/build/outputs -type f -name "*.apk" | head -1)
+          APK_PATH=$(find app/build/outputs -type f -name "*-release-unsigned.apk" | head -1)
           if [ -z "$APK_PATH" ]; then
             echo "No release APK generated"
             exit 1
           fi
           echo "found APK: $APK_PATH"
-          # mkdir -p ${{ github.workspace }}/dist
-          # mv "$APK_PATH" "${{ github.workspace }}/dist/markor-release.apk"
+          mkdir -p ${{ github.workspace }}/dist
+          mv "$APK_PATH" "${{ github.workspace }}/dist/markor-unsigned.apk"
+
+      - name: Decode keystore.p12
+        working-directory: ./markor_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+
+      - name: Sign the apk (pkcs12)
+        working-directory: ./markor_source
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
+          apksigner sign \
+            --ks "app/keystore.p12" \
+            --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
+            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
+            --ks-type PKCS12 \
+            --out "${{ github.workspace }}/dist/markor-${{ env.BUILD_DATE }}.apk" \
+            "${{ github.workspace }}/dist/markor-unsigned.apk"
+          # 验证签名
+          apksigner verify --verbose "${{ github.workspace }}/dist/markor-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./markor_source/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/markor-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-markor"
