@@ -70,26 +70,55 @@ jobs:
           KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
 
-      - name: List all compose mapping
-        working-directory: ./squircle_ce_source
-        run: |
-          chmod +x ./gradlew
-          ./gradlew tasks --all | grep -i "compose.*mapping"
+#       - name: List all compose mapping
+#         working-directory: ./squircle_ce_source
+#         run: |
+#           chmod +x ./gradlew
+#           ./gradlew tasks --all | grep -i "compose.*mapping"
 
       - name: Build apk
         working-directory: ./squircle_ce_source
         run: |
+          chmod +x ./gradlew
           ./gradlew :app:buildGmsRelease \
             --no-configuration-cache \
             --stacktrace \
             -x :app:produceGmsReleaseComposeMapping \
             -x :app:mergeGmsReleaseComposeMapping
 
-      - name: Locate and rename apk
+      - name: Verify task output
         working-directory: ./squircle_ce_source
         run: |
-          echo "Searching for apk files in app/build/outputs..."
-          find app/build/outputs -type f -name "*.apk" -exec ls -lh {} \; || echo "No apk found"
+          chmod +x ./gradlew
+          ./gradlew :app:assembleGmsRelease --dry-run | grep "SKIPPED" || true
+          ls -la app/build/outputs/apk/ || true
+
+      - name: Locate and rename
+        working-directory: ./squircle_ce_source
+        run: |
+          # 1. 输出所有 APK 文件列表（调试用）
+          echo "Searching for APK files in app/build/outputs..."
+          find app/build/outputs -type f -name "*.apk" -exec ls -lh {} \; || echo "No APK found"
+          # 2. 定位预期的 APK（按优先级：release、未签名、arm64-v8a等）
+          APK_PATH=""
+          for pattern in \
+            "app/build/outputs/apk/gms/release/*-release.apk" \
+            "app/build/outputs/apk/gms/release/*-release-unsigned.apk" \
+            "app/build/outputs/apk/gms/release/*arm64-v8a*.apk" \
+            "app/build/outputs/apk/gms/release/*.apk"; do
+            for file in $pattern; do
+              if [ -f "$file" ]; then
+                APK_PATH="$file"
+                break 2
+              fi
+            done
+          done
+          if [ -z "$APK_PATH" ]; then
+            echo "could not find generated APK"
+            exit 1
+          fi
+          echo "Found APK: $APK_PATH"
+          # 3. 创建输出目录并重命名
           # mkdir -p ${{ github.workspace }}/dist
           # DEST="${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
           # cp "$APK_PATH" "$DEST"
