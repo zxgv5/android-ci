@@ -7,7 +7,7 @@ env:
   JDK_VERSION: '17'
   ANDROID_COMPILE_SDK: '34'
   ANDROID_BUILD_TOOLS: '34.0.0'
-  ANDROID_NDK_VERSION: '26.1.10909125'
+  ANDROID_NDK_VERSION: '25.2.9519653'   # NDK r25c
   ANDROID_ARCH: arm64
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -95,13 +95,18 @@ jobs:
         working-directory: ./koreader_source
         run: make fetchthirdparty
 
+      # 清理之前可能的构建残留
+      - name: Clean base build directory
+        working-directory: ./koreader_source
+        run: make clean || true
+
       - name: Build koreader apk
         working-directory: ./koreader_source
         run: |
           export ANDROID_ARCH=${{ env.ANDROID_ARCH }}
-          make TARGET=android update
+          make TARGET=android update V=1   # 输出详细日志便于排查
 
-      - name: Locate and rename APK
+      - name: Locate and rename apk
         working-directory: ./koreader_source
         run: |
           mkdir -p dist
