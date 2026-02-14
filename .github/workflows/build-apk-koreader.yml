@@ -103,27 +103,31 @@ jobs:
       - name: Check disk space
         run: df -h
 
-      - name: Build koreader apk (serial)
+      - name: Build koreader apk
         working-directory: ./koreader_source
         run: |
           export ANDROID_ARCH=${{ env.ANDROID_ARCH }}
+          # 启用 Gradle 详细日志，便于排查打包错误
+          export GRADLE_FLAGS="--info --stacktrace --no-daemon"
           make -j1 TARGET=android update
         timeout-minutes: 120
 
-      - name: Debug - list build artifacts on failure
-        if: failure()
+      - name: Debug - check for apk and gradle logs
+        if: always()
         working-directory: ./koreader_source
         run: |
-          echo "=== Build failed, collecting logs ==="
-          find base/build -name "CMakeOutput.log" -o -name "CMakeError.log" | while read f; do
-            echo "--- $f ---"
-            cat "$f"
-          done
-          find base/build -name "*.log" | while read f; do
-            echo "--- $f (tail) ---"
-            tail -n 50 "$f"
-          done
-          exit 1
+          echo "=== Searching for APK ==="
+          find . -name "*.apk" -ls || true
+          echo "=== Checking Gradle build directory ==="
+          GRADLE_BUILD_DIR="$(find base/build -type d -name "android-luajit-launcher" -print -quit)/build"
+          if [ -d "$GRADLE_BUILD_DIR" ]; then
+            echo "Gradle build logs:"
+            find "$GRADLE_BUILD_DIR" -name "*.log" -o -name "*.txt" | xargs tail -n 50 || true
+          else
+            echo "Gradle build directory not found."
+          fi
+          echo "=== Last 50 lines of base/build log files ==="
+          find base/build -name "*.log" -exec tail -n 50 {} \; || true
 
       - name: Locate and rename apk
         working-directory: ./koreader_source
