@@ -25,7 +25,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-          rm -rf ~/.ccache # 清掉旧缓存，防止NDK不匹配残留
+          rm -rf ~/.ccache
 
       - name: Checkout koreader source
         uses: actions/checkout@main
@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Checkout ci repository
+      - name: Checkout ci repository (self)
         uses: actions/checkout@main
         with:
           path: ci_source
@@ -44,25 +44,38 @@ jobs:
       - name: Set build date
         run: echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
 
-      - name: Set up java
+      - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
 
-      - name: Set up android sdk & ndk
-        uses: android-actions/setup-android@main
-        with:
-          api-level: ${{ env.ANDROID_COMPILE_SDK }}
-          build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
-          ndk-version: ${{ env.ANDROID_NDK_VERSION }}
-          accept-licenses: true
-
-      # 强制用NDK 26.1，覆盖系统自带的27
-      - name: Force use ndk 26.1
+      # 手动安装 Android SDK & NDK，确保指定版本
+      - name: Setup android sdk & ndk
         run: |
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION" >> $GITHUB_ENV
-          echo "PATH=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH" >> $GITHUB_ENV
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mv cmdline-tools latest
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" \
+                     "platforms;android-$ANDROID_COMPILE_SDK" \
+                     "build-tools;$ANDROID_BUILD_TOOLS" \
+                     "ndk;$ANDROID_NDK_VERSION"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Verify ndk version
+        run: |
+          echo "NDK version:"
+          $ANDROID_NDK_HOME/ndk-build --version || true
+          which clang || true
+          clang --version | head -1
 
       - name: Install system dependencies
         run: |
@@ -78,7 +91,7 @@ jobs:
           restore-keys: |
             android-ccache-
 
-      - name: Fetch 3rd party submodules
+      - name: Fetch third-party submodules
         working-directory: ./koreader_source
         run: make fetchthirdparty
 
@@ -88,7 +101,7 @@ jobs:
           export ANDROID_ARCH=${{ env.ANDROID_ARCH }}
           make TARGET=android update
 
-      - name: Locate and rename apk
+      - name: Locate and rename APK
         working-directory: ./koreader_source
         run: |
           mkdir -p dist
@@ -99,11 +112,11 @@ jobs:
           fi
           mv "$APK_FILE" "${{ github.workspace }}/dist/koreader-unsigned.apk"
 
-      - name: Decode keystore
+      - name: Decode keystore.p12
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
 
-      - name: Sign apk
+      - name: Sign APK (pkcs12)
         run: |
           export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
           apksigner sign \
@@ -114,3 +127,12 @@ jobs:
             --out "${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk" \
             "${{ github.workspace }}/dist/koreader-unsigned.apk"
           apksigner verify --verbose "${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk"
+
+      - name: Remove keystore
+        run: rm -f keystore.p12
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: koreader-android-arm64
+          path: ${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk
