@@ -116,7 +116,7 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
 
-      - name: Sign APK (pkcs12)
+      - name: Sign apk (pkcs12)
         run: |
           export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
           apksigner sign \
@@ -127,12 +127,3 @@ jobs:
             --out "${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk" \
             "${{ github.workspace }}/dist/koreader-unsigned.apk"
           apksigner verify --verbose "${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk"
-
-      - name: Remove keystore
-        run: rm -f keystore.p12
-
-      - name: Upload APK as artifact
-        uses: actions/upload-artifact@main
-        with:
-          name: koreader-android-arm64
-          path: ${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk
