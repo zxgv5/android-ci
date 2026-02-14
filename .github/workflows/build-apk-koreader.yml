@@ -100,23 +100,30 @@ jobs:
         working-directory: ./koreader_source
         run: make clean || true
 
-      - name: Build koreader apk
+      - name: Check disk space
+        run: df -h
+
+      - name: Build koreader apk (serial)
         working-directory: ./koreader_source
         run: |
           export ANDROID_ARCH=${{ env.ANDROID_ARCH }}
-          # 不使用 V=1，避免日志爆炸
-          make TARGET=android update
-        # 可选：设置超时，防止作业挂起
+          make -j1 TARGET=android update
         timeout-minutes: 120
 
-      - name: Debug - list build directory
+      - name: Debug - list build artifacts on failure
+        if: failure()
         working-directory: ./koreader_source
-        if: always()  # 无论成功失败都运行
         run: |
-          echo "=== Content of base/build ==="
-          ls -la base/build/
-          echo "=== Looking for APK ==="
-          find . -name "*.apk" -ls
+          echo "=== Build failed, collecting logs ==="
+          find base/build -name "CMakeOutput.log" -o -name "CMakeError.log" | while read f; do
+            echo "--- $f ---"
+            cat "$f"
+          done
+          find base/build -name "*.log" | while read f; do
+            echo "--- $f (tail) ---"
+            tail -n 50 "$f"
+          done
+          exit 1
 
       - name: Locate and rename apk
         working-directory: ./koreader_source
@@ -128,9 +135,10 @@ jobs:
             exit 1
           fi
           mv "$APK_FILE" "${{ github.workspace }}/dist/koreader-unsigned.apk"
-            - name: Decode keystore.p12
-              run: |
-                echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
+
+      - name: Decode keystore.p12
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
 
       - name: Sign apk (pkcs12)
         run: |
