@@ -1,0 +1,144 @@
+name: build-apk-readest
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '17'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  NDK_VERSION: '28.2.13676358'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: readest/readest
+          ref: main
+          path: readest_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "temurin"
+
+      - name: Install ndk
+        run: sdkmanager "ndk;${{ env.NDK_VERSION }}"
+
+      - name: Setup node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@main
+        with:
+          version: 10
+
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@main
+        with:
+          key: android-arm64-cargo
+          working-directory: readest_source
+
+      - name: Install pnpm dependencies
+        working-directory: ./readest_source
+        run: pnpm install
+
+      - name: Copy vendor assets
+        working-directory: ./readest_source
+        run: pnpm --filter @readest/readest-app setup-vendors
+
+      - name: Decode keystore
+        working-directory: ./readest_source
+        run: |
+          mkdir -p apps/readest-app/src-tauri/gen/android
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ./keystore.p12
+
+      - name: Create .env.local for next.js
+        working-directory: ./readest_source/apps/readest-app
+        run: |
+          cat > .env.local << EOF
+          NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+          NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_APP_PLATFORM=tauri
+          EOF
+
+      - name: Prepare android project and signing config
+        working-directory: ./readest_source/apps/readest-app
+        env:
+          ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # 初始化 Android 项目（如果不存在）
+          if [ ! -d "src-tauri/gen/android" ]; then
+            pnpm tauri android init
+          fi
+          # 写入 keystore.properties
+          pushd src-tauri/gen/android
+          cat > keystore.properties << EOL
+          keyAlias=${ANDROID_KEY_ALIAS}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          storeFile=${{ github.workspace }}/readest_source/keystore.p12
+          storePassword=${ANDROID_KEY_PASSWORD}
+          EOL
+          popd
+          # 可选：重新生成图标（如果丢失）
+          pnpm tauri icon ../../data/icons/readest-book.png || true
+
+      - name: Build android arm64 apk
+        working-directory: ./readest_source/apps/readest-app
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+        run: |
+          pnpm tauri android build -t aarch64
+
+      - name: Rename and prepare apk artifact
+        working-directory: ./readest_source
+        run: |
+          mkdir -p ${{ github.workspace }}/dist
+          cp ./apps/readest-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
+             ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./readest_source/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/readest-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-readest"
