@@ -68,6 +68,7 @@ jobs:
       - name: Setup rust
         uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: stable
           targets: aarch64-linux-android
 
       - name: Rust cache
