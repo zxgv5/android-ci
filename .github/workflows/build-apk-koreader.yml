@@ -110,11 +110,25 @@ jobs:
           export GRADLE_FLAGS="--info --stacktrace --no-daemon"
           make -j1 TARGET=android update
 
-      - name: Move and rename apk
+      - name: Locate and rename apk
         working-directory: ./koreader_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "koreader-android-arm64*.apk" "${{ github.workspace }}/dist/koreader-unsigned.apk"
+          APK_FILES=$(find . -name "koreader-android-*.apk" -type f)
+          if [ -z "$APK_FILES" ]; then
+            echo "No APK found!"
+            exit 1
+          fi
+          # 如果有多个，取第一个
+          APK_FILE=$(echo "$APK_FILES" | head -1)
+          echo "Found APK: $APK_FILE"
+          mv "$APK_FILE" "${{ github.workspace }}/dist/koreader-unsigned.apk"
+
+#       - name: Move and rename apk
+#         working-directory: ./koreader_source
+#         run: |
+#           mkdir -p "${{ github.workspace }}/dist"
+#           mv "koreader-android-arm64*.apk" "${{ github.workspace }}/dist/koreader-unsigned.apk"
 
       - name: Decode keystore.p12
         working-directory: ./koreader_source
