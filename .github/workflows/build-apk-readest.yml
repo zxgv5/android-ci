@@ -49,6 +49,9 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
 
+      - name: Setup android sdk
+        uses: zxgv5/setup-android@main
+
       - name: Install ndk
         run: sdkmanager "ndk;${{ env.NDK_VERSION }}"
 
