@@ -19,9 +19,10 @@ jobs:
     steps:
       - name: Clean runner environment
         run: |
-          # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
+          rm -rf .gradle
 
       - name: Checkout source repo
         uses: actions/checkout@main
@@ -60,7 +61,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease -PversionName="0.1.11" -PversionCode="57"
+          ./gradlew assembleRelease -PversionName="0.1.15" -PversionCode="3257"
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/blbl-${{ env.BUILD_DATE }}.apk"
 
