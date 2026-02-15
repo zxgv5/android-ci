@@ -7,7 +7,7 @@ env:
   JDK_VERSION: '17'
   ANDROID_COMPILE_SDK: '34'
   ANDROID_BUILD_TOOLS: '34.0.0'
-  ANDROID_NDK_VERSION: '25.2.9519653'   # NDK r25c
+  ANDROID_NDK_VERSION: '25.2.9519653'
   ANDROID_ARCH: arm64
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -109,41 +109,20 @@ jobs:
           # 启用 Gradle 详细日志，便于排查打包错误
           export GRADLE_FLAGS="--info --stacktrace --no-daemon"
           make -j1 TARGET=android update
-        timeout-minutes: 120
 
-      - name: Debug - check for apk and gradle logs
-        if: always()
+      - name: Move and rename apk
         working-directory: ./koreader_source
         run: |
-          echo "=== Searching for APK ==="
-          find . -name "*.apk" -ls || true
-          echo "=== Checking Gradle build directory ==="
-          GRADLE_BUILD_DIR="$(find base/build -type d -name "android-luajit-launcher" -print -quit)/build"
-          if [ -d "$GRADLE_BUILD_DIR" ]; then
-            echo "Gradle build logs:"
-            find "$GRADLE_BUILD_DIR" -name "*.log" -o -name "*.txt" | xargs tail -n 50 || true
-          else
-            echo "Gradle build directory not found."
-          fi
-          echo "=== Last 50 lines of base/build log files ==="
-          find base/build -name "*.log" -exec tail -n 50 {} \; || true
-
-      - name: Locate and rename apk
-        working-directory: ./koreader_source
-        run: |
-          mkdir -p dist
-          APK_FILE=$(find . -name "koreader-android-*.apk" -type f | head -1)
-          if [ -z "$APK_FILE" ]; then
-            echo "APK not found! Check build logs."
-            exit 1
-          fi
-          mv "$APK_FILE" "${{ github.workspace }}/dist/koreader-unsigned.apk"
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "koreader-android-arm64*.apk" "${{ github.workspace }}/dist/koreader-unsigned.apk"
 
       - name: Decode keystore.p12
+        working-directory: ./koreader_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
 
       - name: Sign apk (pkcs12)
+        working-directory: ./koreader_source
         run: |
           export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
           apksigner sign \
@@ -154,3 +133,12 @@ jobs:
             --out "${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk" \
             "${{ github.workspace }}/dist/koreader-unsigned.apk"
           apksigner verify --verbose "${{ github.workspace }}/dist/koreader-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./koreader_source/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/koreader-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-koreader"
