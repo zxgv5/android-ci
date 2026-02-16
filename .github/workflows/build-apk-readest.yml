@@ -145,8 +145,15 @@ jobs:
             echo "❌ tauri android init failed"
             exit 1
           fi
+          # 确保 local.properties 中的 sdk.dir 指向正确的 ANDROID_HOME
+          ANDROID_PROJECT_DIR="src-tauri/gen/android"
+          if [ -f "${ANDROID_PROJECT_DIR}/local.properties" ]; then
+            sed -i "s|^sdk.dir=.*|sdk.dir=${ANDROID_HOME}|" "${ANDROID_PROJECT_DIR}/local.properties"
+          else
+            echo "sdk.dir=${ANDROID_HOME}" > "${ANDROID_PROJECT_DIR}/local.properties"
+          fi
           # 写入 keystore.properties
-          pushd src-tauri/gen/android
+          pushd ${ANDROID_PROJECT_DIR}
           cat > keystore.properties << EOL
           keyAlias=${ANDROID_KEY_ALIAS}
           keyPassword=${ANDROID_KEY_PASSWORD}
@@ -165,12 +172,18 @@ jobs:
         run: |
           pnpm tauri android build -t aarch64
 
-      - name: Rename and prepare apk artifact
+      - name: Find and rename apk artifact
         working-directory: ./readest_source
         run: |
           mkdir -p ${{ github.workspace }}/dist
-          cp ./apps/readest-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
-             ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk
+          # 查找生成的 APK 文件（通常为 .apk 文件，位于 app/build/outputs/apk 下）
+          APK_PATH=$(find apps/readest-app/src-tauri/gen/android -path "*/release/*.apk" -type f | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ No APK found!"
+            exit 1
+          fi
+          echo "Found APK: $APK_PATH"
+          cp "$APK_PATH" ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
