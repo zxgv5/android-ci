@@ -177,7 +177,7 @@ jobs:
             --out "${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk" \
             "${{ github.workspace }}/dist/readest-unsigned.apk"
           # 验证签名
-          apksigner verify --verbose "${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk"
+          "$ApkSigner" verify --verbose "${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
