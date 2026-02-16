@@ -126,7 +126,7 @@ jobs:
         working-directory: ./readest_source/apps/readest-app
         env:
           ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           # 检查密码是否为空
           if [ -z "$ANDROID_KEY_PASSWORD" ]; then
