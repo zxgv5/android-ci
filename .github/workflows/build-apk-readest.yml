@@ -64,7 +64,6 @@ jobs:
           mv latest cmdline-tools/
           export PATH=${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}
           echo "ANDROID_HOME=${ANDROID_HOME}" >> $GITHUB_ENV
-          # 将 ANDROID_SDK_ROOT 设置为相同路径，避免冲突
           echo "ANDROID_SDK_ROOT=${ANDROID_HOME}" >> $GITHUB_ENV
           echo "${ANDROID_HOME}/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "${ANDROID_HOME}/platform-tools" >> $GITHUB_PATH
@@ -73,7 +72,6 @@ jobs:
                      "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" \
                      "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" \
                      "ndk;${NDK_VERSION}"
-          # 设置 NDK 相关环境变量，确保 Tauri 使用我们安装的版本
           echo "NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> $GITHUB_ENV
 
@@ -99,14 +97,6 @@ jobs:
           key: android-arm64-cargo
           working-directory: readest_source
 
-      # 检查环境变量（调试用）
-      - name: Check environment variables
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "NDK_HOME=$NDK_HOME"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-
       - name: Install pnpm dependencies
         working-directory: ./readest_source
         run: pnpm install
@@ -119,7 +109,7 @@ jobs:
         working-directory: ./readest_source
         run: |
           mkdir -p apps/readest-app/src-tauri/gen/android
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > ./keystore.p12
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore.p12
 
       - name: Create .env.local for next.js
         working-directory: ./readest_source/apps/readest-app
@@ -138,15 +128,14 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
-          # 强制重新初始化 Android 项目（确保干净）
           rm -rf src-tauri/gen/android
           pnpm tauri android init
           if [ $? -ne 0 ]; then
             echo "❌ tauri android init failed"
             exit 1
           fi
-          # 确保 local.properties 中的 sdk.dir 指向正确的 ANDROID_HOME
           ANDROID_PROJECT_DIR="src-tauri/gen/android"
+          # 修正 sdk.dir
           if [ -f "${ANDROID_PROJECT_DIR}/local.properties" ]; then
             sed -i "s|^sdk.dir=.*|sdk.dir=${ANDROID_HOME}|" "${ANDROID_PROJECT_DIR}/local.properties"
           else
@@ -155,14 +144,23 @@ jobs:
           # 写入 keystore.properties
           pushd ${ANDROID_PROJECT_DIR}
           cat > keystore.properties << EOF
-          keyAlias=${ANDROID_KEY_ALIAS}
-          keyPassword=${ANDROID_KEY_PASSWORD}
+          keyAlias=${ env.ANDROID_KEY_ALIAS }
+          keyPassword=${ env.ANDROID_KEY_PASSWORD }
           storeFile=${{ github.workspace }}/readest_source/keystore.p12
-          storePassword=${ANDROID_KEY_PASSWORD}
+          storePassword=${ env.ANDROID_KEY_PASSWORD }
           EOF
+          echo "keystore.properties content:"
+          cat keystore.properties
           popd
-          # 可选：重新生成图标（如果丢失）
           pnpm tauri icon ../../data/icons/readest-book.png || true
+
+      # 诊断签名配置
+      - name: Check signing config
+        working-directory: ./readest_source/apps/readest-app/src-tauri/gen/android
+        run: |
+          chmod +x gradlew
+          echo "=== Signing report for universalRelease ==="
+          ./gradlew signingReport | grep -A20 "Variant: universalRelease" || true
 
       - name: Build android arm64 apk
         working-directory: ./readest_source/apps/readest-app
@@ -170,20 +168,39 @@ jobs:
           NDK_HOME: ${{ env.NDK_HOME }}
           ANDROID_NDK_HOME: ${{ env.NDK_HOME }}
         run: |
-          pnpm tauri android build -t aarch64
+          pnpm tauri android build -t aarch64 --verbose
 
       - name: Find and rename apk artifact
         working-directory: ./readest_source
         run: |
           mkdir -p ${{ github.workspace }}/dist
-          # 查找生成的 APK 文件（通常为 .apk 文件，位于 app/build/outputs/apk 下）
-          APK_PATH=$(find apps/readest-app/src-tauri/gen/android -path "*/release/*.apk" -type f | head -n 1)
+          # 优先选择已签名的 APK（不含 -unsigned）
+          APK_PATH=$(find apps/readest-app/src-tauri/gen/android -path "*/release/*.apk" -type f ! -name "*-unsigned.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "No signed APK found, using unsigned APK (will fail verification)."
+            APK_PATH=$(find apps/readest-app/src-tauri/gen/android -path "*/release/*.apk" -type f | head -n 1)
+          fi
           if [ -z "$APK_PATH" ]; then
             echo "❌ No APK found!"
             exit 1
           fi
           echo "Found APK: $APK_PATH"
           cp "$APK_PATH" ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk
+
+      # 验证 APK 签名
+      - name: Verify apk signature
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}/apksigner"
+          if [ ! -f "$APKSIGNER" ]; then
+            echo "apksigner not found, trying system path..."
+            APKSIGNER="apksigner"
+          fi
+          if $APKSIGNER verify ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk; then
+            echo "✅ APK is signed."
+          else
+            echo "❌ APK is not signed! Build failed."
+            exit 1
+          fi
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
