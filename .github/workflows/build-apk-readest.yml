@@ -142,12 +142,12 @@ jobs:
             echo "sdk.dir=${ANDROID_HOME}" > "${ANDROID_PROJECT_DIR}/local.properties"
           fi
           # 写入 keystore.properties
-          pushd ${ANDROID_PROJECT_DIR}
+          pushd ${{ ANDROID_PROJECT_DIR }}
           cat > keystore.properties << EOF
-          keyAlias=${ ANDROID_KEY_ALIAS }
-          keyPassword=${ ANDROID_KEY_PASSWORD }
+          keyAlias=${{ env.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ env.ANDROID_KEY_PASSWORD }}
           storeFile=${{ github.workspace }}/readest_source/keystore.p12
-          storePassword=${ ANDROID_KEY_PASSWORD }
+          storePassword=${{ env.ANDROID_KEY_PASSWORD }}
           EOF
           echo "keystore.properties content:"
           cat keystore.properties
