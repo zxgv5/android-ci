@@ -116,6 +116,12 @@ jobs:
           NEXT_PUBLIC_APP_PLATFORM=tauri
           EOF
 
+      - name: Decode keystore
+        working-directory: ./readest_source
+        run: |
+          # mkdir -p apps/readest-app/src-tauri/gen/android
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore.p12
+
       - name: Prepare android project and signing config
         working-directory: ./readest_source/apps/readest-app
         env:
@@ -135,7 +141,6 @@ jobs:
           else
             echo "sdk.dir=${ANDROID_HOME}" > "${ANDROID_PROJECT_DIR}/local.properties"
           fi
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore.p12
           # 写入 keystore.properties（符合 build.gradle.kts 的预期格式）
           pushd ${ANDROID_PROJECT_DIR}
           cat > keystore.properties << EOF
@@ -164,8 +169,10 @@ jobs:
           # mv ./apps/readest-app/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.aab
 
       - name: Sign the apk (pkcs12)
-        working-directory: ./readest_source
+        working-directory: ./aegis_source
         run: |
+          export ANDROID_HOME=$HOME/android-sdk
+          export PATH=${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}
           apksigner sign \
             --ks "${{ github.workspace }}/readest_source/keystore.p12" \
             --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
