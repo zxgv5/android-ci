@@ -142,7 +142,7 @@ jobs:
             echo "sdk.dir=${ANDROID_HOME}" > "${ANDROID_PROJECT_DIR}/local.properties"
           fi
           # 写入 keystore.properties
-          pushd ${{ ANDROID_PROJECT_DIR }}
+          pushd ${ANDROID_PROJECT_DIR}
           cat > keystore.properties << EOF
           keyAlias=${{ env.ANDROID_KEY_ALIAS }}
           keyPassword=${{ env.ANDROID_KEY_PASSWORD }}
