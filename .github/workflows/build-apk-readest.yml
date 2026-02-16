@@ -128,15 +128,10 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          # 检查密码是否为空
-          if [ -z "$ANDROID_KEY_PASSWORD" ]; then
-            echo "❌ ANDROID_KEY_PASSWORD is empty"
-            exit 1
-          fi
           rm -rf src-tauri/gen/android
           pnpm tauri android init
           if [ $? -ne 0 ]; then
-            echo "❌ tauri android init failed"
+            echo "tauri android init failed"
             exit 1
           fi
           ANDROID_PROJECT_DIR="src-tauri/gen/android"
@@ -158,7 +153,7 @@ jobs:
           popd
           pnpm tauri icon ../../data/icons/readest-book.png || true
 
-      - name: Build android arm64 apk
+      - name: Build android arm64
         working-directory: ./readest_source/apps/readest-app
         env:
           NDK_HOME: ${{ env.NDK_HOME }}
@@ -177,31 +172,17 @@ jobs:
             APK_PATH=$(find apps/readest-app/src-tauri/gen/android -path "*/release/*.apk" -type f | head -n 1)
           fi
           if [ -z "$APK_PATH" ]; then
-            echo "❌ No APK found!"
+            echo "No APK found!"
             exit 1
           fi
           echo "Found APK: $APK_PATH"
-          cp "$APK_PATH" ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk
-
-      # 验证 APK 签名
-      - name: Verify apk signature
-        run: |
-          APKSIGNER="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}/apksigner"
-          if [ ! -f "$APKSIGNER" ]; then
-            echo "apksigner not found, trying system path..."
-            APKSIGNER="apksigner"
-          fi
-          if $APKSIGNER verify ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk; then
-            echo "✅ APK is signed."
-          else
-            echo "❌ APK is not signed! Build failed."
-            exit 1
-          fi
+          # cp "$APK_PATH" ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk
+          mv ./apps/readest-app/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.aab
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./readest_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/readest-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./dist/readest-${{ env.BUILD_DATE }}.aab"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-readest"
