@@ -136,7 +136,7 @@ jobs:
         working-directory: ./readest_source/apps/readest-app
         env:
           ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           # 强制重新初始化 Android 项目（确保干净）
           rm -rf src-tauri/gen/android
@@ -154,12 +154,12 @@ jobs:
           fi
           # 写入 keystore.properties
           pushd ${ANDROID_PROJECT_DIR}
-          cat > keystore.properties << EOL
+          cat > keystore.properties << EOF
           keyAlias=${ANDROID_KEY_ALIAS}
           keyPassword=${ANDROID_KEY_PASSWORD}
           storeFile=${{ github.workspace }}/readest_source/keystore.p12
           storePassword=${ANDROID_KEY_PASSWORD}
-          EOL
+          EOF
           popd
           # 可选：重新生成图标（如果丢失）
           pnpm tauri icon ../../data/icons/readest-book.png || true
