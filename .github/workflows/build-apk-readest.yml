@@ -169,7 +169,7 @@ jobs:
           # mv ./apps/readest-app/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.aab
 
       - name: Sign the apk (pkcs12)
-        working-directory: ./aegis_source
+        working-directory: ./readest_source
         run: |
           export ANDROID_HOME=$HOME/android-sdk
           export PATH=${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}
