@@ -105,12 +105,6 @@ jobs:
         working-directory: ./readest_source
         run: pnpm --filter @readest/readest-app setup-vendors
 
-      - name: Decode keystore
-        working-directory: ./readest_source
-        run: |
-          mkdir -p apps/readest-app/src-tauri/gen/android
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore.p12
-
       - name: Create .env.local for next.js
         working-directory: ./readest_source/apps/readest-app
         run: |
@@ -141,6 +135,7 @@ jobs:
           else
             echo "sdk.dir=${ANDROID_HOME}" > "${ANDROID_PROJECT_DIR}/local.properties"
           fi
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore.p12
           # 写入 keystore.properties（符合 build.gradle.kts 的预期格式）
           pushd ${ANDROID_PROJECT_DIR}
           cat > keystore.properties << EOF
@@ -161,28 +156,30 @@ jobs:
         run: |
           pnpm tauri android build -t aarch64
 
-      - name: Find and rename apk artifact
+      - name: Rename apk
         working-directory: ./readest_source
         run: |
           mkdir -p ${{ github.workspace }}/dist
-          # 优先选择已签名的 APK（不含 -unsigned）
-          APK_PATH=$(find apps/readest-app/src-tauri/gen/android -path "*/release/*.apk" -type f ! -name "*-unsigned.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "No signed APK found, using unsigned APK (will fail verification)."
-            APK_PATH=$(find apps/readest-app/src-tauri/gen/android -path "*/release/*.apk" -type f | head -n 1)
-          fi
-          if [ -z "$APK_PATH" ]; then
-            echo "No APK found!"
-            exit 1
-          fi
-          echo "Found APK: $APK_PATH"
-          # cp "$APK_PATH" ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk
-          mv ./apps/readest-app/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.aab
+          mv ./apps/readest-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk ${{ github.workspace }}/dist/readest-unsigned.apk
+          # mv ./apps/readest-app/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab ${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.aab
+
+      - name: Sign the apk (pkcs12)
+        working-directory: ./aegis_source
+        run: |
+          apksigner sign \
+            --ks "${{ github.workspace }}/readest_source/keystore.p12" \
+            --ks-pass "pass:${{ secrets.KEYSTORE_PASSWORD }}" \
+            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
+            --ks-type PKCS12 \
+            --out "${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk" \
+            "${{ github.workspace }}/dist/readest-unsigned.apk"
+          # 验证签名
+          apksigner verify --verbose "${{ github.workspace }}/dist/readest-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./readest_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/readest-${{ env.BUILD_DATE }}.aab"
+          BUILD_ARTIFACT_PATH: "./dist/readest-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-readest"
