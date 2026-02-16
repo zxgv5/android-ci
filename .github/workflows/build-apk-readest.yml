@@ -128,6 +128,11 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
+          # 检查密码是否为空
+          if [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "❌ ANDROID_KEY_PASSWORD is empty"
+            exit 1
+          fi
           rm -rf src-tauri/gen/android
           pnpm tauri android init
           if [ $? -ne 0 ]; then
@@ -141,26 +146,17 @@ jobs:
           else
             echo "sdk.dir=${ANDROID_HOME}" > "${ANDROID_PROJECT_DIR}/local.properties"
           fi
-          # 写入 keystore.properties
+          # 写入 keystore.properties（符合 build.gradle.kts 的预期格式）
           pushd ${ANDROID_PROJECT_DIR}
           cat > keystore.properties << EOF
-          keyAlias=${{ env.ANDROID_KEY_ALIAS }}
-          keyPassword=${{ env.ANDROID_KEY_PASSWORD }}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          password=${ANDROID_KEY_PASSWORD}
           storeFile=${{ github.workspace }}/readest_source/keystore.p12
-          storePassword=${{ env.ANDROID_KEY_PASSWORD }}
           EOF
           echo "keystore.properties content:"
           cat keystore.properties
           popd
           pnpm tauri icon ../../data/icons/readest-book.png || true
-
-      # 诊断签名配置
-      - name: Check signing config
-        working-directory: ./readest_source/apps/readest-app/src-tauri/gen/android
-        run: |
-          chmod +x gradlew
-          echo "=== Signing report for universalRelease ==="
-          ./gradlew signingReport | grep -A20 "Variant: universalRelease" || true
 
       - name: Build android arm64 apk
         working-directory: ./readest_source/apps/readest-app
@@ -168,7 +164,7 @@ jobs:
           NDK_HOME: ${{ env.NDK_HOME }}
           ANDROID_NDK_HOME: ${{ env.NDK_HOME }}
         run: |
-          pnpm tauri android build -t aarch64 --verbose
+          pnpm tauri android build -t aarch64
 
       - name: Find and rename apk artifact
         working-directory: ./readest_source
