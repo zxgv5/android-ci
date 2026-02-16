@@ -182,7 +182,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./readest_source/keystore.p12"
+          P12_KEYSTORE_PATH: "./readest_source/apps/readest-app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/readest-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-readest"
