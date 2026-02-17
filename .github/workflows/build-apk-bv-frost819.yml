@@ -1,211 +1,80 @@
 name: build-apk-bv-frost819
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ 
+permissions:
+  contents: write
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Clean runner environment
         run: |
-          # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
-
-      # 检出ci仓库，以便在runner中调用sh脚本
-      - name: Checkout ci source repo (self)
-        uses: actions/checkout@main
-        with:
-          # 指定一个子目录放ci仓库，避免与源仓库混淆
-          path: ci_source
-
-      - name: Checkout source repo (frost819-bv)
+          rm -rf .gradle
+ 
+      - name: Checkout source repo (bv)
         uses: actions/checkout@main
         with:
           repository: Frost819/bv
           ref: feature
-          path: frost819-bv-source
+          path: bv_source
           fetch-depth: 0
-
-      - name: Checkout pre-built libs repo (bv-libs)
+          submodules: recursive
+ 
+      - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
-          repository: zxgv5/bv-libs
-          token: ${{ secrets.BV_LIBS_ACCESS_TOKEN }}
-          ref: main
-          path: bv-libs-source
-
+          path: ci_source
+ 
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
-      # 安装python3（改用官方action，避免apt兼容性问题）
-      - name: Set up python 3.12
-        uses: actions/setup-python@main
-        with:
-          python-version: '3.12'
-
-      # 验证版本（无需手动配置python3命令，action已自动处理）
-      - name: Verify python and pip versions
-        run: |
-          python3 --version
-          pip3 --version
-
-      - name: Install python dependencies
-        run: |
-          # 目前的脚本无第三方依赖，此步骤仅保留作环境校验
-          echo "python环境已就绪，无第三方依赖需安装"
-
-      - name: Customize scripts
-        run: |
-          chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-frost819.sh
-          $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-frost819.sh
-
-      - name: Merge libraries from monorepo structure
-        run: |
-          echo "=== 从 bv-libs Monorepo 复制各子库 ==="
-          cd frost819-bv-source
-          
-          # 确保主项目的 libs 目录存在
-          mkdir -p libs
-          
-          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
-          declare -A LIB_PATHS
-          LIB_PATHS=(
-            ["av1Decoder"]="av1Decoder"
-            ["ffmpegDecoder"]="ffmpegDecoder"
-            ["libVLC"]="libVLC"
-            ["media3Container"]="media3Container"
-            ["akDanmaku"]="akDanmaku"
-          )
-          
-          for LIB_NAME in "${!LIB_PATHS[@]}"; do
-            SRC_PATH="../bv-libs-source/${LIB_PATHS[$LIB_NAME]}"
-            DEST_PATH="libs/$LIB_NAME"
-            
-            echo "处理库: $LIB_NAME"
-            echo "  源路径: $SRC_PATH"
-            
-            if [ -d "$SRC_PATH" ]; then
-              # 删除目标目录，确保干净复制
-              rm -rf "$DEST_PATH"
-              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
-              cp -r "$SRC_PATH" "$DEST_PATH"
-              echo "  已复制到: $DEST_PATH"
-              # 显示复制后的关键文件
-              if [ -f "$DEST_PATH"/*.aar ]; then
-                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
-              fi
-            else
-              echo "  错误：源路径不存在！"
-              echo "  当前bv-libs-source目录内容:"
-              ls -la "../bv-libs-source/" || true
-              exit 1
-            fi
-            echo ""
-          done
-          
-          echo "=== 合并完成，最终 libs/ 目录结构 ==="
-          ls -la libs/
-
-      - name: Cache gradle
-        uses: actions/cache@main
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            frost819-bv-source/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('frost819-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
-
-      - name: Set up jdk 21
+ 
+      - name: Setup java
         uses: actions/setup-java@main
         with:
-          java-version: ${{ env.JDK_VERSION }}
-          distribution: 'temurin'
-
-      # 步骤：在设置Java之后，构建之前，插入以下步骤
-      # 清理插件解析缓存
-      - name: Clean plugins resolution cache
-        working-directory: ./frost819-bv-source
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "temurin"
+ 
+      - name: Decode keystore
+        working-directory: ./bv_source
         run: |
-          # 强制清理 Gradle 插件解析相关的缓存，这是关键
-          rm -rf ~/.gradle/caches/*/plugin-resolution/
-          rm -rf ~/.gradle/caches/jars-*/  
-          echo "已清理插件解析缓存"
-
-      - name: Validate google maven repo connection
+          mkdir -p keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
+ 
+      - name: Build release apk
+        working-directory: ./bv_source
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          # 直接测试构建所需的核心仓库连通性
-          echo "测试 Google Maven 仓库..."
-          if curl -s --connect-timeout 10 "https://dl.google.com/android/maven2/index.html" > /dev/null; then
-            echo "✅ Google Maven 仓库可达"
-          else
-            echo "❌ 无法访问 Google Maven 仓库，可能是网络问题"
-          fi
-          
-          echo "测试 Gradle 插件门户..."
-          if curl -s --connect-timeout 10 "https://plugins.gradle.org/" > /dev/null; then
-            echo "✅ Gradle 插件门户可达"
-          else
-            echo "❌ 无法访问 Gradle 插件门户"
-          fi
-
-      - name: Prepare gradle environment
-        working-directory: ./frost819-bv-source
+          chmod +x ./gradlew
+          # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
+          ./gradlew :app:assembleRelease
+ 
+      - name: Rename and move apk
+        working-directory: ./bv_source
         run: |
-          chmod +x gradlew
-          echo "Gradle 版本信息:"
-          ./gradlew --version
-
-      - name: Decode and write release keystore
-        working-directory: ./frost819-bv-source
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-          # 同时，创建一个虚拟的debug密钥库文件（例如，直接复制一份release的，或创建一个空文件）
-          # 这里选择复制，以确保它是一个有效的文件
-          cp keystore.p12 debug.keystore
-
-      - name: Write signing.properties for release build
-        working-directory: ./frost819-bv-source
-        run: |
-          cat <<EOF > signing.properties
-          # 1. 提供真实且有效的RELEASE签名配置（用于最终的APK签名）
-          releaseStoreFile=keystore.p12
-          releaseKeyAlias=${{ secrets.KEY_ALIAS }}
-          releaseStorePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          releaseKeyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
-          # 2. 提供虚拟但有效的DEBUG签名配置（仅用于绕过脚本检查）
-          debugStoreFile=debug.keystore
-          debugKeyAlias=androiddebugkey
-          debugStorePassword=android
-          debugKeyPassword=android
-          EOF
-
-      - name: Build release apk files
-        working-directory: ./frost819-bv-source
-        run: |
-          echo "=== 开始构建 ==="
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
-          # echo ""
-          # echo "=== 构建完成！查找APK产物 ==="
-          # find . -name "*.apk" -type f | grep -i release | while read apk; do
-          #   echo "  $(ls -lh "$apk")"
-          # done || echo "未找到APK文件，请检查构建日志。"
-          mv ./app/build/outputs/apk/default/release/BV_*.release_default_universal.apk ./app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk
-
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/default/release/BV"*"release_default_universal.apk" "${{ github.workspace }}/dist/f819bv-${{ env.BUILD_DATE }}.apk"
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 文件路径为基于github.workspace的绝对路径
-          P12_KEYSTORE_PATH: "./frost819-bv-source/keystore.p12"
+          P12_KEYSTORE_PATH: "./bv_source/keystore/release.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./frost819-bv-source/app/build/outputs/apk/default/release/f819bv-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./dist/f819bv-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-f819bv"
