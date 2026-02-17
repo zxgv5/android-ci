@@ -1,194 +1,80 @@
 name: build-apk-bv-leonwu85
-
+ 
 on:
   workflow_dispatch:
-    inputs:
-      repo_branch:
-        type: string
-        description: '分支'
-        required: true
-        default: 'feature-customisation-0001'
-
+  workflow_call:
+ 
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ 
+permissions:
+  contents: write
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Clean runner environment
         run: |
-          # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
+          rm -rf .gradle
  
-       # 检出ci仓库，以便在runner中调用sh脚本
-      - name: Checkout ci source repo (self)
-        uses: actions/checkout@main
-        with:
-          # 指定一个子目录放ci仓库，避免与源仓库混淆
-          path: ci_source
-
-      # 并行克隆两个仓库
-      - name: Checkout source repo (leonwu85-bv)
+      - name: Checkout source repo (bv)
         uses: actions/checkout@main
         with:
           repository: leonwu85/bv
-          # ref: feature-customisation-0001
-          ref: ${{ inputs.repo_branch }}
-          path: leonwu85-bv-source
+          ref: feature-customisation-0001
+          path: bv_source
           fetch-depth: 0
-
-      - name: Checkout pre-built libs repo (bv-libs)
+          submodules: recursive
+ 
+      - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
-          repository: zxgv5/bv-libs
-          token: ${{ secrets.BV_LIBS_ACCESS_TOKEN }}
-          ref: main
-          path: bv-libs-source
-
-      # 环境变量初始化
+          path: ci_source
+ 
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
-      # 安装python3（改用官方action，避免apt兼容性问题）
-      - name: Set up python 3.12
-        uses: actions/setup-python@main
-        with:
-          python-version: '3.12'
-
-      - name: Customize scripts
-        run: |
-          chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-leonwu85.sh
-          $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-leonwu85.sh
-
-      # 从Monorepo精确合并每个库（核心改进）
-      - name: Merge libraries from monorepo structure
-        run: |
-          echo "=== 从 bv-libs Monorepo 复制各子库 ==="
-          cd leonwu85-bv-source
-          
-          # 确保主项目的 libs 目录存在
-          mkdir -p libs
-          
-          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
-          # 由于该fork已内部实现了对libVLC的支持，在此去掉libVCL的相关代码
-          declare -A LIB_PATHS
-          LIB_PATHS=(
-            ["av1Decoder"]="av1Decoder"
-            ["ffmpegDecoder"]="ffmpegDecoder"
-            ["media3Container"]="media3Container"
-          )
-          
-          for LIB_NAME in "${!LIB_PATHS[@]}"; do
-            SRC_PATH="../bv-libs-source/${LIB_PATHS[$LIB_NAME]}"
-            DEST_PATH="libs/$LIB_NAME"
-            
-            echo "处理库: $LIB_NAME"
-            echo "  源路径: $SRC_PATH"
-            
-            if [ -d "$SRC_PATH" ]; then
-              # 删除目标目录，确保干净复制
-              rm -rf "$DEST_PATH"
-              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
-              cp -r "$SRC_PATH" "$DEST_PATH"
-              echo "  已复制到: $DEST_PATH"
-              # 显示复制后的关键文件
-              if [ -f "$DEST_PATH"/*.aar ]; then
-                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
-              fi
-            else
-              echo "  错误：源路径不存在！"
-              echo "  当前bv-libs-source目录内容:"
-              ls -la "../bv-libs-source/" || true
-              exit 1
-            fi
-            echo ""
-          done
-          
-          echo "=== 合并完成，最终 libs/ 目录结构 ==="
-          ls -la libs/
  
-      # 设置构建环境
-      - name: Cache gradle
-        uses: actions/cache@main
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            leonwu85-bv-source/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('leonwu85-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
- 
-      - name: Set up jdk 21
+      - name: Setup java
         uses: actions/setup-java@main
         with:
-          java-version: ${{ env.JDK_VERSION }}
-          distribution: 'temurin'
-
-      # 验证与准备构建
-      - name: Validate final project structure
-        working-directory: ./leonwu85-bv-source
-        run: |
-          echo "=== 最终项目完整性验证 ==="
-          echo ""
-          # echo "1. 验证预编译库:"
-          for lib_dir in libs/*; do
-            if [ -d "$lib_dir" ]; then
-              lib_name=$(basename "$lib_dir")
-              aar_count=$(find "$lib_dir" -name "*.aar" -type f | wc -l)
-              kts_count=$(find "$lib_dir" -name "*.kts" -type f | wc -l)
-              echo "  $lib_name: $aar_count个AAR文件, $kts_count个KTS文件"
-            fi
-          done
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "temurin"
  
-      - name: Prepare gradle environment
-        working-directory: ./leonwu85-bv-source
+      - name: Decode keystore
+        working-directory: ./bv_source
         run: |
-          chmod +x gradlew
-          echo "Gradle 版本信息:"
-          ./gradlew --version
-
-      # ========== 新增步骤：编译 player.tv 模块 ==========
-      - name: Build player.tv module
-        working-directory: ./leonwu85-bv-source
-        run: |
-          echo "=== 编译 player.tv 模块，验证 TV 依赖 ==="
-          ./gradlew :player:tv:assembleRelease --refresh-dependencies --no-daemon
-
-      - name: Decode keystore.p12 and write signing.properties
-        working-directory: ./leonwu85-bv-source
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-          cat <<EOF > signing.properties
-          keystore.path=keystore.p12
-          keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
-          keystore.alias=${{ secrets.KEY_ALIAS }}
-          keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
-          EOF
-
-      - name: Build release apk files
-        working-directory: ./leonwu85-bv-source
-        run: |
-          echo "=== 开始构建主应用 (所有依赖已就位) ==="
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
-          
-          echo ""
-          echo "=== 构建完成！查找APK产物 ==="
-          find . -name "*.apk" -type f | grep -i release | while read apk; do
-            echo "  $(ls -lh "$apk")"
-          done || echo "未找到APK文件，请检查构建日志。"
-          
-          mv ./app/build/outputs/apk/default/release/*.apk ./app/build/outputs/apk/default/release/leonwu85bv-${{ env.BUILD_DATE }}.apk
+          mkdir -p keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
  
+      - name: Build release apk
+        working-directory: ./bv_source
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
+          ./gradlew :app:assembleRelease
+
+      - name: Rename and move apk
+        working-directory: ./bv_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/default/release/BV"*"release_default_universal.apk" "${{ github.workspace }}/dist/leonwu85bv-${{ env.BUILD_DATE }}.apk"
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 文件路径为基于github.workspace的绝对路径
-          P12_KEYSTORE_PATH: "./leonwu85-bv-source/keystore.p12 ./leonwu85-bv-source/signing.properties"
+          P12_KEYSTORE_PATH: "./bv_source/keystore/release.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./leonwu85-bv-source/app/build/outputs/apk/default/release/leonwu85bv-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./dist/leonwu85bv-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-leonwu85bv"
