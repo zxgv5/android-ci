@@ -67,7 +67,7 @@ python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_MA
 # FANTASY_BV_HOMECONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/HomeContent.kt"
 # python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_homecontent_kt.py" "${FANTASY_BV_HOMECONTENT_KT}"
  
-7、解决视频列表加载和焦点左漂问题
+# 7、解决视频列表加载和焦点左漂问题
 # echo "处理*Screen.kt代码..."
 # FANTASY_BV_DYNAMICSSCREEN_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
 # python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${FANTASY_BV_DYNAMICSSCREEN_KT}"
