@@ -8,7 +8,7 @@ FROST819_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/bv_source"
 # 版本号规则调整，避免负数
 # 修改包名
 # 修改sdk的最低版本为23，避免和其他库的链接问题
-# FROST819_BV_APPCONFIGURATION_KT="$FROST819_BV_SOURCE_ROOT/buildSrc/src/main/kotlin/AppConfiguration.kt"
+FROST819_BV_APPCONFIGURATION_KT="$FROST819_BV_SOURCE_ROOT/buildSrc/src/main/kotlin/AppConfiguration.kt"
 # 修改 AppConfiguration.kt 中的配置项
 # sed -i \
 #   -e 's/const val minSdk = 21/const val minSdk = 23/' \
