@@ -69,7 +69,7 @@ jobs:
         working-directory: ./bv_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/default/release/BV*release_default_universal.apk" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
+          mv "./app/build/outputs/apk/default/release/BV"*"release_default_universal.apk" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
