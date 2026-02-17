@@ -1,18 +1,18 @@
 name: build-apk-bv-frost819
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
- 
+
 permissions:
   contents: write
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,12 +32,12 @@ jobs:
           path: bv_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -47,6 +47,16 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
+
+      - name: Set up python 3.12
+        uses: actions/setup-python@main
+        with:
+          python-version: '3.12'
+
+      - name: Customize scripts
+        run: |
+          chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-frost819.sh"
+          "${{ github.workspace }}/ci_source/scripts/customize-bv-frost819.sh"
 
       - name: Decode and write release keystore
         working-directory: ./bv_source
