@@ -2,7 +2,7 @@
 # customize-bv-leonwu85.sh
 
 set -e  # 遇到错误立即退出，避免ci静默失败
-LEONWU85_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/leonwu85-bv-source"
+LEONWU85_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/bv_source"
 PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # - - - - - - - - - - - - - - - - - -简单且无模糊的修改用sed等实现 - - - - - - - - - - - - - - - - - -
 # 1、版本号规则调整，避免负数
