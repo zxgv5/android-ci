@@ -48,6 +48,16 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
  
+      - name: Set up python 3.12
+        uses: actions/setup-python@main
+        with:
+          python-version: '3.12'
+ 
+      - name: Customize scripts
+        run: |
+          chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
+          "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
+ 
       - name: Decode keystore
         working-directory: ./bv_source
         run: |
@@ -64,13 +74,13 @@ jobs:
           chmod +x ./gradlew
           # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
           ./gradlew :app:assembleRelease
-
+ 
       - name: Rename and move apk
         working-directory: ./bv_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./app/build/outputs/apk/default/release/BV"*"release_default_universal.apk" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
