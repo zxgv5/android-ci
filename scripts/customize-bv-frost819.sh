@@ -3,7 +3,7 @@
 
 set -e  # 遇到错误立即退出，避免CI静默失败
 
-FROST819_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/frost819-bv-source"
+FROST819_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/bv_source"
 # 修改 AppConfiguration.kt 中的配置项
 # 版本号规则调整，避免负数
 # 修改包名
