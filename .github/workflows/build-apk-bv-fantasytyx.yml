@@ -1,18 +1,18 @@
 name: build-apk-bv-fantasytyx
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,7 +23,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo (bv)
         uses: actions/checkout@main
         with:
@@ -32,28 +32,28 @@ jobs:
           path: bv_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
-
+ 
       - name: Decode keystore
         working-directory: ./bv_source
         run: |
           mkdir -p keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
-
+ 
       - name: Build release apk
         working-directory: ./bv_source
         env:
@@ -65,25 +65,11 @@ jobs:
           # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
           ./gradlew :app:assembleRelease
 
-          # 列出所有生成的 APK
-          echo "=== APK files found ==="
-          find . -name "*.apk" -type f | tee /tmp/all-apks.txt
-
-          # 优先选择路径中包含 "/tv/" 的 APK（TV 变体的输出目录通常含 tv）
-          TV_APK=$(grep -i "/tv/" /tmp/all-apks.txt | head -n 1)
-          if [ -z "$TV_APK" ]; then
-            echo "::warning::TV APK not found by path, using the first APK instead"
-            TV_APK=$(head -n 1 /tmp/all-apks.txt)
-          fi
-
-          if [ -z "$TV_APK" ]; then
-            echo "::error::No APK generated"
-            exit 1
-          fi
-
-          echo "Selected APK: $TV_APK"
+      - name: Rename and move apk
+        working-directory: ./bv_source
+        run: |
           mkdir -p "${{ github.workspace }}/dist"
-          cp "$TV_APK" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
+          mv "./app/build/outputs/apk/default/release/BV*release_default_universal.apk" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
