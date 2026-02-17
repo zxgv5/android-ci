@@ -8,7 +8,10 @@ env:
   JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -16,204 +19,63 @@ jobs:
     steps:
       - name: Clean runner environment
         run: |
-          # 清理可能存在的全局缓存文件
-          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
- 
-       # 检出ci仓库，以便在runner中调用sh脚本
+          rm -rf .gradle
+
+      - name: Checkout source repo (bv)
+        uses: actions/checkout@main
+        with:
+          repository: <owner>/<repo>          # 替换为实际仓库地址
+          ref: main                            # 根据项目默认分支修改
+          path: bv_source
+          fetch-depth: 0
+
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
-          # 指定一个子目录放ci仓库，避免与源仓库混淆
           path: ci_source
 
-      # 并行克隆两个仓库
-      - name: Checkout source repo (fantasy-bv)
-        uses: actions/checkout@main
-        with:
-          # repository: zxgv5/fantasy-bv
-          repository: fantasytyx/bv
-          ref: develop
-          path: fantasy-bv-source
-          fetch-depth: 0
-
-      - name: Checkout pre-built libs repo (bv-libs)
-        uses: actions/checkout@main
-        with:
-          repository: zxgv5/bv-libs
-          token: ${{ secrets.BV_LIBS_ACCESS_TOKEN }}
-          ref: main
-          path: bv-libs-source
-
-      # 环境变量初始化
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      # 安装python3（改用官方action，避免apt兼容性问题）
-      - name: Set up python 3.12
-        uses: actions/setup-python@main
-        with:
-          python-version: '3.12'
-
-      # 验证版本（无需手动配置python3命令，action已自动处理）
-      - name: Verify python and pip versions
-        run: |
-          python3 --version
-          pip3 --version
-
-      - name: Install python dependencies
-        run: |
-          # 目前的脚本无第三方依赖，此步骤仅保留作环境校验
-          echo "python环境已就绪，无第三方依赖需安装"
-
-      - name: Customize scripts
-        run: |
-          chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-fantasy.sh
-          $GITHUB_WORKSPACE/ci_source/scripts/customize-bv-fantasy.sh
-
-      # 从Monorepo精确合并每个库（核心改进）
-      - name: Merge libraries from monorepo structure
-        run: |
-          echo "=== 从 bv-libs Monorepo 复制各子库 ==="
-          cd fantasy-bv-source
-          
-          # 确保主项目的 libs 目录存在
-          mkdir -p libs
-          
-          # 定义需要复制的库及其在bv-libs中的路径（与你提供的URL对应）
-          declare -A LIB_PATHS
-          LIB_PATHS=(
-            ["akDanmaku"]="akDanmaku"
-            ["av1Decoder"]="av1Decoder"
-            ["ffmpegDecoder"]="ffmpegDecoder"
-            ["libVLC"]="libVLC"
-            ["media3Container"]="media3Container"
-          )
-          
-          for LIB_NAME in "${!LIB_PATHS[@]}"; do
-            SRC_PATH="../bv-libs-source/${LIB_PATHS[$LIB_NAME]}"
-            DEST_PATH="libs/$LIB_NAME"
-            
-            echo "处理库: $LIB_NAME"
-            echo "  源路径: $SRC_PATH"
-            
-            if [ -d "$SRC_PATH" ]; then
-              # 删除目标目录，确保干净复制
-              rm -rf "$DEST_PATH"
-              # 复制整个库目录（包含 .aar 和 .kts 等所有文件）
-              cp -r "$SRC_PATH" "$DEST_PATH"
-              echo "  已复制到: $DEST_PATH"
-              # 显示复制后的关键文件
-              if [ -f "$DEST_PATH"/*.aar ]; then
-                echo "  包含AAR文件: $(ls "$DEST_PATH"/*.aar | head -1 | xargs basename)"
-              fi
-            else
-              echo "  错误：源路径不存在！"
-              echo "  当前bv-libs-source目录内容:"
-              ls -la "../bv-libs-source/" || true
-              exit 1
-            fi
-            echo ""
-          done
-          
-          echo "=== 合并完成，最终 libs/ 目录结构 ==="
-          ls -la libs/
- 
-      # 设置构建环境
-      - name: Cache gradle
-        uses: actions/cache@main
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            fantasy-bv-source/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('fantasy-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
- 
-      - name: Set up jdk 21
+      - name: Setup java
         uses: actions/setup-java@main
         with:
-          java-version: ${{ env.JDK_VERSION }}
-          distribution: 'temurin'
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "temurin"
 
-      # 验证与准备构建
-      - name: Validate final project structure
-        working-directory: ./fantasy-bv-source
+      - name: Decode keystore
+        working-directory: ./bv_source
         run: |
-          echo "=== 最终项目完整性验证 ==="
-          echo ""
-          # echo "1. 验证预编译库:"
-          for lib_dir in libs/*; do
-            if [ -d "$lib_dir" ]; then
-              lib_name=$(basename "$lib_dir")
-              aar_count=$(find "$lib_dir" -name "*.aar" -type f | wc -l)
-              kts_count=$(find "$lib_dir" -name "*.kts" -type f | wc -l)
-              echo "  $lib_name: $aar_count个AAR文件, $kts_count个KTS文件"
-            fi
-          done
-          # 已在build-lib-akdanmaku工作流中构建并提交，此处不再验证，节约资源，减少时间
-          # echo ""
-          # echo "2. 验证源码模块:"
-          # if [ -f "akdanmaku/build.gradle.kts" ] || [ -f "akdanmaku/build.gradle" ]; then
-          #   echo "  akdanmaku - 找到构建文件"
-          # else
-          #   echo "  akdanmaku - 缺少构建文件！"
-          #   exit 1
-          # fi
- 
-      - name: Prepare gradle environment
-        working-directory: ./fantasy-bv-source
-        run: |
-          chmod +x gradlew
-          echo "Gradle 版本信息:"
-          ./gradlew --version
+          mkdir -p keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
 
-      # ========== 新增步骤：编译 player.tv 模块 ==========
-      - name: Build player.tv module
-        working-directory: ./fantasy-bv-source
+      - name: Build tv release apk
+        working-directory: ./bv_source
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "=== 编译 player.tv 模块，验证 TV 依赖 ==="
-          ./gradlew :player:tv:assembleRelease --refresh-dependencies --no-daemon
+          chmod +x ./gradlew
+          # 构建 TV 模块的 release APK（会自动处理所有依赖）
+          ./gradlew :app:tv:assembleRelease
+          # 定位生成的 APK（路径：app/tv/build/outputs/apk/release/）
+          APK_PATH=$(find app/tv/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::TV release APK not found!"
+            exit 1
+          fi
+          mkdir -p "${{ github.workspace }}/dist"
+          cp "$APK_PATH" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
 
-      - name: Decode keystore.p12 and write signing.properties
-        working-directory: ./fantasy-bv-source
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-          cat <<EOF > signing.properties
-          keystore.path=keystore.p12
-          keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
-          keystore.alias=${{ secrets.KEY_ALIAS }}
-          keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
-          EOF
-
-      # 顺序构建（先编译akdanmaku，再构建主应用）
-      # 已在build-lib-akdanmaku工作流中构建并提交，此处不再单独构建，节约资源，减少时间
-      # - name: Build danmaku module (akdanmaku)
-      #   working-directory: ./fantasy-bv-source
-      #   run: |
-      #     echo "=== 开始编译弹幕库 (akdanmaku) ==="
-      #     ./gradlew :akdanmaku:assembleRelease --no-daemon --stacktrace
-      #     echo "=== akdanmaku 编译完成 ==="
- 
-      - name: Build release apk files
-        working-directory: ./fantasy-bv-source
-        run: |
-          echo "=== 开始构建主应用 (所有依赖已就位) ==="
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
-          
-          echo ""
-          echo "=== 构建完成！查找APK产物 ==="
-          find . -name "*.apk" -type f | grep -i release | while read apk; do
-            echo "  $(ls -lh "$apk")"
-          done || echo "未找到APK文件，请检查构建日志。"
-          
-          mv ./app/build/outputs/apk/default/release/*.apk ./app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk
- 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 文件路径为基于github.workspace的绝对路径
-          P12_KEYSTORE_PATH: "./fantasy-bv-source/keystore.p12 ./fantasy-bv-source/signing.properties"
+          P12_KEYSTORE_PATH: "./bv_source/keystore/release.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./fantasy-bv-source/app/build/outputs/apk/default/release/fantasybv-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./dist/fantasybv-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-fantasybv"
