@@ -27,10 +27,11 @@ jobs:
       - name: Checkout source repo (bv)
         uses: actions/checkout@main
         with:
-          repository: <owner>/<repo>          # 替换为实际仓库地址
-          ref: main                            # 根据项目默认分支修改
+          repository: fantasytyx/bv
+          ref: develop
           path: bv_source
           fetch-depth: 0
+          submodules: recursive
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
