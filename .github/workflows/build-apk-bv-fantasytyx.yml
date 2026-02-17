@@ -54,7 +54,7 @@ jobs:
           mkdir -p keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
 
-      - name: Build tv release apk
+      - name: Build release apk
         working-directory: ./bv_source
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -62,19 +62,29 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew :app:tv:assembleRelease
-          # 查找所有 APK 文件
-          echo "Searching for APK files in $(pwd)"
-          find . -name "*.apk" -type f | tee /tmp/apk-list.txt
-          APK_PATH=$(cat /tmp/apk-list.txt | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "::error::No APK found!"
+          # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
+          ./gradlew :app:assembleRelease
+
+          # 列出所有生成的 APK
+          echo "=== APK files found ==="
+          find . -name "*.apk" -type f | tee /tmp/all-apks.txt
+
+          # 优先选择路径中包含 "/tv/" 的 APK（TV 变体的输出目录通常含 tv）
+          TV_APK=$(grep -i "/tv/" /tmp/all-apks.txt | head -n 1)
+          if [ -z "$TV_APK" ]; then
+            echo "::warning::TV APK not found by path, using the first APK instead"
+            TV_APK=$(head -n 1 /tmp/all-apks.txt)
+          fi
+
+          if [ -z "$TV_APK" ]; then
+            echo "::error::No APK generated"
             exit 1
           fi
-          echo "APK found at: $APK_PATH"
+
+          echo "Selected APK: $TV_APK"
           mkdir -p "${{ github.workspace }}/dist"
-          cp "$APK_PATH" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
- 
+          cp "$TV_APK" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
