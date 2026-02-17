@@ -62,17 +62,19 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          # 构建 TV 模块的 release APK（会自动处理所有依赖）
           ./gradlew :app:tv:assembleRelease
-          # 定位生成的 APK（路径：app/tv/build/outputs/apk/release/）
-          APK_PATH=$(find app/tv/build/outputs/apk/release -name "*.apk" | head -n 1)
+          # 查找所有 APK 文件
+          echo "Searching for APK files in $(pwd)"
+          find . -name "*.apk" -type f | tee /tmp/apk-list.txt
+          APK_PATH=$(cat /tmp/apk-list.txt | head -n 1)
           if [ -z "$APK_PATH" ]; then
-            echo "::error::TV release APK not found!"
+            echo "::error::No APK found!"
             exit 1
           fi
+          echo "APK found at: $APK_PATH"
           mkdir -p "${{ github.workspace }}/dist"
           cp "$APK_PATH" "${{ github.workspace }}/dist/fantasybv-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
