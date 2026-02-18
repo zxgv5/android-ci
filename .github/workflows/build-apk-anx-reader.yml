@@ -1,0 +1,96 @@
+name: build-apk-anx-reader
+ 
+on:
+  workflow_dispatch:
+  workflow_call:
+ 
+env:
+  FLUTTER_VERSION: 3.41.0 # 260211最新版
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'zulu'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+ 
+permissions:
+  contents: write
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: Anxcye/anx-reader
+          ref: develop
+          path: anx_reader_source
+          fetch-depth: 0
+          submodules: recursive
+ 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Set up flutter
+        uses: subosito/flutter-action@main
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+ 
+      - name: Get flutter dependencies
+        run: |
+          flutter --version
+          flutter pub get
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+          check-latest: true
+ 
+      - name: Decode keystore
+        working-directory: ./anx_reader_source
+        run: |
+          mkdir -p keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.p12
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=keystore.p1" >> android/key.properties
+ 
+      - name: Build release apk
+        working-directory: ./anx_reader_source
+        run: |
+          flutter gen-l10n
+          dart run build_runner build --delete-conflicting-outputs
+          flutter build apk --release
+          flutter build apk --split-per-abi
+
+      - name: Rename and move
+        working-directory: ./anx_reader_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/anx-reader-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./anx_reader_source/android/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/anx-reader-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-anx-reader"
