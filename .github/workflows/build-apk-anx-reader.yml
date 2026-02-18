@@ -51,6 +51,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
  
       - name: Get flutter dependencies
+        working-directory: ./anx_reader_source
         run: |
           flutter --version
           flutter pub get
