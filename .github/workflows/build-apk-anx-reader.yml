@@ -85,11 +85,15 @@ jobs:
           sed -i 's/compileSdk [0-9]\+/compileSdk 36/' build.gradle
           echo "compileSdk set to 36"
 
-      - name: Patch agp version in build.gradle
+      - name: Fix android gradle plugin version
         working-directory: ./anx_reader_source/android
         run: |
-          sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.9.2/' build.gradle
-          echo "AGP version set to 8.9.2"
+          echo "🔍 Current AGP version in build.gradle:"
+          grep "com.android.tools.build:gradle" build.gradle || echo "Not found"
+          sed -i 's/com\.android\.tools\.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.9.2/g' build.gradle
+          sed -i "s/com\.android\.tools\.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.9.2/g" build.gradle
+          echo "Fixed AGP version. New content:"
+          grep "com.android.tools.build:gradle" build.gradle
 
       - name: Decode keystore
         working-directory: ./anx_reader_source
