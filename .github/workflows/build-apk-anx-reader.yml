@@ -5,7 +5,7 @@ on:
   workflow_call:
  
 env:
-  FLUTTER_VERSION: 3.29.x
+  FLUTTER_VERSION: 3.38.6
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'zulu'
   ANDROID_COMPILE_SDK: '36'
