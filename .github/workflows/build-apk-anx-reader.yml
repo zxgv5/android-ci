@@ -58,6 +58,8 @@ jobs:
             riverpod: 2.6.1
             flutter_riverpod: 2.6.1
             riverpod_annotation: 2.6.1
+            riverpod_generator: 2.6.1
+            riverpod_lint: 2.6.1
             archive: ^3.6.0
             csv: ^5.0.0
           EOF
