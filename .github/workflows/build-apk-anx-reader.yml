@@ -88,12 +88,34 @@ jobs:
       - name: Fix android gradle plugin version
         working-directory: ./anx_reader_source/android
         run: |
-          echo "🔍 Current AGP version in build.gradle:"
-          grep "com.android.tools.build:gradle" build.gradle || echo "Not found"
-          sed -i 's/com\.android\.tools\.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.9.2/g' build.gradle
-          sed -i "s/com\.android\.tools\.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.9.2/g" build.gradle
-          echo "Fixed AGP version. New content:"
-          grep "com.android.tools.build:gradle" build.gradle
+          set +e  # 临时禁用 -e，方便处理 grep 失败的情况
+          echo "Checking for AGP version definition..."
+          # 显示文件内容以便调试
+          echo "=== android/build.gradle content ==="
+          cat build.gradle || echo "build.gradle not found"
+          echo "=== android/app/build.gradle content ==="
+          cat app/build.gradle || echo "app/build.gradle not found"
+          # 尝试在 build.gradle 中替换 classpath 形式 (例如: classpath "com.android.tools.build:gradle:8.6.0")
+          if [ -f build.gradle ]; then
+            sed -i 's/\(com\.android\.tools\.build:gradle:\)[0-9.]\+/\18.9.2/g' build.gradle
+            sed -i "s/\(com\.android\.tools\.build:gradle:\)[0-9.]\+/\18.9.2/g" build.gradle
+            echo "Updated build.gradle (classpath style)"
+          fi
+          # 尝试在 app/build.gradle 中替换 plugins 块版本 (例如: id 'com.android.application' version '8.6.0')
+          if [ -f app/build.gradle ]; then
+            # 替换单引号版本
+            sed -i "s/\(id 'com\.android\.application' version '\)[0-9.]\+'/\18.9.2'/g" app/build.gradle
+            sed -i "s/\(id 'com\.android\.library' version '\)[0-9.]\+'/\18.9.2'/g" app/build.gradle
+            # 替换双引号版本
+            sed -i 's/\(id "com\.android\.application" version "\)[0-9.]\+"/\18.9.2"/g' app/build.gradle
+            sed -i 's/\(id "com\.android\.library" version "\)[0-9.]\+"/\18.9.2"/g' app/build.gradle
+            echo "Updated app/build.gradle (plugins style)"
+          fi
+          # 验证修改结果（使用递归 grep，且不因无结果而退出）
+          echo "🔍 Final check for AGP version:"
+          grep -r "com.android.tools.build:gradle" . || echo "No classpath style found (OK if using plugins style)"
+          grep -r "com.android.application.*version" . || echo "No plugin style found"
+          set -e  # 恢复严格模式
 
       - name: Decode keystore
         working-directory: ./anx_reader_source
