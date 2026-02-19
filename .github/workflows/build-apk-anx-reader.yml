@@ -125,6 +125,17 @@ jobs:
           grep -r "com.android.application.*version" . || echo "No plugin style found"
           set -e  # 恢复严格模式
 
+      - name: Upgrade gradle wrapper to 8.12.0
+        working-directory: ./anx_reader_source/android
+        run: |
+          echo "Current gradle-wrapper.properties:"
+          cat gradle/wrapper/gradle-wrapper.properties || echo "wrapper file not found"
+          # 将 distributionUrl 中的 Gradle 版本替换为 8.12.0（支持 -bin 或 -all）
+          sed -i 's/gradle-[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?/gradle-8.12.0/g' gradle/wrapper/gradle-wrapper.properties
+          sed -i 's/gradle-[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?-all/gradle-8.12.0-all/g' gradle/wrapper/gradle-wrapper.properties
+          echo "Updated gradle wrapper to 8.12.0. New distributionUrl:"
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
+
       - name: Decode keystore
         working-directory: ./anx_reader_source
         run: |
