@@ -54,13 +54,13 @@ jobs:
         working-directory: ./anx_reader_source
         run: |
           cat << 'EOF' >> pubspec.yaml
-      dependency_overrides:
-        riverpod: 2.6.1
-        flutter_riverpod: 2.6.1
-        riverpod_annotation: 2.6.1
-        archive: 3.6.1
-        csv: 5.0.13
-      EOF
+          dependency_overrides:
+            riverpod: 2.6.1
+            flutter_riverpod: 2.6.1
+            riverpod_annotation: 2.6.1
+            archive: ^3.6.0
+            csv: ^5.0.0
+          EOF
 
       - name: Get flutter dependencies
         working-directory: ./anx_reader_source
