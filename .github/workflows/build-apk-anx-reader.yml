@@ -60,7 +60,8 @@ dependency_overrides:
   riverpod_annotation: 2.6.1
   archive: 3.6.1
   csv: 5.0.13
-EOF
+          EOF
+
       - name: Get flutter dependencies
         working-directory: ./anx_reader_source
         run: |
