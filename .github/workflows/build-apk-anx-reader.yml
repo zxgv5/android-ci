@@ -61,7 +61,6 @@ dependency_overrides:
   archive: 3.6.1
   csv: 5.0.13
 EOF
-
       - name: Get flutter dependencies
         working-directory: ./anx_reader_source
         run: |
