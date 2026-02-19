@@ -120,7 +120,7 @@ jobs:
             echo "Updated settings.gradle (plugins style)"
           fi
           # 验证修改结果
-          echo "🔍 Final check for AGP version:"
+          echo "Final check for AGP version:"
           grep -r "com.android.tools.build:gradle" . || echo "No classpath style found (OK if using plugins style)"
           grep -r "com.android.application.*version" . || echo "No plugin style found"
           set -e  # 恢复严格模式
@@ -130,9 +130,8 @@ jobs:
         run: |
           echo "Current gradle-wrapper.properties:"
           cat gradle/wrapper/gradle-wrapper.properties || echo "wrapper file not found"
-          # 将 distributionUrl 中的 Gradle 版本替换为 8.12.0（支持 -bin 或 -all）
-          sed -i 's/gradle-[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?/gradle-8.12.0/g' gradle/wrapper/gradle-wrapper.properties
-          sed -i 's/gradle-[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?-all/gradle-8.12.0-all/g' gradle/wrapper/gradle-wrapper.properties
+          # 将 distributionUrl 中的版本替换为 8.12.0，并确保使用正确的 services.gradle.org 域名
+          sed -i 's|https\?://.*/gradle-[0-9.]\+-\(bin\|all\)\.zip|https\://services.gradle.org/distributions/gradle-8.12-\1.zip|g' gradle/wrapper/gradle-wrapper.properties
           echo "Updated gradle wrapper to 8.12.0. New distributionUrl:"
           grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
