@@ -79,6 +79,18 @@ jobs:
           distribution: "${{ env.JDK_DISTRIBUTION }}"
           check-latest: true
 
+      - name: Patch compileSdk in app/build.gradle
+        working-directory: ./anx_reader_source/android/app
+        run: |
+          sed -i 's/compileSdk [0-9]\+/compileSdk 36/' build.gradle
+          echo "compileSdk set to 36"
+
+      - name: Patch agp version in build.gradle
+        working-directory: ./anx_reader_source/android
+        run: |
+          sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.9.2/' build.gradle
+          echo "AGP version set to 8.9.2"
+
       - name: Decode keystore
         working-directory: ./anx_reader_source
         run: |
