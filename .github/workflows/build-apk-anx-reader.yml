@@ -1,9 +1,9 @@
 name: build-apk-anx-reader
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   FLUTTER_VERSION: 3.38.6
   JDK_VERSION: '21'
@@ -11,10 +11,10 @@ env:
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+
 permissions:
   contents: write
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -34,12 +34,12 @@ jobs:
           path: anx_reader_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -54,13 +54,13 @@ jobs:
         working-directory: ./anx_reader_source
         run: |
           cat << 'EOF' >> pubspec.yaml
-          dependency_overrides:
-            riverpod: 2.6.1
-            flutter_riverpod: 2.6.1
-            riverpod_annotation: 2.6.1
-            archive: 3.6.1
-            csv: 5.0.13
-          EOF
+dependency_overrides:
+  riverpod: 2.6.1
+  flutter_riverpod: 2.6.1
+  riverpod_annotation: 2.6.1
+  archive: 3.6.1
+  csv: 5.0.13
+EOF
 
       - name: Get flutter dependencies
         working-directory: ./anx_reader_source
@@ -74,7 +74,7 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
           check-latest: true
- 
+
       - name: Decode keystore
         working-directory: ./anx_reader_source
         run: |
