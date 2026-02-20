@@ -157,7 +157,7 @@ jobs:
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-          echo "storeFile=keystore.p1" >> android/key.properties
+          echo "storeFile=keystore.p12" >> android/key.properties
  
       - name: Build release apk
         working-directory: ./anx_reader_source
