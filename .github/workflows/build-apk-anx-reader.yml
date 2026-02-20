@@ -99,24 +99,24 @@ jobs:
           cat settings.gradle || echo "settings.gradle not found"
           # 尝试在 build.gradle 中替换 classpath 形式
           if [ -f build.gradle ]; then
-            sed -i 's/\(com\.android\.tools\.build:gradle:\)[0-9.]\+/\18.9.2/g' build.gradle
-            sed -i "s/\(com\.android\.tools\.build:gradle:\)[0-9.]\+/\18.9.2/g" build.gradle
+            sed -i 's/\(com\.android\.tools\.build:gradle:\)[0-9.]\+/\18.10.0/g' build.gradle
+            sed -i "s/\(com\.android\.tools\.build:gradle:\)[0-9.]\+/\18.10.0/g" build.gradle
             echo "Updated build.gradle (classpath style)"
           fi
           # 尝试在 app/build.gradle 中替换 plugins 块版本
           if [ -f app/build.gradle ]; then
-            sed -i "s/\(id 'com\.android\.application' version '\)[0-9.]\+'/\18.9.2'/g" app/build.gradle
-            sed -i "s/\(id 'com\.android\.library' version '\)[0-9.]\+'/\18.9.2'/g" app/build.gradle
-            sed -i 's/\(id "com\.android\.application" version "\)[0-9.]\+"/\18.9.2"/g' app/build.gradle
-            sed -i 's/\(id "com\.android\.library" version "\)[0-9.]\+"/\18.9.2"/g' app/build.gradle
+            sed -i "s/\(id 'com\.android\.application' version '\)[0-9.]\+'/\18.10.0'/g" app/build.gradle
+            sed -i "s/\(id 'com\.android\.library' version '\)[0-9.]\+'/\18.10.0'/g" app/build.gradle
+            sed -i 's/\(id "com\.android\.application" version "\)[0-9.]\+"/\18.10.0"/g' app/build.gradle
+            sed -i 's/\(id "com\.android\.library" version "\)[0-9.]\+"/\18.10.0"/g' app/build.gradle
             echo "Updated app/build.gradle (plugins style)"
           fi
           # 修改 settings.gradle 中的 AGP 版本
           if [ -f settings.gradle ]; then
             # 处理双引号版本（如 settings.gradle 中的格式）
-            sed -i 's/\(id "com\.android\.application" version "\)[0-9.]\+"/\18.9.2"/g' settings.gradle
+            sed -i 's/\(id "com\.android\.application" version "\)[0-9.]\+"/\18.10.0"/g' settings.gradle
             # 处理单引号版本（备用）
-            sed -i "s/\(id 'com\.android\.application' version '\)[0-9.]\+'/\18.9.2'/g" settings.gradle
+            sed -i "s/\(id 'com\.android\.application' version '\)[0-9.]\+'/\18.10.0'/g" settings.gradle
             echo "Updated settings.gradle (plugins style)"
           fi
           # 验证修改结果
@@ -125,27 +125,27 @@ jobs:
           grep -r "com.android.application.*version" . || echo "No plugin style found"
           set -e  # 恢复严格模式
 
-      - name: Force gradle wrapper to 8.12.0
+      - name: Force gradle wrapper to 8.13.0
         working-directory: ./anx_reader_source/android
         run: |
           cat > gradle/wrapper/gradle-wrapper.properties << EOF
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.12-all.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.13-all.zip
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
           # 如果 gradlew 不存在，下载一个最小的（可选，但推荐）
           if [ ! -f gradlew ]; then
-            curl -s -L -o gradlew https://raw.githubusercontent.com/gradle/gradle/v8.12.0/gradlew
+            curl -s -L -o gradlew https://raw.githubusercontent.com/gradle/gradle/v8.13.0/gradlew
             chmod +x gradlew
             # 下载 wrapper jar（如果不存在）
             if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
               curl -s -L -o gradle/wrapper/gradle-wrapper.jar \
-                https://github.com/gradle/gradle/raw/v8.12.0/gradle/wrapper/gradle-wrapper.jar
+                https://github.com/gradle/gradle/raw/v8.13.0/gradle/wrapper/gradle-wrapper.jar
             fi
           fi
-          echo "Gradle wrapper configured to 8.12.0"
+          echo "Gradle wrapper configured to 8.13.0"
           echo "Current distributionUrl:"
           grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
@@ -164,14 +164,16 @@ jobs:
         run: |
           flutter gen-l10n
           dart run build_runner build --delete-conflicting-outputs
-          flutter build apk --release
-          flutter build apk --split-per-abi
+          # flutter build apk --release
+          # flutter build apk --split-per-abi
+          flutter build apk --release --target-platform=android-arm64
 
       - name: Rename and move
         working-directory: ./anx_reader_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/anx-reader-${{ env.BUILD_DATE }}.apk"
+          # mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/anx-reader-${{ env.BUILD_DATE }}.apk"
+          mv build/app/outputs/flutter-apk/app-release.apk "${{ github.workspace }}/dist/anx-reader-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
