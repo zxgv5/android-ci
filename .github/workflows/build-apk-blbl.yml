@@ -61,7 +61,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease -PversionName="0.1.15" -PversionCode="3257"
+          ./gradlew assembleRelease -PversionName="0.1.16" -PversionCode="3257"
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/blbl-${{ env.BUILD_DATE }}.apk"
 
