@@ -51,8 +51,6 @@ jobs:
       - name: Initialization values
         run: |
           # 先获取当前commit信息
-          echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
       - name: Fix build-extras.gradle for release build
@@ -120,41 +118,6 @@ jobs:
           echo "文件行数: $(wc -l < utils/config.js)"
           echo "✓ utils/config.js 文件替换完成"
  
-      - name: Extract versionCode and version from config.xml
-        id: extract_version
-        working-directory: ./acode_source
-        run: |
-          if [ ! -f config.xml ]; then
-            echo "config.xml not found!"
-            exit 1
-          fi
-          VERSION_CODE=$(grep -oP 'versionCode="\K[0-9]+' config.xml || grep -oP 'versionCode="([0-9]+)' config.xml | sed -E 's/versionCode="([0-9]+)"/\1/')
-          VERSION=$(grep -oP 'version="\K[0-9.]+' config.xml)
-          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted Version Code: $VERSION_CODE"
-          echo "Extracted Version: $VERSION"
- 
-      - name: Append commit hash to version and update config.xml
-        id: update-version
-        working-directory: ./acode_source
-        run: |
-          # 确保GIT_COMMIT不为空
-          if [ -z "${{ env.GIT_COMMIT }}" ]; then
-            echo "GIT_COMMIT is empty, using default"
-            SHORT_COMMIT_HASH="unknown"
-          else
-            SHORT_COMMIT_HASH=$(echo "${{ env.GIT_COMMIT }}" | cut -c 1-7)
-          fi
-          UPDATED_VERSION="${{ steps.extract_version.outputs.VERSION }}-$SHORT_COMMIT_HASH"
-          echo "Updated Version: $UPDATED_VERSION"
-          # Update config.xml with the new version
-          sed -i "s/version=\"${{ steps.extract_version.outputs.VERSION }}\"/version=\"$UPDATED_VERSION\"/g" config.xml
-          echo "Updated version in config.xml"
-          # Output the updated version
-          echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_ENV
-          echo "UPDATED_VERSION=$UPDATED_VERSION" >> $GITHUB_OUTPUT
- 
       - name: Install bun
         uses: oven-sh/setup-bun@main
         with:
@@ -179,9 +142,8 @@ jobs:
           npm run build paid apk
  
       - name: Build release apk files with gradle
-        working-directory: ./acode_source
+        working-directory: ./acode_source/platforms/android
         run: |
-          cd platforms/android
           ./gradlew clean
           ./gradlew assembleRelease
           # 查找生成的APK文件
@@ -189,35 +151,14 @@ jobs:
           find app/build/outputs/apk -name "*.apk" -type f
           # 确保目录存在
           mkdir -p "${{ github.workspace }}/dist"
-          # 复制release APK到临时目录
-          if [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
-            echo "Found unsigned release APK"
-            cp app/build/outputs/apk/release/app-release-unsigned.apk "${{ github.workspace }}/dist/acode-unsigned.apk"
-            echo "Copied to ${{ github.workspace }}/dist/acode-unsigned.apk"
-          else
-            echo "Checking for signed APK..."
-            # 尝试查找已签名的APK
-            for apk in app/build/outputs/apk/release/*.apk; do
-              if [[ "$apk" != *"unsigned"* ]] && [[ -f "$apk" ]]; then
-                echo "Found signed APK: $apk"
-                cp "$apk" "${{ github.workspace }}/dist/acode-unsigned.apk"
-                echo "Copied to ${{ github.workspace }}/dist/acode-unsigned.apk"
-                break
-              fi
-            done
-          fi
-          # 验证APK文件存在
-          ls -la "${{ github.workspace }}/dist/acode-unsigned.apk" || echo "APK file not found!"
- 
+          mv  app/build/outputs/apk/release/app-release-unsigned.apk "${{ github.workspace }}/dist/acode-unsigned.apk"
+          
       - name: Sign the apk (pkcs12)
         working-directory: ./acode_source
         run: |
           # 设置Android build-tools路径
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
-          # 验证apksigner可用
-          which apksigner
-          apksigner --version
           # 使用apksigner对APK签名
           apksigner sign \
             --ks "${{ env.STORE_FILE_PATH }}" \
