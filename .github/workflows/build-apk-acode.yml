@@ -8,6 +8,8 @@ permissions:
   contents: write
  
 env:
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: "${{secrets.GITHUB_TOKEN}}"
   BUILD_JSON_PATH: "./build.json"
   STORE_FILE_PATH: "/tmp/app-release.keystore"
@@ -117,7 +119,7 @@ jobs:
         run: |
           # 设置Android build-tools路径
           export ANDROID_HOME=/usr/local/lib/android/sdk
-          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
           # 使用apksigner对APK签名
           apksigner sign \
             --ks "${{ env.STORE_FILE_PATH }}" \
