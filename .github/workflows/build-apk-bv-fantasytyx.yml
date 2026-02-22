@@ -72,8 +72,8 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
-          ./gradlew :app:assembleRelease
+          ./gradlew :player:tv:assembleRelease --refresh-dependencies --no-daemon
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
  
       - name: Rename and move apk
         working-directory: ./bv_source
