@@ -8,6 +8,7 @@ permissions:
   contents: write
  
 env:
+  JDK_VERSION: '25'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: "${{secrets.GITHUB_TOKEN}}"
@@ -60,12 +61,11 @@ jobs:
           chmod +x ${{ github.workspace }}/ci_source/scripts/customize-acode.sh
           ${{ github.workspace }}/ci_source/scripts/customize-acode.sh
  
-      - name: Set up jdk 21
+      - name: Set up java
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
-          java-version: '21'
-          cache: 'gradle'
+          java-version: '${{ env.JDK_VERSION }}'
  
       - name: Set up node.js
         uses: actions/setup-node@main
