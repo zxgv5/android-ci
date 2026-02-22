@@ -95,21 +95,12 @@ jobs:
         with:
           bun-version: latest
  
-      - name: Install node.js packages
-        working-directory: ./acode_source
-        run: npm install
- 
-      - name: Install cordova cli
-        working-directory: ./acode_source
-        run: npm install -g cordova
- 
-      - name: Run npm setup
-        working-directory: ./acode_source
-        run: npm run setup
- 
-      - name: Run npm build paid apk
+      - name: Install setup and npm build
         working-directory: ./acode_source
         run: |
+          npm install
+          npm install -g cordova
+          npm run setup
           node utils/storage_manager.mjs y
           npm run build paid apk
  
