@@ -1,6 +1,6 @@
 #!/bin/bash
 # customize-bv-fantasy.sh
-
+ 
 set -e  # 遇到错误立即退出，避免ci静默失败
 FANTASY_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/bv_source"
 PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,9 +24,8 @@ FANTASY_BV_R8TEST_STRINGS_XML="$FANTASY_BV_SOURCE_ROOT/app/shared/src/r8Test/res
 sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV R8 Test.*<\/string>/<string name="app_name">fantasy R8 Test<\/string>/' "$FANTASY_BV_R8TEST_STRINGS_XML"
 # 4、倍速取值范围调整
 FANTASY_BV_CONTROLLERVIDEOINFO_KT="$FANTASY_BV_SOURCE_ROOT/player/tv/src/main/kotlin/dev/aaa1115910/bv/player/tv/controller/ControllerVideoInfo.kt"
-# 使用捕获组保留原缩进
-sed -i -e 's/^\([[:space:]]*\)down = firstVisibleButtonId?.let { focusRequesters\[it\] } ?: FocusRequester()/\1down = focusRequesters["danmaku"] ?: FocusRequester()/' \
-       -e 's/^\([[:space:]]*\)step: Float = 0\.25f,/\1step: Float = 0.2f,/' \
+# sed -i -e 's/^\([[:space:]]*\)down = firstVisibleButtonId?.let { focusRequesters\[it\] } ?: FocusRequester()/\1down = focusRequesters["danmaku"] ?: FocusRequester()/' \
+sed -i -e 's/^\([[:space:]]*\)step: Float = 0\.25f,/\1step: Float = 0.2f,/' \
        -e 's/^\([[:space:]]*\)min: Float = 0\.25f,/\1min: Float = 0.2f,/' \
        -e 's/^\([[:space:]]*\)max: Float = 3f,/\1max: Float = 5f,/' "$FANTASY_BV_CONTROLLERVIDEOINFO_KT"
 FANTASY_BV_PLAYERSETTING_KT="${FANTASY_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/settings/content/PlayerSetting.kt"
