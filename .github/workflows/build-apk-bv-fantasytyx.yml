@@ -61,19 +61,20 @@ jobs:
       - name: Decode keystore
         working-directory: ./bv_source
         run: |
-          mkdir -p keystore
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
+          cat << EOF > signing.properties
+          keystore.path=keystore.p12
+          keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
+          keystore.alias=${{ secrets.KEY_ALIAS }}
+          keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
  
       - name: Build release apk
         working-directory: ./bv_source
-        env:
-          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew :player:tv:assembleRelease --refresh-dependencies --no-daemon
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
+          ./gradlew :app:assembleRelease 
  
       - name: Rename and move apk
         working-directory: ./bv_source
