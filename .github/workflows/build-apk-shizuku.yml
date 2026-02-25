@@ -45,11 +45,11 @@ jobs:
       - name: Write key
         working-directory: ./shizuku_source
         run: |
-          echo KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} > signing.properties
-          echo KEYSTORE_ALIAS=${{ secrets.KEY_ALIAS }} >> signing.properties
-          echo KEYSTORE_ALIAS_PASSWORD='${{ secrets.KEY_ALIAS_PASSWORD }}' >> signing.properties
-          echo KEYSTORE_FILE=../key.p12 >> signing.properties
-          echo ${{ secrets.KEYSTORE_BASE64 }} | base64 --decode > key.p12
+          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" > signing.properties
+          echo "KEYSTORE_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
+          echo "KEYSTORE_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> signing.properties
+          echo "KEYSTORE_FILE=../key.p12" >> signing.properties
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ../key.p12
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@main
