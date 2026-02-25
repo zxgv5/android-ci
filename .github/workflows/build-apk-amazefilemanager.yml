@@ -109,10 +109,11 @@ jobs:
       - name: Write keystore info
         working-directory: ./amazefilemanager_source
         run: |
-          # 将 keystore 写入当前目录
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-          # 生成 signing.properties，属性名必须与 build.gradle 中读取的完全一致
-          echo "STORE_FILE=keystore.p12" > signing.properties
+          # 创建 app 目录并将 keystore 写入其中
+          mkdir -p app
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          # 使用绝对路径，确保 Gradle 能正确找到
+          echo "STORE_FILE=${{ github.workspace }}/amazefilemanager_source/app/keystore.p12" > signing.properties
           echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> signing.properties
           echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
           echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> signing.properties
@@ -169,7 +170,8 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./amazefilemanager_source/keystore.p12"
+          # 注意路径现在指向 app 子目录
+          P12_KEYSTORE_PATH: "./amazefilemanager_source/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/amazefilemanager-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-amazefilemanager"
