@@ -74,4 +74,9 @@ jobs:
           # releaseName=`ls manager/build/outputs/apk/release/shizuku*-v*-release.apk | awk -F '(/|-release.apk)' '{print $6}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
           ./gradlew assembleRelease
           releaseName=`ls manager/build/outputs/apk/release/shizuku*-v*-release.apk | awk -F '(/|-release.apk)' '{print $6}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
-          echo "$releaseName"
+ 
+      - name: Rename and move
+        working-directory: ./shizuku_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          echo "${{ steps.buildWithGradle.outputs.releaseName }}"
