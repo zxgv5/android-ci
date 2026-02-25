@@ -94,6 +94,7 @@ jobs:
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
         with:
+          gradle-version: "8.8"  # 指定版本以预下载并缓存，避免超时
           dependency-graph: generate-and-submit
           build-scan-publish: true
           build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
@@ -112,7 +113,6 @@ jobs:
           echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" > signing.properties
           echo "KEYSTORE_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
           echo "KEYSTORE_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> signing.properties
-          # 因build实际可能在不同目录，这里使用绝对路径避免路径问题
           echo "KEYSTORE_FILE=${{ github.workspace }}/amazefilemanager_source/key.p12" >> signing.properties
 
       - name: Build with gradle
@@ -129,7 +129,6 @@ jobs:
         working-directory: ./amazefilemanager_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          # 查找生成的release apk（根据实际项目输出路径调整）
           apkPath=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || ls app/build/outputs/apk/release/*.apk | head -n1)
           if [ -f "$apkPath" ]; then
             mv "$apkPath" "${{ github.workspace }}/dist/amaze-${{ env.BUILD_DATE }}.apk"
