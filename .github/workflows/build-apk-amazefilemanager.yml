@@ -166,7 +166,6 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 注意路径现在指向 app 子目录
           P12_KEYSTORE_PATH: "./amazefilemanager_source/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/amazefilemanager-${{ env.BUILD_DATE }}.apk"
