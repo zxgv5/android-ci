@@ -1,0 +1,147 @@
+name: build-apk-amazefilemanager
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '17'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: TeamAmaze/AmazeFileManager
+          ref: release/4.0
+          path: amazefilemanager_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          distribution: 'temurin'
+          java-version: '${{ env.JDK_VERSION }}'
+
+      - name: Setup ndk
+        uses: nttld/setup-ndk@afb4c9964b521afb97c864b7d40b11e6911bd410
+        with:
+          ndk-version: r28c
+          link-to-sdk: true
+          local-cache: true
+
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache rust dependencies
+        uses: actions/cache@main
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            file_operations/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Setup rust for android
+        working-directory: ./amazefilemanager_source
+        run: |
+          cd file_operations
+          chmod +x setup_rust_android.sh
+          ./setup_rust_android.sh
+
+      - name: Verify rust setup
+        working-directory: ./amazefilemanager_source
+        run: |
+          cd file_operations
+          echo "🔍 Verifying Rust Android targets..."
+          rustup target list --installed | grep android || echo "No Android targets found"
+          echo "🔍 Verifying cargo configuration..."
+          if [ -f .cargo/config.toml ]; then
+            echo "✅ .cargo/config.toml exists"
+          else
+            echo "❌ .cargo/config.toml missing"
+            exit 1
+          fi
+
+      - name: Setup gradle
+        uses: gradle/actions/setup-gradle@main
+        with:
+          dependency-graph: generate-and-submit
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
+
+      - name: Check spotless formatting
+        working-directory: ./amazefilemanager_source
+        run: |
+          chmod +x ./gradlew
+          ./gradlew spotlessCheck --stacktrace
+
+      - name: Write keystore info
+        working-directory: ./amazefilemanager_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > key.p12
+          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" > signing.properties
+          echo "KEYSTORE_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
+          echo "KEYSTORE_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> signing.properties
+          # 因build实际可能在不同目录，这里使用绝对路径避免路径问题
+          echo "KEYSTORE_FILE=${{ github.workspace }}/amazefilemanager_source/key.p12" >> signing.properties
+
+      - name: Build with gradle
+        working-directory: ./amazefilemanager_source
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          echo 'android.sdk.channel=3' >> gradle.properties
+          echo 'android.native.buildOutput=verbose' >> gradle.properties
+          echo 'org.gradle.caching=true' >> gradle.properties
+          echo 'org.gradle.parallel=true' >> gradle.properties
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Rename and move
+        working-directory: ./amazefilemanager_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          # 查找生成的release apk（根据实际项目输出路径调整）
+          apkPath=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || ls app/build/outputs/apk/release/*.apk | head -n1)
+          if [ -f "$apkPath" ]; then
+            mv "$apkPath" "${{ github.workspace }}/dist/amaze-${{ env.BUILD_DATE }}.apk"
+          else
+            echo "Release APK not found, build may have failed"
+            exit 1
+          fi
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./amazefilemanager_source/key.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/amaze-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}"
