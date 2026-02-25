@@ -14,7 +14,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    steps:
       - name: Clean runner environment
         run: |
           # 清理可能存在的全局缓存文件
