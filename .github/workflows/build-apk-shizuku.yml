@@ -71,12 +71,21 @@ jobs:
           echo 'org.gradle.parallel=true' >> gradle.properties
           chmod +x ./gradlew
           # ./gradlew :manager:assembleRelease
-          # releaseName=`ls manager/build/outputs/apk/release/shizuku*-v*-release.apk | awk -F '(/|-release.apk)' '{print $6}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
           ./gradlew assembleRelease
-          releaseName=`ls manager/build/outputs/apk/release/shizuku*-v*-release.apk | awk -F '(/|-release.apk)' '{print $6}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
+          # releaseName=`ls manager/build/outputs/apk/release/shizuku*-v*-release.apk | awk -F '(/|-release.apk)' '{print $6}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
  
       - name: Rename and move
         working-directory: ./shizuku_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          echo "${{ steps.buildWithGradle.outputs.releaseName }}"
+          apkPath=$(ls manager/build/outputs/apk/release/shizuku*-v*-release.apk)
+          mv "$apkPath" "${{ github.workspace }}/dist/shizuku-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./shizuku_source/manager/key.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/shizuku-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-shizuku"
