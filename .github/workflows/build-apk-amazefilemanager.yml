@@ -53,7 +53,7 @@ jobs:
           local-cache: true
 
       - name: Install rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
 
@@ -81,20 +81,20 @@ jobs:
         working-directory: ./amazefilemanager_source
         run: |
           cd file_operations
-          echo "🔍 Verifying Rust Android targets..."
+          echo "Verifying Rust Android targets..."
           rustup target list --installed | grep android || echo "No Android targets found"
-          echo "🔍 Verifying cargo configuration..."
+          echo "Verifying cargo configuration..."
           if [ -f .cargo/config.toml ]; then
-            echo "✅ .cargo/config.toml exists"
+            echo "cargo/config.toml exists"
           else
-            echo "❌ .cargo/config.toml missing"
+            echo "cargo/config.toml missing"
             exit 1
           fi
 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
         with:
-          gradle-version: "8.8"  # 指定版本以预下载并缓存，避免超时
+          gradle-version: "8.8"
           dependency-graph: generate-and-submit
           build-scan-publish: true
           build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
@@ -109,11 +109,39 @@ jobs:
       - name: Write keystore info
         working-directory: ./amazefilemanager_source
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > key.p12
-          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" > signing.properties
-          echo "KEYSTORE_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
-          echo "KEYSTORE_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> signing.properties
-          echo "KEYSTORE_FILE=${{ github.workspace }}/amazefilemanager_source/key.p12" >> signing.properties
+          # 将 keystore 写入当前目录
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
+          # 生成 signing.properties，属性名必须与 build.gradle 中读取的完全一致
+          echo "STORE_FILE=keystore.p12" > signing.properties
+          echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> signing.properties
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
+          echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> signing.properties
+
+      - name: Create init script to copy release signing to config
+        working-directory: ./amazefilemanager_source
+        run: |
+          cat > init.gradle << 'EOF'
+          // 此脚本在项目评估后将 release 签名配置复制给 config
+          gradle.projectsLoaded {
+              rootProject.allprojects { project ->
+                  project.afterEvaluate {
+                      if (project.plugins.hasPlugin('com.android.application')) {
+                          def releaseConfig = project.android.signingConfigs.release
+                          def configConfig = project.android.signingConfigs.config
+                          if (releaseConfig.storeFile != null && releaseConfig.storePassword != null) {
+                              configConfig.storeFile = releaseConfig.storeFile
+                              configConfig.storePassword = releaseConfig.storePassword
+                              configConfig.keyAlias = releaseConfig.keyAlias
+                              configConfig.keyPassword = releaseConfig.keyPassword
+                              println "Copied release signing config to config"
+                          } else {
+                              println "Release signing config not fully set, cannot copy to config"
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
 
       - name: Build with gradle
         working-directory: ./amazefilemanager_source
@@ -123,25 +151,25 @@ jobs:
           echo 'android.native.buildOutput=verbose' >> gradle.properties
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
-          # ./gradlew assembleRelease --stacktrace
-          ./gradlew assembleRelease --stacktrace --no-daemon
+          # 使用 init 脚本，仅构建 playRelease
+          ./gradlew assemblePlayRelease --stacktrace --no-daemon -I init.gradle
 
       - name: Rename and move
         working-directory: ./amazefilemanager_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          apkPath=$(ls app/build/outputs/apk/release/app-release.apk 2>/dev/null || ls app/build/outputs/apk/release/*.apk | head -n1)
+          apkPath=$(ls app/build/outputs/apk/play/release/app-play-release.apk)
           if [ -f "$apkPath" ]; then
-            mv "$apkPath" "${{ github.workspace }}/dist/amaze-${{ env.BUILD_DATE }}.apk"
+            mv "$apkPath" "${{ github.workspace }}/dist/amazefilemanager-${{ env.BUILD_DATE }}.apk"
           else
-            echo "Release APK not found, build may have failed"
+            echo "Play Release APK not found, build may have failed"
             exit 1
           fi
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./amazefilemanager_source/key.p12"
+          P12_KEYSTORE_PATH: "./amazefilemanager_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/amaze-${{ env.BUILD_DATE }}.apk"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}"
+          BUILD_ARTIFACT_PATH: "./dist/amazefilemanager-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-amazefilemanager"
