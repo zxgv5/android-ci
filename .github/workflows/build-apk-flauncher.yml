@@ -5,7 +5,7 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '17'
+  JDK_VERSION: '21'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -56,14 +56,9 @@ jobs:
       - name: Install flutter
         uses: subosito/flutter-action@main
         with:
-          flutter-version: '3.24.5'
+          # flutter-version: '3.24.5'
+          flutter-version: '3.41.2'
           channel: 'stable'
-
-      - name: Verify environment
-        working-directory: ./flauncher_source
-        run: |
-          java --version
-          flutter doctor -v
 
       - name: Accept android licenses
         working-directory: ./flauncher_source
@@ -94,20 +89,8 @@ jobs:
       - name: Rename and move
         working-directory: ./flauncher_source
         run: |
-          APK_DIR="build/app/outputs/flutter-apk"
-          echo "Current directory: $(pwd)"
-          echo "APK directory: $APK_DIR"
-          echo "Generated APK files:"
-          ls -la "$APK_DIR"/*.apk || echo "No APK files found in $APK_DIR"
           mkdir -p "${{ github.workspace }}/dist"
-          sudo apt install rename -y
-          rename 's/app-(.*)-release.apk/flauncher-$1-release.apk/' "$APK_DIR"/*.apk || true
-          ls -la "$APK_DIR"/*.apk || echo "No APK files found in $APK_DIR"
-          if [ -f "$APK_DIR/app-release.apk" ]; then
-            mv "$APK_DIR/app-release.apk" "${{ github.workspace }}/dist/flauncher-${{ env.BUILD_DATE }}.apk"
-          else
-            echo "Warning: app-release.apk not found, skipping move."
-          fi
+          mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/flauncher-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
