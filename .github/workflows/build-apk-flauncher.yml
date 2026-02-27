@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: cyanonoob/flauncher
-          ref: master
+          ref: master                # 若默认分支为 main，可改为 main 或留空使用默认分支
           path: flauncher_source
           fetch-depth: 0
           submodules: recursive
@@ -56,7 +56,7 @@ jobs:
       - name: Install flutter
         uses: subosito/flutter-action@main
         with:
-          flutter-version: '3.38.1'
+          flutter-version: '3.38.x'   # 与 pubspec.yaml 中指定的 3.38.1 保持一致
           channel: 'stable'
 
       - name: Accept android licenses
@@ -67,21 +67,29 @@ jobs:
         working-directory: ./flauncher_source
         run: |
           mkdir -p android/app
-          # 实际为p12，非jks，懒得改构建代码了
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+          # 解码密钥文件并命名为 upload-keystore.keystore（与 build.gradle 中的文件名一致）
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.keystore
+
+      - name: Create .env file with signing credentials
+        working-directory: ./flauncher_source/android
+        run: |
+          cat > .env <<EOF
+          FLAUNCHER_KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+          FLAUNCHER_SIGNING_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          FLAUNCHER_SIGNING_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          EOF
 
       - name: Build with flutter
         working-directory: ./flauncher_source
         env:
-          FLAUNCHER_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          FLAUNCHER_SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          FLAUNCHER_SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           BUILD_NUMBER: ${{ steps.version.outputs.BUILD_NUMBER }}
           FULL_VERSION_NUMBER: ${{ steps.version.outputs.FULL_VERSION_NUMBER }}
         run: |
           echo 'org.gradle.caching=true' >> android/gradle.properties
           echo 'org.gradle.parallel=true' >> android/gradle.properties
           flutter --no-color build apk --release \
+            --flavor production \
+            --target-platform android-arm64 \
             --build-number $BUILD_NUMBER \
             --build-name=$FULL_VERSION_NUMBER
 
@@ -90,11 +98,12 @@ jobs:
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/flauncher-${{ env.BUILD_DATE }}.apk"
- 
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./flauncher_source/android/app/upload-keystore.jks"
+          # 注意：密钥文件路径已更新为 .keystore 以匹配仓库要求
+          P12_KEYSTORE_PATH: "./flauncher_source/android/app/upload-keystore.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/flauncher-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-flauncher"
