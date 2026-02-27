@@ -94,21 +94,21 @@ jobs:
       - name: Rename and move
         working-directory: ./flauncher_source
         run: |
+          APK_DIR="build/app/outputs/flutter-apk"
           echo "Current directory: $(pwd)"
-          echo "OUTPUT_DIR: $OUTPUT_DIR"
+          echo "APK directory: $APK_DIR"
           echo "Generated APK files:"
-          ls -la "$OUTPUT_DIR"/*.apk || echo "No APK files found in $OUTPUT_DIR"
+          ls -la "$APK_DIR"/*.apk || echo "No APK files found in $APK_DIR"
           mkdir -p "${{ github.workspace }}/dist"
           sudo apt install rename -y
-          # 重命名所有带架构后缀的 APK
-          rename 's/app-(.*)-release.apk/flauncher-$1-release.apk/' "$OUTPUT_DIR"/*.apk || true
-          ls -la "$OUTPUT_DIR"/*.apk || echo "No APK files found in $OUTPUT_DIR"
-          if [ -f "$OUTPUT_DIR/app-release.apk" ]; then
-            mv "$OUTPUT_DIR/app-release.apk" "${{ github.workspace }}/dist/flauncher-${{ env.BUILD_DATE }}.apk"
+          rename 's/app-(.*)-release.apk/flauncher-$1-release.apk/' "$APK_DIR"/*.apk || true
+          ls -la "$APK_DIR"/*.apk || echo "No APK files found in $APK_DIR"
+          if [ -f "$APK_DIR/app-release.apk" ]; then
+            mv "$APK_DIR/app-release.apk" "${{ github.workspace }}/dist/flauncher-${{ env.BUILD_DATE }}.apk"
           else
             echo "Warning: app-release.apk not found, skipping move."
           fi
-    
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
