@@ -104,11 +104,20 @@ jobs:
             --build-number $BUILD_NUMBER \
             --build-name=$FULL_VERSION_NUMBER
 
-      - name: Rename and move
+      - name: Find and rename apk
         working-directory: ./flauncher_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/flauncher-${{ env.BUILD_DATE }}.apk"
+          APK_PATH=$(find build -name "*arm64-v8a*release.apk" -type f | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            APK_PATH=$(find build -name "*.apk" -type f | head -n 1)
+          fi
+          if [ -z "$APK_PATH" ]; then
+            echo "No APK found!"
+            exit 1
+          fi
+          echo "Found APK at $APK_PATH"
+          mv "$APK_PATH" "${{ github.workspace }}/dist/flauncher-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
