@@ -104,6 +104,20 @@ jobs:
             --build-number $BUILD_NUMBER \
             --build-name=$FULL_VERSION_NUMBER
 
+      - name: Find and list all apks
+        working-directory: ./flauncher_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          # 查找所有 .apk 文件，将路径存入多行字符串
+          APK_PATHS=$(find build -name "*.apk" -type f)
+          # 打印所有路径（用于日志）
+          echo "Found APK(s):"
+          echo "$APK_PATHS"
+          # 将路径列表存入环境变量，供后续步骤使用
+          echo "APK_PATHS<<EOF" >> $GITHUB_ENV
+          echo "$APK_PATHS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
       - name: Find and rename apk
         working-directory: ./flauncher_source
         run: |
