@@ -57,7 +57,7 @@ jobs:
         uses: subosito/flutter-action@main
         with:
           # flutter-version: '3.24.5'
-          flutter-version: '3.29.0'
+          flutter-version: '3.24.x'
           channel: 'stable'
 
       - name: Accept android licenses
@@ -70,28 +70,6 @@ jobs:
           mkdir -p android/app
           # 实际为p12，非jks，懒得改构建代码了
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
-
-      - name: Patch gradle files for flutter update
-        working-directory: ./flauncher_source
-        run: |
-          set -x
-          SETTINGS_GRADLE="android/settings.gradle"
-          APP_BUILD_GRADLE="android/app/build.gradle"
-          GRADLE_PROPERTIES="android/gradle/wrapper/gradle-wrapper.properties"
-          # 1. 升级 Gradle 包装器到 8.6（兼容 AGP 8.4.0）
-          sed -i 's|distributionUrl=.*gradle-[0-9.]*-all\.zip|distributionUrl=https\://services.gradle.org/distributions/gradle-8.6-all.zip|' "$GRADLE_PROPERTIES"
-          # 2. 升级 settings.gradle 中的 AGP 版本到 8.4.0
-          perl -i -pe 's/(id "com\.android\.application" version ")[0-9.]+(")/${1}8.4.0${2}/' "$SETTINGS_GRADLE"
-          perl -i -pe "s/(id 'com\.android\.application' version ')[0-9.]+(')/\${1}8.4.0\${2}/" "$SETTINGS_GRADLE"
-          # 3. 确保 app/build.gradle 中的 splits.abi 包含 include 指令（防止 ABI 错误）
-          perl -i -0777 -pe 's/splits\s*\{\s*abi\s*\{.*?\}\s*\}/splits {\n        abi {\n            enable gradle.startParameter.taskNames.any { it.contains("assembleRelease") }\n            include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"\n            universalApk true\n        }\n    }/s' "$APP_BUILD_GRADLE"
-          # 4. 验证修改
-          echo "=== Gradle wrapper version ==="
-          grep "distributionUrl" "$GRADLE_PROPERTIES"
-          echo "=== AGP version in settings.gradle ==="
-          grep "com.android.application" "$SETTINGS_GRADLE"
-          echo "=== splits.abi config in app/build.gradle ==="
-          sed -n '/splits\s*{\s*abi\s*{/,/}/p' "$APP_BUILD_GRADLE"
 
       - name: Build with flutter
         working-directory: ./flauncher_source
