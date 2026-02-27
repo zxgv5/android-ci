@@ -75,34 +75,38 @@ jobs:
         working-directory: ./flauncher_source
         run: |
           set -x
-          # 定义文件路径
           APP_BUILD_GRADLE="android/app/build.gradle"
           ROOT_BUILD_GRADLE="android/build.gradle"
           GRADLE_PROPERTIES="android/gradle/wrapper/gradle-wrapper.properties"
-          # 备份文件
-          cp "$APP_BUILD_GRADLE" "$APP_BUILD_GRADLE.bak"
-          cp "$ROOT_BUILD_GRADLE" "$ROOT_BUILD_GRADLE.bak" 2>/dev/null || true
-          cp "$GRADLE_PROPERTIES" "$GRADLE_PROPERTIES.bak"
-          # 1. 升级 Gradle 包装器到 8.11.1（兼容 AGP 8.6.0）
+          # 1. 升级 Gradle 包装器
           sed -i 's|distributionUrl=.*gradle-[0-9.]*-all\.zip|distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-all.zip|' "$GRADLE_PROPERTIES"
           # 2. 在根 build.gradle 中设置 AGP 版本为 8.6.0
-          if grep -q "buildscript" "$ROOT_BUILD_GRADLE"; then
-            # 已存在 buildscript，替换 classpath 版本
+          if grep -q "classpath.*com\.android\.tools\.build:gradle" "$ROOT_BUILD_GRADLE"; then
             perl -i -pe 's/(classpath ["'\'']com\.android\.tools\.build:gradle:)[0-9.]+(["'\''])/${1}8.6.0${2}/' "$ROOT_BUILD_GRADLE"
           else
-            # 不存在，在文件开头插入 buildscript 块
+            # 插入 buildscript 块
             sed -i '1i buildscript {\n    repositories {\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:8.6.0"\n    }\n}\n' "$ROOT_BUILD_GRADLE"
           fi
-          # 3. 替换 app/build.gradle 中的 splits.abi 块，显式指定支持的 ABI
-          perl -i -0777 -pe 's/splits\s*\{\s*abi\s*\{.*?\}\s*\}/splits {\n        abi {\n            enable gradle.startParameter.taskNames.any { it.contains("assembleRelease") }\n            include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"\n            universalApk true\n        }\n    }/s' "$APP_BUILD_GRADLE"
-          # 4. 显示修改结果
+          # 3. 在 app/build.gradle 的 splits.abi 块中插入 include 指令
+          awk '/splits\s*{\s*abi\s*{/,/}/ {
+            if ($0 ~ /enable[^\n]*/) {
+              print $0
+              print "            include \"arm64-v8a\", \"armeabi-v7a\", \"x86\", \"x86_64\""
+            } else {
+              print $0
+            }
+            next
+          } 1' "$APP_BUILD_GRADLE" > "$APP_BUILD_GRADLE.tmp" && mv "$APP_BUILD_GRADLE.tmp" "$APP_BUILD_GRADLE"
+          # 4. 验证修改
           echo "=== Gradle 包装器版本 ==="
           grep "distributionUrl" "$GRADLE_PROPERTIES"
           echo "=== 根 build.gradle 中的 AGP 版本 ==="
           grep "com.android.tools.build:gradle" "$ROOT_BUILD_GRADLE" || echo "未找到"
-          echo "=== app/build.gradle 中的 splits.abi 配置 ==="
+          echo "=== app/build.gradle 中的 splits.abi 配置（修改后）==="
           sed -n '/splits\s*{\s*abi\s*{/,/}/p' "$APP_BUILD_GRADLE"
-       
+          echo "=== 完整的 splits 块周围内容（用于调试）==="
+          grep -A10 -B2 "splits" "$APP_BUILD_GRADLE" || echo "未找到 splits"
+ 
       - name: Build with flutter
         working-directory: ./flauncher_source
         env:
