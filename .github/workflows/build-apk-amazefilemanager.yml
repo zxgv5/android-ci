@@ -1,15 +1,15 @@
 name: build-apk-amazefilemanager
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '17'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,7 +20,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -29,35 +29,40 @@ jobs:
           path: amazefilemanager_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
           java-version: '${{ env.JDK_VERSION }}'
 
+      - name: Clean ndk cache
+        run: |
+          rm -rf $ANDROID_HOME/ndk
+          rm -rf ~/.android/ndk
+ 
       - name: Setup ndk
         # uses: nttld/setup-ndk@afb4c9964b521afb97c864b7d40b11e6911bd410
         uses: nttld/setup-ndk@main
         with:
           ndk-version: r28c
           link-to-sdk: true
-          local-cache: true
-
+          local-cache: false
+ 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-
+ 
       - name: Cache rust dependencies
         uses: actions/cache@main
         with:
@@ -70,14 +75,14 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
+ 
       - name: Setup rust for android
         working-directory: ./amazefilemanager_source
         run: |
           cd file_operations
           chmod +x setup_rust_android.sh
           ./setup_rust_android.sh
-
+ 
       - name: Verify rust setup
         working-directory: ./amazefilemanager_source
         run: |
@@ -91,7 +96,7 @@ jobs:
             echo "cargo/config.toml missing"
             exit 1
           fi
-
+ 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
         with:
@@ -100,13 +105,13 @@ jobs:
           build-scan-publish: true
           build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
           build-scan-terms-of-use-agree: "yes"
-
+ 
       - name: Check spotless formatting
         working-directory: ./amazefilemanager_source
         run: |
           chmod +x ./gradlew
           ./gradlew spotlessCheck --stacktrace
-
+ 
       - name: Write keystore info
         working-directory: ./amazefilemanager_source
         run: |
@@ -118,7 +123,7 @@ jobs:
           echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> signing.properties
           echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
           echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> signing.properties
-
+ 
       - name: Create init script to copy release signing to config
         working-directory: ./amazefilemanager_source
         run: |
@@ -144,7 +149,7 @@ jobs:
               }
           }
           EOF
-
+ 
       - name: Build with gradle
         working-directory: ./amazefilemanager_source
         run: |
@@ -155,14 +160,14 @@ jobs:
           echo 'org.gradle.parallel=true' >> gradle.properties
           # 使用 init 脚本，仅构建 playRelease
           ./gradlew assemblePlayRelease --stacktrace --no-daemon -I init.gradle
-
+ 
       - name: Rename and move
         working-directory: ./amazefilemanager_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           apkPath=$(ls app/build/outputs/apk/play/release/app-play-release.apk)
           mv "$apkPath" "${{ github.workspace }}/dist/amazefilemanager-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
