@@ -75,31 +75,41 @@ jobs:
         working-directory: ./flauncher_source
         run: |
           set -x
-          # 1. 升级 AGP 到 8.6.0（Flutter 3.41.2 最低要求）
-          find . -name "build.gradle" -type f -exec perl -i -pe 's/(classpath\s*["'\'']com\.android\.tools\.build:gradle:)\K[0-9.]+/8.6.0/' {} \;
-          # 2. 升级 Gradle 包装器到 8.11.1（兼容 AGP 8.6.0）
-          if [ -f android/gradle/wrapper/gradle-wrapper.properties ]; then
-            sed -i 's|distributionUrl=.*gradle-[0-9.]*-all\.zip|distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
-          fi
-          # 3. 在 splits.abi 中添加支持的 ABI 列表（防止构建不支持的 ABI）
-          SPLITS_FILE="android/app/build.gradle"
-          if [ -f "$SPLITS_FILE" ]; then
-            # 检查是否已存在 include 行（避免重复插入）
-            if ! grep -q "include.*arm64-v8a" "$SPLITS_FILE"; then
-              # 在 splits.abi 块的 enable 行后插入 include
-              perl -i -pe 'BEGIN{undef $/;} s/(splits\s*\{\s*abi\s*\{.*?enable[^\n]*\n)/$1            include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"\n/s' "$SPLITS_FILE"
+          # 定义目标文件
+          APP_BUILD_GRADLE="android/app/build.gradle"
+          ROOT_BUILD_GRADLE="android/build.gradle"
+          GRADLE_PROPERTIES="android/gradle/wrapper/gradle-wrapper.properties"
+          # 检查关键文件是否存在
+          for f in "$APP_BUILD_GRADLE" "$GRADLE_PROPERTIES"; do
+            if [ ! -f "$f" ]; then
+              echo "❌ 错误：找不到 $f"
+              exit 1
             fi
+          done
+          # 1. 升级 Gradle 包装器到 8.11.1（兼容 AGP 8.6.0）
+          sed -i 's|distributionUrl=.*gradle-[0-9.]*-all\.zip|distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-all.zip|' "$GRADLE_PROPERTIES"
+          # 2. 在 splits.abi 块中添加 include 指令（如果尚未存在）
+          if ! grep -q "include.*arm64-v8a" "$APP_BUILD_GRADLE"; then
+            # 使用 awk 在 enable 行后插入 include
+            awk '/splits\s*{\s*abi\s*{/,/}/ { 
+              if ($0 ~ /enable[^\n]*/) { 
+                print $0; 
+                print "            include \"arm64-v8a\", \"armeabi-v7a\", \"x86\", \"x86_64\"";
+              } else print $0; 
+              next 
+            } 1' "$APP_BUILD_GRADLE" > "$APP_BUILD_GRADLE.tmp" && mv "$APP_BUILD_GRADLE.tmp" "$APP_BUILD_GRADLE"
           fi
-          # 4. 如果存在 Kotlin 版本定义，升级到 1.9.20（可选）
-          find . -name "build.gradle" -type f -exec perl -i -pe 's/(ext\.kotlin_version\s*=\s*["'\''])\K[0-9.]+/1.9.20/' {} \;
+          # 3. 可选：如果 Kotlin 版本存在，升级到 1.9.20
+          if grep -q 'ext.kotlin_version' "$ROOT_BUILD_GRADLE" 2>/dev/null; then
+            sed -i 's/ext.kotlin_version = ["'\'']*[0-9.]*["'\'']*/ext.kotlin_version = "1.9.20"/' "$ROOT_BUILD_GRADLE"
+          fi
+          # 4. 显示修改结果
           echo "Gradle 文件已更新："
-          echo "AGP 版本："
-          grep -r "com.android.tools.build:gradle" --include="*.gradle" . || echo "未找到 AGP"
           echo "Gradle 包装器版本："
-          grep "distributionUrl" android/gradle/wrapper/gradle-wrapper.properties
+          grep "distributionUrl" "$GRADLE_PROPERTIES"
           echo "ABI splits 配置："
-          grep -A10 "splits" "$SPLITS_FILE" || echo "未找到 splits 配置"
- 
+          sed -n '/splits\s*{\s*abi\s*{/,/}/p' "$APP_BUILD_GRADLE"
+
       - name: Build with flutter
         working-directory: ./flauncher_source
         env:
