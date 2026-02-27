@@ -24,7 +24,7 @@ jobs:
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
-          repository: osrosal/flauncher
+          repository: cyanonoob/flauncher
           ref: master
           path: flauncher_source
           fetch-depth: 0
@@ -57,7 +57,7 @@ jobs:
         uses: subosito/flutter-action@main
         with:
           # flutter-version: '3.24.5'
-          flutter-version: '3.24.x'
+          flutter-version: '3.35.1'
           channel: 'stable'
 
       - name: Accept android licenses
