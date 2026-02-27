@@ -56,8 +56,7 @@ jobs:
       - name: Install flutter
         uses: subosito/flutter-action@main
         with:
-          # flutter-version: '3.24.5'
-          flutter-version: '3.35.1'
+          flutter-version: '3.38.1'
           channel: 'stable'
 
       - name: Accept android licenses
