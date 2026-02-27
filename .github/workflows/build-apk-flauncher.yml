@@ -71,45 +71,40 @@ jobs:
           # 实际为p12，非jks，懒得改构建代码了
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
 
-      - name: Patch gradle files for latest flutter version
+      - name: Patch gradle files for latest flutter
         working-directory: ./flauncher_source
         run: |
           set -x
+          SETTINGS_GRADLE="android/settings.gradle"
           APP_BUILD_GRADLE="android/app/build.gradle"
-          ROOT_BUILD_GRADLE="android/build.gradle"
           GRADLE_PROPERTIES="android/gradle/wrapper/gradle-wrapper.properties"
           # 1. 升级 Gradle 包装器
           sed -i 's|distributionUrl=.*gradle-[0-9.]*-all\.zip|distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-all.zip|' "$GRADLE_PROPERTIES"
-          # 2. 确保根 build.gradle 中的 AGP 版本为 8.6.0（使用更精确的匹配）
-          if grep -q "classpath.*com\.android\.tools\.build:gradle" "$ROOT_BUILD_GRADLE"; then
-            perl -i -pe 's/(classpath ["'\'']com\.android\.tools\.build:gradle:)[0-9.]+(["'\''])/${1}8.6.0${2}/' "$ROOT_BUILD_GRADLE"
+          # 2. 在 settings.gradle 中升级 AGP 版本到 8.6.0（处理 plugins 块）
+          if [ -f "$SETTINGS_GRADLE" ]; then
+            echo "正在修改 $SETTINGS_GRADLE ..."
+            # 备份
+            cp "$SETTINGS_GRADLE" "$SETTINGS_GRADLE.bak"
+            # 匹配 plugins 块中的 com.android.application 版本号并替换
+            perl -i -pe 's/(id "com\.android\.application" version ")[0-9.]+(")/${1}8.6.0${2}/' "$SETTINGS_GRADLE"
+            # 如果没有匹配到，可能是在 plugins 块中用单引号或不同格式，尝试更宽松的匹配
+            perl -i -pe 's/(id ['\''"]com\.android\.application['\''"] version ['\''"])[0-9.]+(['\'"])/${1}8.6.0${2}/' "$SETTINGS_GRADLE"
           else
-            # 若不存在，插入 buildscript 块
-            sed -i '1i buildscript {\n    repositories {\n        google()\n        mavenCentral()\n    }\n    dependencies {\n        classpath "com.android.tools.build:gradle:8.6.0"\n    }\n}\n' "$ROOT_BUILD_GRADLE"
+            echo "警告：未找到 $SETTINGS_GRADLE"
           fi
-          # 3. 强制在 app/build.gradle 的 splits.abi 块中插入 include 指令
-          echo ">>> 正在修改 $APP_BUILD_GRADLE ..."
-          # 备份当前文件
-          cp "$APP_BUILD_GRADLE" "$APP_BUILD_GRADLE.tmp.bak"
-          # 使用 sed 在 enable 行后插入 include（无论缩进如何，匹配包含 "enable" 的行）
-          sed -i '/enable.*assembleRelease/ a \            include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"' "$APP_BUILD_GRADLE"
-          # 检查插入是否成功
-          if grep -q "include.*arm64-v8a" "$APP_BUILD_GRADLE"; then
-            echo "✅ 成功插入 include 指令"
-          else
-            echo "❌ 插入失败，尝试备用方案：直接替换整个 splits 块"
-            # 备用方案：如果 sed 插入失败，用 perl 直接替换整个 splits 块
-            perl -i -0777 -pe 's/splits\s*\{\s*abi\s*\{.*?\}\s*\}/splits {\n        abi {\n            enable gradle.startParameter.taskNames.any { it.contains("assembleRelease") }\n            include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"\n            universalApk true\n        }\n    }/s' "$APP_BUILD_GRADLE"
-          fi
-          # 4. 最终验证并输出修改后的配置
-          echo "=== 最终修改结果 ==="
+          # 3. 在 app/build.gradle 中替换整个 splits.abi 块（确保 include 生效）
+          echo "正在修改 $APP_BUILD_GRADLE ..."
+          cp "$APP_BUILD_GRADLE" "$APP_BUILD_GRADLE.bak"
+          perl -i -0777 -pe 's/splits\s*\{\s*abi\s*\{.*?\}\s*\}/splits {\n        abi {\n            enable gradle.startParameter.taskNames.any { it.contains("assembleRelease") }\n            include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"\n            universalApk true\n        }\n    }/s' "$APP_BUILD_GRADLE"
+          # 4. 验证修改结果
+          echo "=== 修改后配置 ==="
           echo "--- Gradle 包装器版本 ---"
           grep "distributionUrl" "$GRADLE_PROPERTIES"
-          echo "--- 根 build.gradle 中的 AGP 版本 ---"
-          grep "com.android.tools.build:gradle" "$ROOT_BUILD_GRADLE"
+          echo "--- settings.gradle 中的 AGP 版本 ---"
+          grep "com.android.application" "$SETTINGS_GRADLE" || echo "未找到"
           echo "--- app/build.gradle 中的 splits.abi 配置 ---"
           sed -n '/splits\s*{\s*abi\s*{/,/}/p' "$APP_BUILD_GRADLE"
-
+ 
       - name: Build with flutter
         working-directory: ./flauncher_source
         env:
