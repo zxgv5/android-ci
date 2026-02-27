@@ -74,17 +74,25 @@ jobs:
       - name: Patch gradle files for latest flutter version
         working-directory: ./flauncher_source
         run: |
-          # 升级 Android Gradle Plugin 版本到 8.1.0
+          set -x  # 启用调试输出
+          if [ ! -f android/build.gradle ]; then
+            echo "错误：找不到 android/build.gradle"
+            exit 1
+          fi
+          if [ ! -f android/gradle/wrapper/gradle-wrapper.properties ]; then
+            echo "错误：找不到 android/gradle/wrapper/gradle-wrapper.properties"
+            exit 1
+          fi
           sed -i 's/classpath ["'\'']com.android.tools.build:gradle:[0-9.]*["'\'']/classpath "com.android.tools.build:gradle:8.1.0"/' android/build.gradle
-          # 升级 Gradle 版本到 8.10.2
           sed -i 's|distributionUrl=.*gradle-[0-9.]*-all\.zip|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' android/gradle/wrapper/gradle-wrapper.properties
-          # 如果存在 Kotlin 版本定义，升级到 1.9.20
           if grep -q 'ext.kotlin_version' android/build.gradle; then
             sed -i 's/ext.kotlin_version = ["'\'']*[0-9.]*["'\'']*/ext.kotlin_version = "1.9.20"/' android/build.gradle
           fi
-          echo "Patched Gradle files:"
-          cat android/build.gradle | grep "com.android.tools.build:gradle"
-          cat android/gradle/wrapper/gradle-wrapper.properties | grep "distributionUrl"
+          echo "Gradle 文件已更新："
+          echo "AGP 版本："
+          grep "com.android.tools.build:gradle" android/build.gradle || echo "未找到 AGP 配置"
+          echo "Gradle 包装器版本："
+          grep "distributionUrl" android/gradle/wrapper/gradle-wrapper.properties || echo "未找到 distributionUrl"          cat android/gradle/wrapper/gradle-wrapper.properties | grep "distributionUrl"
 
       - name: Build with flutter
         working-directory: ./flauncher_source
