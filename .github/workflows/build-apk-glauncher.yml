@@ -1,0 +1,119 @@
+name: build-apk-glauncher
+ 
+on:
+  workflow_dispatch:
+  workflow_call:
+ 
+env:
+  JDK_VERSION: '21'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: cyanonoob/flauncher
+          ref: master
+          path: glauncher_source
+          fetch-depth: 0
+          submodules: recursive
+ 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Set version variables
+        id: version
+        working-directory: ./glauncher_source
+        run: |
+          cat version_numbers >> $GITHUB_OUTPUT
+          export $(cat version_numbers | xargs)
+          echo "FULL_VERSION_NUMBER=$(date '+%Y.%m').$(printf '%03d' $MONTH_VERSION_NUMBER)" >> $GITHUB_OUTPUT
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          distribution: 'temurin'
+          java-version: '${{ env.JDK_VERSION }}'
+ 
+      - name: Install flutter
+        uses: subosito/flutter-action@main
+        with:
+          flutter-version: '3.38.x'
+          channel: 'stable'
+ 
+      - name: Accept android licenses
+        working-directory: ./glauncher_source
+        run: yes | flutter doctor --android-licenses || true
+ 
+      - name: Write keystore info
+        working-directory: ./glauncher_source
+        run: |
+          mkdir -p android/app
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.keystore
+ 
+      # 创建签名用的 .env 文件（位于 android/ 目录，供 build.gradle 使用）
+      - name: Create .env file for gradle signing
+        working-directory: ./glauncher_source/android
+        run: |
+          cat > .env << EOF
+          FLAUNCHER_KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+          FLAUNCHER_SIGNING_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          FLAUNCHER_SIGNING_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          EOF
+ 
+      # 创建 Flutter 所需的 .env 文件（位于项目根目录，供 flutter_dotenv 使用）
+      # 如果仓库中有 .env.example 则复制，否则创建空文件
+      - name: Create .env file for flutter
+        working-directory: ./glauncher_source
+        run: |
+          if [ -f .env.example ]; then
+            cp .env.example .env
+          else
+            touch .env
+          fi
+ 
+      - name: Build with flutter
+        working-directory: ./glauncher_source
+        env:
+          BUILD_NUMBER: ${{ steps.version.outputs.BUILD_NUMBER }}
+          FULL_VERSION_NUMBER: ${{ steps.version.outputs.FULL_VERSION_NUMBER }}
+        run: |
+          echo 'org.gradle.caching=true' >> android/gradle.properties
+          echo 'org.gradle.parallel=true' >> android/gradle.properties
+          flutter --no-color build apk --release \
+            --flavor production \
+            --target-platform android-arm64 \
+            --build-number $BUILD_NUMBER \
+            --build-name=$FULL_VERSION_NUMBER
+ 
+      - name: Rename and move
+        working-directory: ./glauncher_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./build/app/outputs/apk/production/release/app-production-release.apk" "${{ github.workspace }}/dist/glauncher-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./glauncher_source/android/app/upload-keystore.keystore"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/glauncher-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-glauncher"
