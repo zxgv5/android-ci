@@ -73,7 +73,8 @@ jobs:
         working-directory: ./flauncher_source
         run: |
           mkdir -p android/app
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.p12
+          # 实际为p12，非jks，懒得改构建代码了
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
 
       - name: Build with flutter
         working-directory: ./flauncher_source
@@ -105,7 +106,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./flauncher_source/android/app/keystore.p12"
+          P12_KEYSTORE_PATH: "./flauncher_source/android/app/upload-keystore.jks"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/flauncher-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-flauncher"
