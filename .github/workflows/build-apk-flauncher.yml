@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: cyanonoob/flauncher
-          ref: master                # 若默认分支为 main，可改为 main 或留空使用默认分支
+          ref: master
           path: flauncher_source
           fetch-depth: 0
           submodules: recursive
@@ -56,7 +56,7 @@ jobs:
       - name: Install flutter
         uses: subosito/flutter-action@main
         with:
-          flutter-version: '3.38.x'   # 与 pubspec.yaml 中指定的 3.38.1 保持一致
+          flutter-version: '3.38.x'
           channel: 'stable'
 
       - name: Accept android licenses
@@ -67,17 +67,28 @@ jobs:
         working-directory: ./flauncher_source
         run: |
           mkdir -p android/app
-          # 解码密钥文件并命名为 upload-keystore.keystore（与 build.gradle 中的文件名一致）
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.keystore
 
-      - name: Create .env file with signing credentials
+      # 创建签名用的 .env 文件（位于 android/ 目录，供 build.gradle 使用）
+      - name: Create .env file for gradle signing
         working-directory: ./flauncher_source/android
         run: |
-          cat > .env <<EOF
+          cat > .env << EOF
           FLAUNCHER_KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
           FLAUNCHER_SIGNING_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
           FLAUNCHER_SIGNING_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
           EOF
+
+      # 创建 Flutter 所需的 .env 文件（位于项目根目录，供 flutter_dotenv 使用）
+      # 如果仓库中有 .env.example 则复制，否则创建空文件
+      - name: Create .env file for flutter
+        working-directory: ./flauncher_source
+        run: |
+          if [ -f .env.example ]; then
+            cp .env.example .env
+          else
+            touch .env
+          fi
 
       - name: Build with flutter
         working-directory: ./flauncher_source
@@ -102,7 +113,6 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 注意：密钥文件路径已更新为 .keystore 以匹配仓库要求
           P12_KEYSTORE_PATH: "./flauncher_source/android/app/upload-keystore.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/flauncher-${{ env.BUILD_DATE }}.apk"
