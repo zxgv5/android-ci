@@ -56,6 +56,7 @@ jobs:
           git clone https://github.com/zxgv5/adb_foundation.git /tmp/adb_foundation
           sed -i 's/^name: adb_foundation/name: adbutil/' /tmp/adb_foundation/pubspec.yaml
           sed -i 's/flutter_pty: \^0\.4\.1/flutter_pty: ^0.3.1/' /tmp/adb_foundation/pubspec.yaml
+          git clone https://github.com/zxgv5/dart_adb.git /tmp/dart_adb
           git clone https://github.com/zxgv5/signale.git /tmp/signale
           echo "" >> pubspec.yaml
           echo "dependency_overrides:" >> pubspec.yaml
@@ -63,6 +64,8 @@ jobs:
           echo "    path: /tmp/adb_foundation" >> pubspec.yaml
           echo "  signale:" >> pubspec.yaml
           echo "    path: /tmp/signale" >> pubspec.yaml
+          echo "  adb_dart:" >> pubspec.yaml
+          echo "    path: /tmp/dart_adb/adb_dart" >> pubspec.yaml
 
       - name: Write keystore
         working-directory: ./adb_kit_source
