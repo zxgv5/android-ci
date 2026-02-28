@@ -1,0 +1,82 @@
+name: build-apk-adb-kit
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '21'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: nightmare-space/adb_kit
+          ref: main
+          path: adb_kit_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          distribution: 'temurin'
+          java-version: '${{ env.JDK_VERSION }}'
+
+      - name: Setup android sdk
+        uses: android-actions/setup-android@main
+
+      - name: Setup flutter
+        uses: subosito/flutter-action@main
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - name: Write keystore
+        working-directory: ./adb_kit_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > key.p12
+          cat > android/key.properties << EOF
+          storeFile=../key.p12
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
+
+      - name: Build apk 
+        working-directory: ./adb_kit_source
+        run: |
+          flutter pub get
+          flutter build apk --release --split-per-abi --target-platform android-arm64
+
+      - name: Rename and move apk
+        working-directory: ./adb_kit_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          apkPath=$(ls build/app/outputs/flutter-apk/app-arm64-v8a-release.apk)
+          mv "$apkPath" "${{ github.workspace }}/dist/adb-kit-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./adb_kit_source/key.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/adb-kit-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-adb-kit"
