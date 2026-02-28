@@ -49,24 +49,20 @@ jobs:
           flutter-version: '3.x'
           channel: 'stable'
 
-      # 核心修改：移除 device_info，将 adbutil 指向本地修改后的 adb_foundation
-      - name: Patch dependencies (remove device_info, override adbutil with local fork)
+      # 关键修改：移除 device_info，用本地 fork 覆盖 adbutil 和 signale
+      - name: Patch dependencies
         working-directory: ./adb_kit_source
         run: |
-          # 1. 删除 device_info 依赖块（确认项目中未使用）
           sed -i '/^  device_info:/,/^[^ ]/d' pubspec.yaml
-
-          # 2. 克隆您 fork 的 adb_foundation 仓库
           git clone https://github.com/zxgv5/adb_foundation.git /tmp/adb_foundation
-
-          # 3. 将其 pubspec.yaml 中的包名改为 adbutil（原项目期望的名称）
           sed -i 's/^name: adb_foundation/name: adbutil/' /tmp/adb_foundation/pubspec.yaml
-
-          # 4. 在项目 pubspec.yaml 末尾添加 dependency_overrides，强制使用本地修改后的包
+          git clone https://github.com/zxgv5/signale.git /tmp/signale
           echo "" >> pubspec.yaml
           echo "dependency_overrides:" >> pubspec.yaml
           echo "  adbutil:" >> pubspec.yaml
           echo "    path: /tmp/adb_foundation" >> pubspec.yaml
+          echo "  signale:" >> pubspec.yaml
+          echo "    path: /tmp/signale" >> pubspec.yaml
 
       - name: Write keystore
         working-directory: ./adb_kit_source
