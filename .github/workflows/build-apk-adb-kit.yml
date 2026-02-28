@@ -49,13 +49,13 @@ jobs:
           flutter-version: '3.x'
           channel: 'stable'
 
-      # 关键修改：移除 device_info，用本地 fork 覆盖 adbutil 和 signale
       - name: Patch dependencies
         working-directory: ./adb_kit_source
         run: |
           sed -i '/^  device_info:/,/^[^ ]/d' pubspec.yaml
           git clone https://github.com/zxgv5/adb_foundation.git /tmp/adb_foundation
           sed -i 's/^name: adb_foundation/name: adbutil/' /tmp/adb_foundation/pubspec.yaml
+          sed -i 's/flutter_pty: \^0\.4\.1/flutter_pty: ^0.3.1/' /tmp/adb_foundation/pubspec.yaml
           git clone https://github.com/zxgv5/signale.git /tmp/signale
           echo "" >> pubspec.yaml
           echo "dependency_overrides:" >> pubspec.yaml
