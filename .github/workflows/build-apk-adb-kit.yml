@@ -49,16 +49,25 @@ jobs:
           flutter-version: '3.x'
           channel: 'stable'
 
-      - name: Patch dependencies, remove device_info, replace adbutil
+      # 核心修改：移除 device_info，将 adbutil 指向本地修改后的 adb_foundation
+      - name: Patch dependencies (remove device_info, override adbutil with local fork)
         working-directory: ./adb_kit_source
         run: |
-          # 1. 将 adbutil 的 git 地址替换为您的 fork
-          sed -i 's|https://github.com/nightmare-space/adbutil|https://github.com/zxgv5/adb_foundation|' pubspec.yaml
-          # 2. 移除 device_info 整个依赖块（从包含 "device_info:" 的行开始，到下一个非缩进行结束）
+          # 1. 删除 device_info 依赖块（确认项目中未使用）
           sed -i '/^  device_info:/,/^[^ ]/d' pubspec.yaml
-          # 3. 可选：检查修改后的 pubspec.yaml（调试时可取消注释）
-          # cat pubspec.yaml          sed -i 's|nightmare-space/adbutil|zxgv5/adb_foundation|' pubspec.lock
- 
+
+          # 2. 克隆您 fork 的 adb_foundation 仓库
+          git clone https://github.com/zxgv5/adb_foundation.git /tmp/adb_foundation
+
+          # 3. 将其 pubspec.yaml 中的包名改为 adbutil（原项目期望的名称）
+          sed -i 's/^name: adb_foundation/name: adbutil/' /tmp/adb_foundation/pubspec.yaml
+
+          # 4. 在项目 pubspec.yaml 末尾添加 dependency_overrides，强制使用本地修改后的包
+          echo "" >> pubspec.yaml
+          echo "dependency_overrides:" >> pubspec.yaml
+          echo "  adbutil:" >> pubspec.yaml
+          echo "    path: /tmp/adb_foundation" >> pubspec.yaml
+
       - name: Write keystore
         working-directory: ./adb_kit_source
         run: |
@@ -70,7 +79,7 @@ jobs:
           keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
 
-      - name: Build apk 
+      - name: Build apk
         working-directory: ./adb_kit_source
         run: |
           flutter pub get
