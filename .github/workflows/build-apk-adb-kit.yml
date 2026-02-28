@@ -49,15 +49,15 @@ jobs:
           flutter-version: '3.x'
           channel: 'stable'
 
-      - name: Replace git dependencies with forks
+      - name: Patch dependencies, remove device_info, replace adbutil
         working-directory: ./adb_kit_source
         run: |
-          # 替换 device_info（使用您已 fork 的仓库）
-          sed -i 's|https://github.com/nightmare-space/device_info.git|https://github.com/zxgv5/flutter_android_device_info.git|' pubspec.yaml
-          # 替换 adbutil 为新仓库 adb_foundation（请确保您已 fork）
+          # 1. 将 adbutil 的 git 地址替换为您的 fork
           sed -i 's|https://github.com/nightmare-space/adbutil|https://github.com/zxgv5/adb_foundation|' pubspec.yaml
-          # 可选：如果 pubspec.lock 中仍锁定旧地址，可一并修改（但 pub get 会自动更新）
-          sed -i 's|nightmare-space/adbutil|zxgv5/adb_foundation|' pubspec.lock
+          # 2. 移除 device_info 整个依赖块（从包含 "device_info:" 的行开始，到下一个非缩进行结束）
+          sed -i '/^  device_info:/,/^[^ ]/d' pubspec.yaml
+          # 3. 可选：检查修改后的 pubspec.yaml（调试时可取消注释）
+          # cat pubspec.yaml          sed -i 's|nightmare-space/adbutil|zxgv5/adb_foundation|' pubspec.lock
  
       - name: Write keystore
         working-directory: ./adb_kit_source
