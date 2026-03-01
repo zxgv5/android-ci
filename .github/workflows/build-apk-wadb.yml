@@ -5,7 +5,7 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '17'                         # 升级到 JDK 17 以兼容新版 cmdline-tools
+  JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '31'
   ANDROID_BUILD_TOOLS: '31.0.0'
@@ -59,26 +59,41 @@ jobs:
         uses: gradle/actions/setup-gradle@main
         with:
           dependency-graph: generate-and-submit
-          build-scan-publish: true
-          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
-          build-scan-terms-of-use-agree: "yes"
+          build-scan-publish: false  # 禁用 build scan 以避免认证错误
 
       - name: Build with gradle
         working-directory: ./wadb_source
         run: |
+          # 接受 Android SDK 许可证
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          # 确保 build.gradle 中的仓库配置正确
-          # 方案 A: 尝试将 mavenCentral 放在最前面（如果 repo.rikka.dev 不可用）
-          # 以下命令将 'mavenCentral()' 移到自定义 Rikka 仓库之前（简化示例，可能需要更精确的 awk 处理）
-          # awk '/repositories {/,/}/ { if (!printed) { gsub(/mavenCentral\(\)/, "mavenCentral()\n        maven { url \"https://repo.rikka.dev\" }"); printed=1 } print }' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
-          # 方案 B: 如果 repo.rikka.dev 完全失效，直接注释掉它，仅保留标准仓库
-          sed -i '/repo.rikka.dev/d' build.gradle
+
+          # 探测可用的 Rikka 仓库地址
+          rikka_repo=""
+          for repo in "https://repo.rikka.dev" "https://maven.rikka.dev" "https://s01.oss.sonatype.org/content/repositories/rikka"; do
+            echo "Testing $repo ..."
+            if curl --output /dev/null --silent --head --fail "$repo"; then
+              rikka_repo="$repo"
+              echo "Found working Rikka repo: $rikka_repo"
+              break
+            fi
+          done
+
+          if [ -z "$rikka_repo" ]; then
+            echo "No working Rikka repository found, falling back to mavenCentral only."
+          else
+            # 在 allprojects.repositories 中添加找到的仓库
+            awk -v repo="$rikka_repo" '/allprojects {/,/}/ { if ($0 ~ /repositories {/) { print; print "        maven { url \"" repo "\" }"; next } }1' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
+            echo "Added Rikka repository: $rikka_repo"
+          fi
+
           # 仅构建 arm64-v8a 架构
           sed -i "s/abiFilters .*/abiFilters 'arm64-v8a'/" app/build.gradle
+
           # 优化 Gradle 配置
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
           chmod +x ./gradlew
+
           # 执行构建
           ./gradlew app:assembleRelease --stacktrace
 
