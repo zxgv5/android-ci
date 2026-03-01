@@ -89,12 +89,7 @@ jobs:
         working-directory: ./wadb_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          apk_path=$(find app/build/outputs/apk -path "*/release/*.apk" | head -n 1)
-          if [ -z "$apk_path" ]; then
-            echo "No apk found"
-            exit 1
-          fi
-          mv "$apk_path" "${{ github.workspace }}/dist/wadb-${{ env.BUILD_DATE }}.apk"
+          mv "./app/build/outputs/apk/release/"*release*.apk "${{ github.workspace }}/dist/wadb-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
