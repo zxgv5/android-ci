@@ -49,7 +49,8 @@ jobs:
       - name: Write keystore info
         working-directory: ./wadb_source
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./app/keystore.p12
+          mkdir -p app
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
           echo "KEYSTORE_FILE=./keystore.p12" >> signing.properties
           echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> signing.properties
           echo "KEYSTORE_ALIAS=${{ secrets.KEY_ALIAS }}" >> signing.properties
@@ -65,6 +66,8 @@ jobs:
         working-directory: ./wadb_source
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          # 创建 local.properties 并设置 debug.dontRestartAdbd=false，避免 BuildConfig 错误
+          echo "debug.dontRestartAdbd=false" > local.properties
           # 升级 material-preference 到 2.0.0（因为 1.1.0 不存在）
           echo "Upgrading dev.rikka.rikkax.material:material-preference to 2.0.0..."
           sed -i 's/dev\.rikka\.rikkax\.material:material-preference:1\.1\.0/dev.rikka.rikkax.material:material-preference:2.0.0/' app/build.gradle
