@@ -23,15 +23,10 @@ jobs:
           rm -rf .gradle
 
       - name: Checkout source repo
-        uses: actions/checkout@main
-        with:
-          repository: https://gitlab.com/Atharok/BtRemote.git
-          ref: main
-          path: btremote_source
-          fetch-depth: 0
-          submodules: recursive
-          token: ''
-          persist-credentials: false # 阻止使用任何缓存的凭据
+        run: |
+          git clone --branch main https://gitlab.com/Atharok/BtRemote.git btremote_source
+          cd btremote_source
+          git submodule update --init --recursive
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
