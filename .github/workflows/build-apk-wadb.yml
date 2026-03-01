@@ -66,20 +66,19 @@ jobs:
       - name: Build with gradle
         working-directory: ./wadb_source
         run: |
-          # 接受 Android SDK 许可证（JDK 17 后可正常运行）
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-
-          # 添加正确的 Rikka Maven 仓库（原 repo.rikka.dev 已失效）
-          awk '/allprojects {/,/}/ { if ($0 ~ /repositories {/) { print; print "        maven { url \"https://maven.rikka.dev\" }"; next } }1' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
-
+          # 确保 build.gradle 中的仓库配置正确
+          # 方案 A: 尝试将 mavenCentral 放在最前面（如果 repo.rikka.dev 不可用）
+          # 以下命令将 'mavenCentral()' 移到自定义 Rikka 仓库之前（简化示例，可能需要更精确的 awk 处理）
+          # awk '/repositories {/,/}/ { if (!printed) { gsub(/mavenCentral\(\)/, "mavenCentral()\n        maven { url \"https://repo.rikka.dev\" }"); printed=1 } print }' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
+          # 方案 B: 如果 repo.rikka.dev 完全失效，直接注释掉它，仅保留标准仓库
+          sed -i '/repo.rikka.dev/d' build.gradle
           # 仅构建 arm64-v8a 架构
           sed -i "s/abiFilters .*/abiFilters 'arm64-v8a'/" app/build.gradle
-
           # 优化 Gradle 配置
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
           chmod +x ./gradlew
-
           # 执行构建
           ./gradlew app:assembleRelease --stacktrace
 
