@@ -73,6 +73,12 @@ jobs:
           chmod +x ./gradlew
           ./gradlew app:assembleGplayRelease -Pandroid.abis=arm64-v8a
 
+      - name: List generated apk files
+        working-directory: ./btremote_source
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -name "*.apk" | sort
+ 
       - name: Rename and move
         working-directory: ./btremote_source
         run: |
