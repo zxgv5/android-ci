@@ -66,25 +66,34 @@ jobs:
       - name: Build with gradle
         working-directory: ./wadb_source
         run: |
+          # 接受 Android SDK 许可证（忽略失败，因为后续 Gradle 会处理）
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          # Only build arm64-v8a
+
+          # 添加 Rikka Maven 仓库以解决依赖缺失
+          awk '/allprojects {/,/}/ { if ($0 ~ /repositories {/) { print; print "        maven { url \"https://repo.rikka.dev\" }"; next } }1' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
+
+          # 仅构建 arm64-v8a 架构
           sed -i "s/abiFilters .*/abiFilters 'arm64-v8a'/" app/build.gradle
+
+          # 优化 Gradle 配置
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
           chmod +x ./gradlew
+
+          # 执行构建
           ./gradlew app:assembleRelease --stacktrace
 
       - name: List generated apk files
-        working-directory: ./btremote_source
+        working-directory: ./wadb_source
         run: |
           echo "Listing all apk files generated:"
-          find */release -name "*.apk" | sort
+          find app/build/outputs/apk -name "*.apk" | sort
 
       - name: Rename and move
         working-directory: ./wadb_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          apk_path=$(find . -path "*/release/*.apk" | head -n 1)
+          apk_path=$(find app/build/outputs/apk -path "*/release/*.apk" | head -n 1)
           if [ -z "$apk_path" ]; then
             echo "No apk found"
             exit 1
