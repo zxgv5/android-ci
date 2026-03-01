@@ -2,7 +2,20 @@ name: build-apk-btremote
 
 on:
   workflow_dispatch:
-  workflow_call:
+    inputs:
+      branch_name:
+        description: 'Branch to build from'
+        required: false
+        default: 'main'
+        type: string
+      release_type:
+        description: 'Release type: play (Google Play) or fdroid (F-Droid)'
+        required: false
+        default: 'fdroid'
+        type: choice
+        options:
+          - play
+          - fdroid
 
 env:
   JDK_VERSION: '21'
@@ -24,7 +37,7 @@ jobs:
 
       - name: Checkout source repo
         run: |
-          git clone --branch main https://gitlab.com/Atharok/BtRemote.git btremote_source
+          git clone --branch ${{ github.event.inputs.branch_name }} https://gitlab.com/Atharok/BtRemote.git btremote_source
           cd btremote_source
           git submodule update --init --recursive
 
@@ -75,8 +88,11 @@ jobs:
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
           chmod +x ./gradlew
-          # 同时构建 gplayRelease 和 defaultRelease 两种风味，并限制为 arm64-v8a 架构
-          ./gradlew app:assembleGplayRelease app:assembleDefaultRelease -Pandroid.abis=arm64-v8a
+          if [ "${{ github.event.inputs.release_type }}" == "play" ]; then
+            ./gradlew app:assembleGplayRelease -Pandroid.abis=arm64-v8a
+          else
+            ./gradlew app:assembleDefaultRelease -Pandroid.abis=arm64-v8a
+          fi
 
       - name: List generated apk files
         working-directory: ./btremote_source
@@ -88,7 +104,11 @@ jobs:
         working-directory: ./btremote_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/default/release/app-default-release.apk" "${{ github.workspace }}/dist/btremote-${{ env.BUILD_DATE }}.apk"
+          if [ "${{ github.event.inputs.release_type }}" == "play" ]; then
+            mv "./app/build/outputs/apk/gplay/release/app-gplay-release.apk" "${{ github.workspace }}/dist/btremote-${{ env.BUILD_DATE }}.apk"
+          else
+            mv "./app/build/outputs/apk/default/release/app-default-release.apk" "${{ github.workspace }}/dist/btremote-${{ env.BUILD_DATE }}.apk"
+          fi
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
