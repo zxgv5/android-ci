@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       branch_name:
-        description: 'Branch to build from'
+        description: 'branch'
         required: false
         default: 'main'
         type: string
       release_type:
-        description: 'Release type: play (Google Play) or fdroid (F-Droid)'
+        description: 'build type'
         required: false
-        default: 'fdroid'
+        default: 'play'
         type: choice
         options:
           - play
