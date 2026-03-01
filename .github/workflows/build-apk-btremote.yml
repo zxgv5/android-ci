@@ -46,13 +46,18 @@ jobs:
       - name: Write keystore info
         working-directory: ./btremote_source
         run: |
-          # 将 Base64 编码的密钥库解码为文件
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/btremote_source/keystore.p12
-          # 设置环境变量供 gradle 构建使用
           echo "ANDROID_KEY_STORE_FILE=${{ github.workspace }}/btremote_source/keystore.p12" >> $GITHUB_ENV
           echo "ANDROID_KEY_STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
           echo "ANDROID_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
           echo "ANDROID_KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Add signing config to release build type
+        working-directory: ./btremote_source
+        run: |
+          sed -i '/release {/a \            signingConfig = signingConfigs.getByName("release")' app/build.gradle.kts
+          echo "Updated app/build.gradle.kts:"
+          cat app/build.gradle.kts | grep -A5 "release {"
 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
@@ -61,12 +66,11 @@ jobs:
           build-scan-publish: true
           build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
           build-scan-terms-of-use-agree: "yes"
- 
+
       - name: Build with gradle
         working-directory: ./btremote_source
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          # 确保 gradle.properties 末尾有换行，防止拼接错误
           echo "" >> gradle.properties
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
@@ -78,12 +82,11 @@ jobs:
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -name "*.apk" | sort
- 
+
       - name: Rename and move
         working-directory: ./btremote_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          # gplay release 的 APK 输出路径
           apkPath=$(ls app/build/outputs/apk/gplay/release/app-gplay-release.apk)
           mv "$apkPath" "${{ github.workspace }}/dist/btremote-${{ env.BUILD_DATE }}.apk"
 
