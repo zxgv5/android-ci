@@ -59,42 +59,21 @@ jobs:
         uses: gradle/actions/setup-gradle@main
         with:
           dependency-graph: generate-and-submit
-          build-scan-publish: false  # 禁用 build scan 以避免认证错误
+          build-scan-publish: false
 
       - name: Build with gradle
         working-directory: ./wadb_source
         run: |
-          # 接受 Android SDK 许可证
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-
-          # 探测可用的 Rikka 仓库地址
-          rikka_repo=""
-          for repo in "https://repo.rikka.dev" "https://maven.rikka.dev" "https://s01.oss.sonatype.org/content/repositories/rikka"; do
-            echo "Testing $repo ..."
-            if curl --output /dev/null --silent --head --fail "$repo"; then
-              rikka_repo="$repo"
-              echo "Found working Rikka repo: $rikka_repo"
-              break
-            fi
-          done
-
-          if [ -z "$rikka_repo" ]; then
-            echo "No working Rikka repository found, falling back to mavenCentral only."
-          else
-            # 在 allprojects.repositories 中添加找到的仓库
-            awk -v repo="$rikka_repo" '/allprojects {/,/}/ { if ($0 ~ /repositories {/) { print; print "        maven { url \"" repo "\" }"; next } }1' build.gradle > build.gradle.tmp && mv build.gradle.tmp build.gradle
-            echo "Added Rikka repository: $rikka_repo"
-          fi
-
+          # 升级 material-preference 到 2.0.0（因为 1.1.0 不存在）
+          echo "Upgrading dev.rikka.rikkax.material:material-preference to 2.0.0..."
+          sed -i 's/dev\.rikka\.rikkax\.material:material-preference:1\.1\.0/dev.rikka.rikkax.material:material-preference:2.0.0/' app/build.gradle
           # 仅构建 arm64-v8a 架构
           sed -i "s/abiFilters .*/abiFilters 'arm64-v8a'/" app/build.gradle
-
           # 优化 Gradle 配置
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
           chmod +x ./gradlew
-
-          # 执行构建
           ./gradlew app:assembleRelease --stacktrace
 
       - name: List generated apk files
@@ -117,7 +96,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "${{ github.workspace }}/wadb_source/keystore.p12"
+          P12_KEYSTORE_PATH: "./wadb_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "${{ github.workspace }}/dist/wadb-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./dist/wadb-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-wadb"
