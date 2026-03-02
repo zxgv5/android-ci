@@ -52,7 +52,7 @@ jobs:
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}"
 
       - name: Write keystore info
-        working-directory: ./mct_source
+        working-directory: ./mct_source/Mifare Classic Tool
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/mct_source/release.keystore
           echo "KEYSTORE_FILE=${{ github.workspace }}/mct_source/release.keystore" >> gradle.properties
@@ -61,18 +61,16 @@ jobs:
           echo "KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> gradle.properties
 
       - name: Inject signing config and abi filter
-        working-directory: "./mct_source/Mifare Classic Tool"
+        working-directory: ./mct_source/Mifare Classic Tool
         run: |
           cat >> app/build.gradle << 'EOF'
-          // CI injected signing config
           android.signingConfigs.create('release') {
-              storeFile file(KEYSTORE_FILE)
-              storePassword KEYSTORE_PASSWORD
-              keyAlias KEY_ALIAS
-              keyPassword KEY_PASSWORD
+              storeFile file(project.property('KEYSTORE_FILE'))
+              storePassword project.property('KEYSTORE_PASSWORD')
+              keyAlias project.property('KEY_ALIAS')
+              keyPassword project.property('KEY_PASSWORD')
           }
           android.buildTypes.release.signingConfig = android.signingConfigs.release
-          // CI injected ABI filter (arm64-v8a only)
           android.defaultConfig.ndk.abiFilters = ['arm64-v8a']
           EOF
 
@@ -85,22 +83,22 @@ jobs:
           build-scan-terms-of-use-agree: "yes"
 
       - name: Build with gradle
-        working-directory: "./mct_source/Mifare Classic Tool"
+        working-directory: ./mct_source/Mifare Classic Tool
         run: |
           chmod +x ./gradlew
           ./gradlew clean app:assembleRelease
 
       - name: Rename and move
-        working-directory: "./mct_source/Mifare Classic Tool"
+        working-directory: ./mct_source/Mifare Classic Tool
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           SIGNED_APK="app/build/outputs/apk/release/app-release.apk"
-          mv "$SIGNED_APK" "${{ github.workspace }}/dist/mifareclassicTool-${{ env.BUILD_DATE }}.apk"
+          mv "$SIGNED_APK" "${{ github.workspace }}/dist/mifareclassictool-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./mct_source/release.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "$./dist/mifareclassictool-${{ env.BUILD_DATE }}.apk"
-          RELEASE_TAG_NAME: "${{ env.VERSION_NAME }}-mifareclassictool"
+          BUILD_ARTIFACT_PATH: "./dist/mifareclassictool-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-mifareclassictool"
