@@ -58,38 +58,46 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/rfidtools_source/keystore.p12
           if [ -f "gradle.properties" ]; then
-              # 如果文件非空且最后一行没有换行符，则先添加一个换行
               if [ -s "gradle.properties" ] && [ "$(tail -c1 gradle.properties | wc -l)" -eq 0 ]; then
                   echo "" >> gradle.properties
               fi
           fi
           {
-              echo "KEYSTORE_FILE=${{ github.workspace }}/rfidtools_source/keystore.p12"
-              echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}"
-              echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
-              echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}"
+            echo "KEYSTORE_FILE=${{ github.workspace }}/rfidtools_source/keystore.p12"
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}"
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
+            echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}"
           } >> gradle.properties
-          # 验证追加结果（可选，方便调试）
-          echo "Current gradle.properties (last 10 lines):"
-          tail -10 gradle.properties
-          # 原有的 sed 签名配置保持不变
-          sed -i '/android {/a \ \ \ signingConfigs {\n        release {\n            storeFile file(project.property("KEYSTORE_FILE"))\n            storePassword project.property("KEYSTORE_PASSWORD")\n            keyAlias project.property("KEY_ALIAS")\n            keyPassword project.property("KEY_ALIAS_PASSWORD")\n        }\n    }' apprts/build.gradle
-          sed -i '/release {/a \ \ \ \ \ \ \ \ signingConfig signingConfigs.release' apprts/build.gradle
+          # 在 android 块内插入 signingConfigs（正确的多行 sed 语法）
+          sed -i '/android {/a\
+              signingConfigs {\
+                  release {\
+                      storeFile file(project.property("KEYSTORE_FILE"))\
+                      storePassword project.property("KEYSTORE_PASSWORD")\
+                      keyAlias project.property("KEY_ALIAS")\
+                      keyPassword project.property("KEY_ALIAS_PASSWORD")\
+                  }\
+              }' apprts/build.gradle
+          # 在 release 块内插入 signingConfig
+          sed -i '/release {/a\
+                  signingConfig signingConfigs.release' apprts/build.gradle
 
-      - name: Fix gradle jvmargs for java 17
+      - name: Fix gradle jvmargs
         working-directory: ./rfidtools_source
         run: |
-          # Remove -XX:MaxPermSize from org.gradle.jvmargs (unsupported in Java 17)
+          # 移除 Java 17 不支持的 -XX:MaxPermSize
           sed -i 's/ -XX:MaxPermSize=[^ ]*//g' gradle.properties
           sed -i 's/^-XX:MaxPermSize=[^ ]* //g' gradle.properties
           sed -i 's/^-XX:MaxPermSize=[^ ]*$//g' gradle.properties
-          echo "Updated gradle.properties:"
-          grep org.gradle.jvmargs gradle.properties || true
 
       - name: Configure build for arm64-v8a only
         working-directory: ./rfidtools_source
         run: |
-          sed -i '/defaultConfig {/a \ \ \ \ \ \ \ \ ndk {\n                abiFilters "arm64-v8a"\n            }' apprts/build.gradle
+          # 在 defaultConfig 内插入 ndk 配置（正确多行语法）
+          sed -i '/defaultConfig {/a\
+                  ndk {\
+                      abiFilters "arm64-v8a"\
+                  }' apprts/build.gradle
 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
