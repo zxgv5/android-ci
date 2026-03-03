@@ -5,7 +5,7 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '11'
+  JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '33'
   ANDROID_BUILD_TOOLS: '33.0.0'
@@ -85,6 +85,12 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :apprts:assembleRelease
 
+      - name: List generated apk files
+        working-directory: ./rfidtools_source
+        run: |
+          echo "Listing all apk files generated:"
+          find apprts/build/outputs -name "*.apk" | sort
+
       - name: Rename and move apk
         working-directory: ./rfidtools_source
         run: |
@@ -94,12 +100,12 @@ jobs:
             echo "APK not found at $apkPath"
             exit 1
           fi
-          mv "$apkPath" "${{ github.workspace }}/dist/RFIDTools-${{ env.VERSION_NAME }}.apk"
+          mv "$apkPath" "${{ github.workspace }}/dist/rfidtools-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./rfidtools_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/rfidtools-${{ env.VERSION_NAME }}.apk"
-          RELEASE_TAG_NAME: "${{ env.VERSION_NAME }}-rfidtools"
+          BUILD_ARTIFACT_PATH: "./dist/rfidtools-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-rfidtools"
