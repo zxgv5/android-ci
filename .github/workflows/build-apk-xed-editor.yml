@@ -1,5 +1,5 @@
 name: build-apk-xed-editor
- 
+
 on:
   workflow_dispatch:
   workflow_call:
@@ -32,22 +32,22 @@ jobs:
           path: xed_editor_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
+
       - name: Setup java
         uses: actions/setup-java@main
         with:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
- 
+
       - name: Configure gradle for gradle9+
         run: |
           # 1. 关闭快照+网络强化，移除仓库相关
@@ -70,7 +70,7 @@ jobs:
              }
           }
           EOF
- 
+
       # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
       - name: Decode and create secrets
         run: |
@@ -79,11 +79,7 @@ jobs:
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" > /tmp/signing.properties
           echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> /tmp/signing.properties
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> /tmp/signing.properties
- 
-      - name: Clone submodules
-        working-directory: ./xed_editor_source
-        run: git submodule update --init --recursive
- 
+
       - name: Build release apk files
         working-directory: ./xed_editor_source
         run: |
@@ -95,7 +91,7 @@ jobs:
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/*.apk "${{ github.workspace }}/dist/xed-editor-${{env.BUILD_DATE}}.apk"
- 
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
