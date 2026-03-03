@@ -5,7 +5,7 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '21'
+  JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
@@ -47,11 +47,12 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      - name: Install android ndk
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;${{ env.ANDROID_NDK_VERSION }}"
-          echo "ANDROID_NDK=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+      - name: Setup ndk
+        uses: nttld/setup-ndk@main
+        with:
+          ndk-version: r28c
+          link-to-sdk: true
+          local-cache: false
 
       - name: Install required cmake version
         run: |
