@@ -50,7 +50,7 @@ jobs:
       - name: Setup ndk
         uses: nttld/setup-ndk@main
         with:
-          ndk-version: r28c
+          ndk-version: r20b
           link-to-sdk: true
           local-cache: false
 
