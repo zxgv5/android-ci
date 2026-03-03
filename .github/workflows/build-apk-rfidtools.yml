@@ -57,12 +57,22 @@ jobs:
         working-directory: ./rfidtools_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/rfidtools_source/keystore.p12
-          cat << EOF >> gradle.properties
-          KEYSTORE_FILE=${{ github.workspace }}/rfidtools_source/keystore.p12
-          KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS=${{ secrets.KEY_ALIAS }}
-          KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
-          EOF
+          if [ -f "gradle.properties" ]; then
+              # 如果文件非空且最后一行没有换行符，则先添加一个换行
+              if [ -s "gradle.properties" ] && [ "$(tail -c1 gradle.properties | wc -l)" -eq 0 ]; then
+                  echo "" >> gradle.properties
+              fi
+          fi
+          {
+              echo "KEYSTORE_FILE=${{ github.workspace }}/rfidtools_source/keystore.p12"
+              echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}"
+              echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
+              echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}"
+          } >> gradle.properties
+          # 验证追加结果（可选，方便调试）
+          echo "Current gradle.properties (last 10 lines):"
+          tail -10 gradle.properties
+          # 原有的 sed 签名配置保持不变
           sed -i '/android {/a \ \ \ signingConfigs {\n        release {\n            storeFile file(project.property("KEYSTORE_FILE"))\n            storePassword project.property("KEYSTORE_PASSWORD")\n            keyAlias project.property("KEY_ALIAS")\n            keyPassword project.property("KEY_ALIAS_PASSWORD")\n        }\n    }' apprts/build.gradle
           sed -i '/release {/a \ \ \ \ \ \ \ \ signingConfig signingConfigs.release' apprts/build.gradle
 
