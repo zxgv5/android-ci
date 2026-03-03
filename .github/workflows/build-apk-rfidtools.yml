@@ -53,11 +53,10 @@ jobs:
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;${{ env.ANDROID_NDK_VERSION }}"
           echo "ANDROID_NDK=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
 
-      - name: Write keystore info and configure signing
+      - name: Write keystore info and prepare gradle.properties
         working-directory: ./rfidtools_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/rfidtools_source/keystore.p12
-          # 确保 gradle.properties 格式正确
           if [ -f "gradle.properties" ]; then
               if [ -s "gradle.properties" ] && [ "$(tail -c1 gradle.properties | wc -l)" -eq 0 ]; then
                   echo "" >> gradle.properties
@@ -69,22 +68,23 @@ jobs:
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
             echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}"
           } >> gradle.properties
-          awk 'match($0, /^[ \t]*/) {lead=substr($0, RSTART, RLENGTH)} /android {/ {print; print lead "    signingConfigs {"; print lead "        release {"; print lead "            storeFile file(project.property(\"KEYSTORE_FILE\"))"; print lead "            storePassword project.property(\"KEYSTORE_PASSWORD\")"; print lead "            keyAlias project.property(\"KEY_ALIAS\")"; print lead "            keyPassword project.property(\"KEY_ALIAS_PASSWORD\")"; print lead "        }"; print lead "    }"; next}1' apprts/build.gradle > apprts/build.gradle.tmp && mv apprts/build.gradle.tmp apprts/build.gradle
-          awk 'match($0, /^[ \t]*/) {lead=substr($0, RSTART, RLENGTH)} /release {/ {print; print lead "        signingConfig signingConfigs.release"; next}1' apprts/build.gradle > apprts/build.gradle.tmp && mv apprts/build.gradle.tmp apprts/build.gradle
 
       - name: Fix gradle jvmargs for java 17
         working-directory: ./rfidtools_source
         run: |
-          # 移除 Java 17 不支持的 -XX:MaxPermSize
           sed -i 's/ -XX:MaxPermSize=[^ ]*//g' gradle.properties
           sed -i 's/^-XX:MaxPermSize=[^ ]* //g' gradle.properties
           sed -i 's/^-XX:MaxPermSize=[^ ]*$//g' gradle.properties
 
-      - name: Configure build for arm64-v8a only
+      - name: Set up python 3.12
+        uses: actions/setup-python@main
+        with:
+          python-version: '3.12'
+
+      - name: Patch build.gradle
         working-directory: ./rfidtools_source
         run: |
-          # 使用 awk 在 defaultConfig 块内插入 ndk 配置
-          awk 'match($0, /^[ \t]*/) {lead=substr($0, RSTART, RLENGTH)} /defaultConfig {/ {print; print lead "    ndk {"; print lead "        abiFilters \"arm64-v8a\""; print lead "    }"; next}1' apprts/build.gradle > apprts/build.gradle.tmp && mv apprts/build.gradle.tmp apprts/build.gradle
+          python3 "${{ github.workspace }}/ci_source/scripts/patch_rfidtools_gradle.py" "./apprts/patch_rfidtools_gradle.py"
 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
