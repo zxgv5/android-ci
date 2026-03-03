@@ -46,15 +46,6 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      - name: Setup ndk
-        uses: nttld/setup-ndk@main
-        with:
-          ndk-version: r28c
-          add-to-path: true
-
-      - name: Verify ndk version
-        run: |
-          echo "NDK version: $ANDROID_NDK_HOME"
 
       - name: Install required cmake version
         run: |
