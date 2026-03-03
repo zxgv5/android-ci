@@ -1,0 +1,105 @@
+name: build-apk-rfidtools
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '11'
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '33'
+  ANDROID_BUILD_TOOLS: '33.0.0'
+  ANDROID_NDK_VERSION: '20.0.5594570'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: RfidResearchGroup/RFIDtools
+          ref: master
+          path: rfidtools_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          distribution: '${{ env.JDK_DISTRIBUTION }}'
+          java-version: '${{ env.JDK_VERSION }}'
+
+      - name: Install android ndk
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;${{ env.ANDROID_NDK_VERSION }}"
+          echo "ANDROID_NDK=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+
+      - name: Write keystore info and configure signing
+        working-directory: ./rfidtools_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/rfidtools_source/keystore.p12
+          cat << EOF >> gradle.properties
+          KEYSTORE_FILE=${{ github.workspace }}/rfidtools_source/keystore.p12
+          KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
+          sed -i '/android {/a \ \ \ signingConfigs {\n        release {\n            storeFile file(project.property("KEYSTORE_FILE"))\n            storePassword project.property("KEYSTORE_PASSWORD")\n            keyAlias project.property("KEY_ALIAS")\n            keyPassword project.property("KEY_ALIAS_PASSWORD")\n        }\n    }' apprts/build.gradle
+          sed -i '/release {/a \ \ \ \ \ \ \ \ signingConfig signingConfigs.release' apprts/build.gradle
+
+      - name: Configure build for arm64-v8a only
+        working-directory: ./rfidtools_source
+        run: |
+          sed -i '/defaultConfig {/a \ \ \ \ \ \ \ \ ndk {\n                abiFilters "arm64-v8a"\n            }' apprts/build.gradle
+
+      - name: Setup gradle
+        uses: gradle/actions/setup-gradle@main
+        with:
+          dependency-graph: generate-and-submit
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
+
+      - name: Build with gradle
+        working-directory: ./rfidtools_source
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :apprts:assembleRelease
+
+      - name: Rename and move apk
+        working-directory: ./rfidtools_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          apkPath="apprts/build/outputs/apk/release/apprts-release.apk"
+          if [ ! -f "$apkPath" ]; then
+            echo "APK not found at $apkPath"
+            exit 1
+          fi
+          mv "$apkPath" "${{ github.workspace }}/dist/RFIDTools-${{ env.VERSION_NAME }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./rfidtools_source/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/rfidtools-${{ env.VERSION_NAME }}.apk"
+          RELEASE_TAG_NAME: "${{ env.VERSION_NAME }}-rfidtools"
