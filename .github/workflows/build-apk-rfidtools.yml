@@ -84,7 +84,7 @@ jobs:
       - name: Patch build.gradle
         working-directory: ./rfidtools_source
         run: |
-          python3 "${{ github.workspace }}/ci_source/scripts/patch_rfidtools_gradle.py" "./apprts/patch_rfidtools_gradle.py"
+          python3 "${{ github.workspace }}/ci_source/scripts/patch_rfidtools_gradle.py" "./apprts/build.gradle"
 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
