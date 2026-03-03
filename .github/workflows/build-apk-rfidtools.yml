@@ -49,7 +49,7 @@ jobs:
       - name: Setup ndk
         uses: nttld/setup-ndk@main
         with:
-          ndk-version: r20b
+          ndk-version: r27d
           add-to-path: true
 
       - name: Verify ndk version
