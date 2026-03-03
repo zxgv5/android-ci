@@ -57,6 +57,11 @@ jobs:
           mkdir -p keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
 
+      - name: Patch source files
+        working-directory: ./blbl_source
+        run: |
+          sed -i 's/recyclerView\.smoothScrollBy(0, dy)/recyclerView.scrollBy(0, dy)/g' app/src/main/java/blbl/cat3399/core/ui/DpadGridController.kt
+
       - name: Build release apk
         working-directory: ./blbl_source
         env:
