@@ -57,6 +57,7 @@ jobs:
         working-directory: ./rfidtools_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/rfidtools_source/keystore.p12
+          # 确保 gradle.properties 格式正确
           if [ -f "gradle.properties" ]; then
               if [ -s "gradle.properties" ] && [ "$(tail -c1 gradle.properties | wc -l)" -eq 0 ]; then
                   echo "" >> gradle.properties
@@ -68,21 +69,10 @@ jobs:
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
             echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}"
           } >> gradle.properties
-          # 在 android 块内插入 signingConfigs（正确的多行 sed 语法）
-          sed -i '/android {/a\
-              signingConfigs {\
-                  release {\
-                      storeFile file(project.property("KEYSTORE_FILE"))\
-                      storePassword project.property("KEYSTORE_PASSWORD")\
-                      keyAlias project.property("KEY_ALIAS")\
-                      keyPassword project.property("KEY_ALIAS_PASSWORD")\
-                  }\
-              }' apprts/build.gradle
-          # 在 release 块内插入 signingConfig
-          sed -i '/release {/a\
-                  signingConfig signingConfigs.release' apprts/build.gradle
+          awk 'match($0, /^[ \t]*/) {lead=substr($0, RSTART, RLENGTH)} /android {/ {print; print lead "    signingConfigs {"; print lead "        release {"; print lead "            storeFile file(project.property(\"KEYSTORE_FILE\"))"; print lead "            storePassword project.property(\"KEYSTORE_PASSWORD\")"; print lead "            keyAlias project.property(\"KEY_ALIAS\")"; print lead "            keyPassword project.property(\"KEY_ALIAS_PASSWORD\")"; print lead "        }"; print lead "    }"; next}1' apprts/build.gradle > apprts/build.gradle.tmp && mv apprts/build.gradle.tmp apprts/build.gradle
+          awk 'match($0, /^[ \t]*/) {lead=substr($0, RSTART, RLENGTH)} /release {/ {print; print lead "        signingConfig signingConfigs.release"; next}1' apprts/build.gradle > apprts/build.gradle.tmp && mv apprts/build.gradle.tmp apprts/build.gradle
 
-      - name: Fix gradle jvmargs
+      - name: Fix gradle jvmargs for java 17
         working-directory: ./rfidtools_source
         run: |
           # 移除 Java 17 不支持的 -XX:MaxPermSize
@@ -93,11 +83,8 @@ jobs:
       - name: Configure build for arm64-v8a only
         working-directory: ./rfidtools_source
         run: |
-          # 在 defaultConfig 内插入 ndk 配置（正确多行语法）
-          sed -i '/defaultConfig {/a\
-                  ndk {\
-                      abiFilters "arm64-v8a"\
-                  }' apprts/build.gradle
+          # 使用 awk 在 defaultConfig 块内插入 ndk 配置
+          awk 'match($0, /^[ \t]*/) {lead=substr($0, RSTART, RLENGTH)} /defaultConfig {/ {print; print lead "    ndk {"; print lead "        abiFilters \"arm64-v8a\""; print lead "    }"; next}1' apprts/build.gradle > apprts/build.gradle.tmp && mv apprts/build.gradle.tmp apprts/build.gradle
 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
