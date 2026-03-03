@@ -50,9 +50,8 @@ jobs:
       - name: Setup ndk
         uses: nttld/setup-ndk@main
         with:
-          ndk-version: "${{ env.ANDROID_NDK_VERSION }}"
-          link-to-sdk: true
-          local-cache: false
+          ndk-version: r20
+          add-to-path: true
 
       - name: Install required cmake version
         run: |
