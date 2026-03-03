@@ -9,7 +9,6 @@ env:
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  # ANDROID_NDK_VERSION: '20.0.5594570'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -50,7 +49,7 @@ jobs:
       - name: Setup ndk
         uses: nttld/setup-ndk@main
         with:
-          ndk-version: r20
+          ndk-version: r20b
           add-to-path: true
 
       - name: Verify ndk version
@@ -68,8 +67,6 @@ jobs:
         run: |
           # 创建或更新 local.properties，指定 cmake 路径
           echo "cmake.dir=$ANDROID_HOME/cmake/3.10.2.4988404" >> local.properties
-          # 同时设置 ndk 路径（可选，但推荐）
-          # echo "ndk.dir=$ANDROID_NDK" >> local.properties
 
       - name: Fix incorrect macro definition in libflasher
         working-directory: ./rfidtools_source
