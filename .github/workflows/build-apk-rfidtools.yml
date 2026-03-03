@@ -66,6 +66,16 @@ jobs:
           sed -i '/android {/a \ \ \ signingConfigs {\n        release {\n            storeFile file(project.property("KEYSTORE_FILE"))\n            storePassword project.property("KEYSTORE_PASSWORD")\n            keyAlias project.property("KEY_ALIAS")\n            keyPassword project.property("KEY_ALIAS_PASSWORD")\n        }\n    }' apprts/build.gradle
           sed -i '/release {/a \ \ \ \ \ \ \ \ signingConfig signingConfigs.release' apprts/build.gradle
 
+      - name: Fix gradle jvmargs for java 17
+        working-directory: ./rfidtools_source
+        run: |
+          # Remove -XX:MaxPermSize from org.gradle.jvmargs (unsupported in Java 17)
+          sed -i 's/ -XX:MaxPermSize=[^ ]*//g' gradle.properties
+          sed -i 's/^-XX:MaxPermSize=[^ ]* //g' gradle.properties
+          sed -i 's/^-XX:MaxPermSize=[^ ]*$//g' gradle.properties
+          echo "Updated gradle.properties:"
+          grep org.gradle.jvmargs gradle.properties || true
+
       - name: Configure build for arm64-v8a only
         working-directory: ./rfidtools_source
         run: |
