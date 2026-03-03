@@ -53,6 +53,20 @@ jobs:
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;${{ env.ANDROID_NDK_VERSION }}"
           echo "ANDROID_NDK=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
 
+      - name: Install required cmake version
+        run: |
+          # 安装 CMake 3.10.2（项目 libcrapto1 所需）
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.10.2.4988404"
+          echo "ANDROID_CMAKE_HOME=$ANDROID_HOME/cmake/3.10.2.4988404" >> $GITHUB_ENV
+
+      - name: Configure local.properties for cmake
+        working-directory: ./rfidtools_source
+        run: |
+          # 创建或更新 local.properties，指定 cmake 路径
+          echo "cmake.dir=$ANDROID_HOME/cmake/3.10.2.4988404" >> local.properties
+          # 同时设置 ndk 路径（可选，但推荐）
+          echo "ndk.dir=$ANDROID_NDK" >> local.properties
+
       - name: Write keystore info and prepare gradle.properties
         working-directory: ./rfidtools_source
         run: |
