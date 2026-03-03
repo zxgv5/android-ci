@@ -50,7 +50,7 @@ jobs:
       - name: Setup ndk
         uses: nttld/setup-ndk@main
         with:
-          ndk-version: r20
+          ndk-version: "${{ env.ANDROID_NDK_VERSION }}"
           link-to-sdk: true
           local-cache: false
 
