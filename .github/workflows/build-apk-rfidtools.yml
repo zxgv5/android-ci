@@ -67,6 +67,12 @@ jobs:
           # 同时设置 ndk 路径（可选，但推荐）
           echo "ndk.dir=$ANDROID_NDK" >> local.properties
 
+      - name: Fix incorrect macro definition in libflasher
+        working-directory: ./rfidtools_source
+        run: |
+          find libflasher -name "CMakeLists.txt" -exec sed -i '/getlocaledecpoint/s/^/#/' {} \;
+          echo "Fixed getlocaledecpoint macro in CMakeLists.txt"
+
       - name: Write keystore info and prepare gradle.properties
         working-directory: ./rfidtools_source
         run: |
