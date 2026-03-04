@@ -35,6 +35,7 @@ jobs:
           ref: main
           path: blbl_source
           fetch-depth: 0
+          submodules: recursive
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
