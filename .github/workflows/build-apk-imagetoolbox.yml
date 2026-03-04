@@ -72,6 +72,12 @@ jobs:
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -name "*.apk" | sort
+
+      - name: Rename and move
+        working-directory: ./imagetoolbox_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv app/build/outputs/apk/market/release/image-toolbox-3.7.1-market-arm64-v8a-release.apk "${{ github.workspace }}/dist/imagetoolbox-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
