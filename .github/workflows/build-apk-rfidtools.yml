@@ -48,15 +48,14 @@ jobs:
 
       - name: Install required cmake version
         run: |
-          # 安装 CMake 3.10.2（项目 libcrapto1 所需）
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.10.2.4988404"
           echo "ANDROID_CMAKE_HOME=$ANDROID_HOME/cmake/3.10.2.4988404" >> $GITHUB_ENV
 
-      - name: Configure local.properties for cmake
-        working-directory: ./rfidtools_source
-        run: |
-          # 创建或更新 local.properties，指定 cmake 路径
-          echo "cmake.dir=$ANDROID_HOME/cmake/3.10.2.4988404" >> local.properties
+      # - name: Configure local.properties for cmake
+      #   working-directory: ./rfidtools_source
+      #   run: |
+      #     # 创建或更新 local.properties，指定 cmake 路径
+      #     echo "cmake.dir=$ANDROID_HOME/cmake/3.10.2.4988404" >> local.properties
 
       - name: Fix incorrect macro definition in libflasher
         working-directory: ./rfidtools_source
