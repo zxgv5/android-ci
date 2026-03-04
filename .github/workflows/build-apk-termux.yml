@@ -64,7 +64,8 @@ jobs:
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
           chmod +x ./gradlew
-          # 先下载 bootstrap 压缩包（native 构建所需）
+          # 只生成 arm64-v8a 的 split APK（universal 也会生成，但后续只复制 split 包）
+          export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS=1
           ./gradlew downloadBootstraps
           ./gradlew app:assembleRelease \
             -Pandroid.abiFilters=arm64-v8a \
@@ -83,7 +84,7 @@ jobs:
         working-directory: ./termux_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          cp app/build/outputs/apk/release/termux-app_apt-android-7-release_universal.apk "${{ github.workspace }}/dist/termux-${{ env.BUILD_DATE }}.apk"
+          cp app/build/outputs/apk/release/termux-app_apt-android-7-release_arm64-v8a.apk "${{ github.workspace }}/dist/termux-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
