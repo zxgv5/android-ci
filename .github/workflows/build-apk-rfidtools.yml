@@ -46,10 +46,10 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      - name: Install required cmake version
-        run: |
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.10.2.4988404"
-          echo "ANDROID_CMAKE_HOME=$ANDROID_HOME/cmake/3.10.2.4988404" >> $GITHUB_ENV
+      # - name: Install required cmake version
+      #   run: |
+      #     $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.10.2.4988404"
+      #     echo "ANDROID_CMAKE_HOME=$ANDROID_HOME/cmake/3.10.2.4988404" >> $GITHUB_ENV
 
       # - name: Configure local.properties for cmake
       #   working-directory: ./rfidtools_source
