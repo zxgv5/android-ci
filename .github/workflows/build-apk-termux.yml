@@ -81,12 +81,12 @@ jobs:
         working-directory: ./termux_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          cp app/build/outputs/apk/release/termux-app_apt-android-7-release_universal.apk "${{ github.workspace }}/dist/"
+          cp app/build/outputs/apk/release/termux-app_apt-android-7-release_universal.apk "${{ github.workspace }}/dist/termux-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./termux_source/termux.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/termux-app_apt-android-7-release_universal.apk"
+          BUILD_ARTIFACT_PATH: "./dist/termux-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-termux"
