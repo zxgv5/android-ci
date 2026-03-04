@@ -46,10 +46,10 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      # - name: Install required cmake version
-      #   run: |
-      #     $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.10.2.4988404"
-      #     echo "ANDROID_CMAKE_HOME=$ANDROID_HOME/cmake/3.10.2.4988404" >> $GITHUB_ENV
+      - name: Install required cmake version
+        run: |
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.10.2.4988404"
+          echo "ANDROID_CMAKE_HOME=$ANDROID_HOME/cmake/3.10.2.4988404" >> $GITHUB_ENV
 
       # - name: Configure local.properties for cmake
       #   working-directory: ./rfidtools_source
@@ -94,10 +94,6 @@ jobs:
       - name: Patch build.gradle
         working-directory: ./rfidtools_source
         run: |
-          cp "${{ github.workspace }}/ci_source/patches/rfidtools/libcrapto1.build.gradle" "./libcrapto1/build.gradle"
-          cp "${{ github.workspace }}/ci_source/patches/rfidtools/libnfc.build.gradle" "./libnfc/build.gradle"
-          cp "${{ github.workspace }}/ci_source/patches/rfidtools/libflasher.build.gradle" "./libflasher/build.gradle"
-          cp "${{ github.workspace }}/ci_source/patches/rfidtools/libmfkey.build.gradle" "./libmfkey/build.gradle"
           python3 "${{ github.workspace }}/ci_source/scripts/patch_rfidtools_gradle.py" "./apprts/build.gradle"
 
       - name: Setup gradle
