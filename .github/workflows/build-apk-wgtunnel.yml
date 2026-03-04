@@ -83,7 +83,7 @@ jobs:
         working-directory: ./wgtunnel_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv app/build/outputs/apk/market/release/*-arm64-v8a-release.apk "${{ github.workspace }}/dist/wgtunnel-${{ env.BUILD_DATE }}.apk"
+          mv app/build/outputs/apk/google/release/*-arm64.apk "${{ github.workspace }}/dist/wgtunnel-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
