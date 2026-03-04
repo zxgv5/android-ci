@@ -10,6 +10,7 @@ on:
 
 env:
   JDK_VERSION: '24'
+  JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -50,13 +51,13 @@ jobs:
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
-          distribution: "temurin"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
 
       - name: Decode keystore
         working-directory: ./blbl_source
         run: |
-          mkdir -p keystore
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
+          mkdir -p ./keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore/release.keystore
 
       # 作者已revert致此问题的提交，故注释步骤
       # - name: Patch source files
