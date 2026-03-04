@@ -49,10 +49,8 @@ jobs:
       - name: Write keystore info
         working-directory: ./wgtunnel_source
         run: |
-          # decode keystore
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/wgtunnel_source/keystore.jks
-          # set environment variables for signing
-          echo "KEY_STORE_PATH=${{ github.workspace }}/wgtunnel_source/keystore.jks" >> $GITHUB_ENV
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/wgtunnel_source/keystore.p12
+          echo "KEY_STORE_PATH=${{ github.workspace }}/wgtunnel_source/keystore.p12" >> $GITHUB_ENV
           echo "SIGNING_STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
           echo "SIGNING_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
           echo "SIGNING_KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
@@ -90,7 +88,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./wgtunnel_source/keystore.jks"
+          P12_KEYSTORE_PATH: "./wgtunnel_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/wgtunnel-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "wgtunnel-${{ env.BUILD_DATE }}"
