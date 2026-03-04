@@ -70,7 +70,6 @@ jobs:
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
           chmod +x ./gradlew
-          # Build only googleRelease for arm64-v8a (adjust flavor if needed)
           ./gradlew app:assembleGoogleRelease -Pandroid.injected.abi.filters=arm64-v8a
 
       - name: List generated apk files
