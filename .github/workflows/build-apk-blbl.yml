@@ -58,7 +58,7 @@ jobs:
           mkdir -p keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
 
-      # 作者已revert导致问题的提交，注释此步骤
+      # 作者已revert致此问题的提交，故注释步骤
       # - name: Patch source files
       #   working-directory: ./blbl_source
       #   run: |
@@ -73,6 +73,10 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease -PversionName="${{ inputs.version_name }}" -PversionCode="${{ github.run_number }}"
+
+      - name: Rename and move
+        working-directory: ./blbl_source
+        run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/blbl-${{ env.BUILD_DATE }}.apk"
 
