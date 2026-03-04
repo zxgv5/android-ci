@@ -95,6 +95,7 @@ jobs:
         working-directory: ./rfidtools_source
         run: |
           cp "${{ github.workspace }}/ci_source/patches/rfidtools/libcrapto1.build.gradle" "./libcrapto1/build.gradle"
+          cp "${{ github.workspace }}/ci_source/patches/rfidtools/libnfc.build.gradle" "./libnfc/build.gradle"
           python3 "${{ github.workspace }}/ci_source/scripts/patch_rfidtools_gradle.py" "./apprts/build.gradle"
 
       - name: Setup gradle
