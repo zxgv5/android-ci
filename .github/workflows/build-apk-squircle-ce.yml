@@ -56,41 +56,15 @@ jobs:
           KEY_ALIAS=${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
- 
-      - name: Patch app/build.gradle.kts to support abiFilter parameter
-        working-directory: ./squircle_ce_source
-        run: |
-          perl -i -0777 -pe '
-          if (/(buildFeatures \{[^\}]*?\n    \})/s) {
-              my $block = $1;
-              my $insert = "\n    val abiFilter = project.findProperty(\"abiFilter\") as? String\n    if (abiFilter != null) {\n        defaultConfig {\n            ndk {\n                abiFilters.add(abiFilter)\n            }\n        }\n        buildTypes {\n            release {\n                ndk {\n                    abiFilters.add(abiFilter)\n                }\n            }\n        }\n        println(\"ABI filter set to: \$abiFilter\")\n    }";
-              s/$block/$block$insert/;
-          }
-          ' app/build.gradle.kts
-          echo "===== Patched app/build.gradle.kts ====="
-          cat app/build.gradle.kts
 
       - name: Build apk
         working-directory: ./squircle_ce_source
         run: |
           chmod +x ./gradlew
           ./gradlew :app:assembleGmsRelease \
-            -PabiFilter=arm64-v8a \
-            --no-configuration-cache \
-            --stacktrace \
+            --no-configuration-cache --stacktrace \
             -x :app:produceGmsReleaseComposeMapping \
             -x :app:mergeGmsReleaseComposeMapping
-
-      - name: Verify apk contents
-        working-directory: ./squircle_ce_source
-        run: |
-          APK_PATH="app/build/outputs/apk/gms/release/app-gms-release.apk"
-          if [ -f "$APK_PATH" ]; then
-            echo "ABI directories in APK:"
-            unzip -l "$APK_PATH" | grep "lib/" | awk '{print $4}' | cut -d/ -f2 | sort -u
-          else
-            echo "APK not found!"
-          fi
 
       - name: List generated apk files
         working-directory: ./squircle_ce_source
