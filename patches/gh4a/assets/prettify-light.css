@@ -1,6 +1,6 @@
 @font-face {
     font-family: "JetBrainsMapleMono";
-    src: url("file:///android_asset/fonts/JetBrainsMapleMono-SemiBoldltalic.ttf") format("truetype");
+    src: url("file:///android_asset/fonts/JetBrainsMapleMono.ttf") format("truetype");
     font-weight: 600;
     font-style: italic;
 }
