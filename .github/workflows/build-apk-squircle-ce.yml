@@ -63,7 +63,7 @@ jobs:
           perl -i -0777 -pe '
           if (/(buildFeatures \{[^\}]*?\n    \})/s) {
               my $block = $1;
-              my $insert = "\n    splits {\n        abi {\n            enable = true\n            reset()\n            include(\"arm64-v8a\")\n            universalApk = false\n        }\n    }";
+              my $insert = "\n    splits {\n        abi {\n            enable true\n            reset()\n            include(\"arm64-v8a\")\n            universalApk false\n        }\n    }";
               s/$block/$block$insert/;
           }
           ' app/build.gradle.kts
