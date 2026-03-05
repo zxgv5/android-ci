@@ -62,7 +62,12 @@ jobs:
           KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
           EOF
 
-      - name: Patch css files for change fonts
+      - name: Patch css files for new fonts
+        working-directory: ./gh4a_source
+        run: |
+          cp -f "${{ github.workspace }}/ci_source/patches/gh4a/assets/"*.* "./app/src/main/assets/"
+
+      - name: Download and extract fonts files
         working-directory: ./gh4a_source
         run: |
           mkdir -p "./app/src/main/assets/fonts"
@@ -70,7 +75,6 @@ jobs:
           curl -L -o "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" "https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/pre/JetBrainsMapleMono-NF-XX-NL-XX.zip"
           unzip "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" -d "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX"
           cp -f "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX/JetBrainsMapleMono-SemiBoldItalic.ttf" "./app/src/main/assets/fonts/JetBrainsMapleMono.ttf"
-          cp -f "${{ github.workspace }}/ci_source/patches/gh4a/assets/"*.* "./app/src/main/assets/"
 
       # How to Build Octodroid
       # Ensure Android SDK platform and build-tools are installed
