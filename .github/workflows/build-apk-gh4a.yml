@@ -7,7 +7,7 @@ env:
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   ANDROID_MIN_SDK: '23'
-  ANDROID_TARGET_SDK: '33'
+  ANDROID_TARGET_SDK: '36'
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   KEYSTORE_PATH: "$GITHUB_WORKSPACE/gh4a_source/keystore.p12"
@@ -116,7 +116,6 @@ jobs:
         working-directory: ./gh4a_source
         run: |
           chmod +x ./gradlew
-          # 先清理构建缓存
           ./gradlew clean
           ./gradlew assembleRelease --stacktrace
 
@@ -126,33 +125,11 @@ jobs:
           echo "Listing all apk files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
  
-      - name: Find release apk
+      - name: Rename and move
+        working-directory: ./gh4a_source
         run: |
-          echo "Looking for APK files..."
-          RELEASE_APK=$(find ./gh4a_source -name "*release*.apk" ! -name "*unaligned*" -type f | head -1)
-          if [ -n "$RELEASE_APK" ]; then
-            echo "Found release APK: $RELEASE_APK"
-            echo "RELEASE_APK=$RELEASE_APK" >> $GITHUB_ENV
-            echo "apk_path=$RELEASE_APK" >> $GITHUB_OUTPUT
-          else
-            echo "No release APK found"
-            exit 1
-          fi
- 
-      - name: Rename release apk
-        shell: bash
-        run: |
-          SRC_RELEASE_APK_PATH_NAME=$(dirname "${{ env.RELEASE_APK }}")
-          DST_RELEASE_APK_PATH_NAME="./gh4a_source/gh4a-${{ env.BUILD_DATE }}.apk"
-          mv -f "${{ env.RELEASE_APK }}" "$DST_RELEASE_APK_PATH_NAME"
-          # 4. 验证结果+传递环境变量
-          if [ -f "$DST_RELEASE_APK_PATH_NAME" ]; then
-              echo "重命名成功：$DST_RELEASE_APK_PATH_NAME"
-              echo "RENAMED_APK=$DST_RELEASE_APK_PATH_NAME" >> "$GITHUB_ENV"
-          else
-              echo "重命名失败"
-              exit 1
-          fi
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/gh4a-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
@@ -160,5 +137,5 @@ jobs:
           # 文件路径为基于github.workspace的绝对路径
           P12_KEYSTORE_PATH: "./gh4a_source/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "${{ env.RENAMED_APK }}"
+          BUILD_ARTIFACT_PATH: "./dist/gh4a-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-gh4a"
