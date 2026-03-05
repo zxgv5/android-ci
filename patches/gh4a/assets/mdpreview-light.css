@@ -1,0 +1,33 @@
+@font-face {
+    font-family: "JetBrainsMapleMono";
+    src: url("file:///android_asset/fonts/JetBrainsMapleMono-SemiBoldltalic.ttf") format("truetype");
+    font-weight: 600;
+    font-style: italic;
+}
+
+body {
+    background-color: #fafafa;
+    color: #000000;
+    font-size: 14px;
+    padding-top: 20px;
+    word-wrap: break-word;
+}
+ 
+a {
+    color: #5aa03d;
+}
+ 
+h1, h2, h3, h4, h5, h6 {
+    color: #000000;
+}
+ 
+blockquote {
+    color: #000000;
+}
+
+code, tt, pre, pre code, pre tt {
+    font-family: "JetBrainsMapleMono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    font-variant-ligatures: normal;
+}
