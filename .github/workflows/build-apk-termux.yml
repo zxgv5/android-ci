@@ -78,7 +78,7 @@ jobs:
         working-directory: ./termux_source
         run: |
           echo "Listing all apk files generated:"
-          find app/build/outputs -name "*.apk" | sort
+          find app/build/outputs -type f -name "*.apk" | sort
 
       - name: Rename and move
         working-directory: ./termux_source
