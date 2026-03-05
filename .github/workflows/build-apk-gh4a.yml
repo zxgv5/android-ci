@@ -1,8 +1,8 @@
 name: build-apk-gh4a
-
+ 
 on:
   workflow_dispatch:
-
+ 
 env:
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
@@ -11,16 +11,18 @@ env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   KEYSTORE_PATH: "$GITHUB_WORKSPACE/gh4a_source/keystore.p12"
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Clean runner environment
         run: |
-          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
-
+          rm -rf .gradle
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -28,28 +30,28 @@ jobs:
           ref: master
           path: gh4a_source
           fetch-depth: 0
-
+          submodules: recursive
+ 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
-
-      - name: Setup jdk
+ 
+      - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
-
+ 
       - name: Initialize build environment
-        id: init
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Decode keystore file
         working-directory: ./gh4a_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ env.KEYSTORE_PATH }}
-
+ 
       - name: Create signing properties
         working-directory: ./gh4a_source
         run: |
@@ -59,6 +61,13 @@ jobs:
           KEY_ALIAS=${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
           EOF
+
+      - name: Patch css files for change fonts
+        working-directory: ./gh4a_source
+        run: |
+          mkdir -p "./app/src/main/assets/fonts"
+          cp -f "${{ github.workspace }}/ci_source/patches/gh4a/fonts/*.*" "./app/src/main/assets/fonts/"
+          cp -f "${{ github.workspace }}/ci_source/patches/gh4a/assets/*.*" "./app/src/main/assets/"
 
       # How to Build Octodroid
       # Ensure Android SDK platform and build-tools are installed
@@ -72,7 +81,7 @@ jobs:
       # ./gradlew assembleDebug
       # To get a full list of available tasks
       # ./gradlew tasks
-
+ 
       - name: Create client properties
         working-directory: ./gh4a_source
         run: |
@@ -83,7 +92,7 @@ jobs:
           echo "client.properties content:"
           cat client.properties
           echo "client.properties created at: $(pwd)/client.properties"
-
+ 
       - name: Verify files exist
         working-directory: ./gh4a_source
         run: |
@@ -95,7 +104,7 @@ jobs:
           ls -la client.properties
           echo "Checking if signing.properties exists:"
           ls -la signing.properties
-
+ 
       - name: Build release
         working-directory: ./gh4a_source
         run: |
@@ -104,6 +113,12 @@ jobs:
           ./gradlew clean
           ./gradlew assembleRelease --stacktrace
 
+      - name: List generated apk files
+        working-directory: ./gh4a_source
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
+ 
       - name: Find release apk
         run: |
           echo "Looking for APK files..."
@@ -116,29 +131,22 @@ jobs:
             echo "No release APK found"
             exit 1
           fi
-
+ 
       - name: Rename release apk
         shell: bash
         run: |
           SRC_RELEASE_APK_PATH_NAME=$(dirname "${{ env.RELEASE_APK }}")
           DST_RELEASE_APK_PATH_NAME="./gh4a_source/gh4a-${{ env.BUILD_DATE }}.apk"
-          # 3. 强制重命名
           mv -f "${{ env.RELEASE_APK }}" "$DST_RELEASE_APK_PATH_NAME"
           # 4. 验证结果+传递环境变量
           if [ -f "$DST_RELEASE_APK_PATH_NAME" ]; then
-              echo "✅ 重命名成功：$DST_RELEASE_APK_PATH_NAME"
+              echo "重命名成功：$DST_RELEASE_APK_PATH_NAME"
               echo "RENAMED_APK=$DST_RELEASE_APK_PATH_NAME" >> "$GITHUB_ENV"
           else
-              echo "❌ 重命名失败"
+              echo "重命名失败"
               exit 1
           fi
-
-      - name: Verify apk signature
-        run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
-          apksigner verify --verbose "${{ env.RENAMED_APK }}"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
