@@ -1,18 +1,16 @@
 name: build-apk-squircle-ce
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
+  JDK_DISTRIBUTION : 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
-permissions:
-  contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,7 +21,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -32,33 +30,22 @@ jobs:
           path: squircle_ce_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
-          distribution: "temurin"
-
-      # 强制 Gradle 使用当前 JDK
-      - name: Force gradle to use jdk 21
-        working-directory: ./squircle_ce_source
-        run: |
-          echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
-          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> gradle.properties
-          echo "org.gradle.daemon=false" >> gradle.properties
-
-      - name: Verify java version
-        run: java -version
-
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+ 
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./squircle_ce_source
         run: |
@@ -70,11 +57,29 @@ jobs:
           KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
           EOF
 
-#       - name: List all compose mapping
-#         working-directory: ./squircle_ce_source
-#         run: |
-#           chmod +x ./gradlew
-#           ./gradlew tasks --all | grep -i "compose.*mapping"
+      - name: Patch file to build only arm64-v8a
+        working-directory: ./squircle_ce_source
+        run: |
+          awk '
+          BEGIN { in_android = 0; inserted = 0 }
+          /^android {/ { in_android = 1; print; next }
+          in_android && /^}/ {
+              if (!inserted) {
+                  print "    buildTypes {"
+                  print "        release {"
+                  print "            ndk {"
+                  print "                abiFilters += \"arm64-v8a\""
+                  print "            }"
+                  print "        }"
+                  print "    }"
+                  inserted = 1
+              }
+              print "}"
+              in_android = 0
+              next
+          }
+          { print }
+          ' app/build.gradle.kts > app/build.gradle.kts.tmp && mv app/build.gradle.kts.tmp app/build.gradle.kts
 
       - name: Build apk
         working-directory: ./squircle_ce_source
@@ -85,15 +90,26 @@ jobs:
             --stacktrace \
             -x :app:produceGmsReleaseComposeMapping \
             -x :app:mergeGmsReleaseComposeMapping
+
+      - name: List generated apk files
+        working-directory: ./squircle_ce_source
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
  
+      - name: Rename and move
+        working-directory: ./squircle_ce_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv -f app/build/outputs/apk/gms/release/app-gms-release.apk "${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
+
       - name: List all generated apks and move to dist
         working-directory: ./squircle_ce_source
         run: |
           echo "All apk files in app/build/outputs:"
           find app/build/outputs -type f -name "*.apk" -exec ls -lh {} \; || echo "No apk found"
           mkdir -p "${{ github.workspace }}/dist"
-          mv -f app/build/outputs/apk/gms/release/app-gms-release.apk "${{ github.workspace }}/dist/squircle-ce-${{ env.BUILD_DATE }}.apk"
- 
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
