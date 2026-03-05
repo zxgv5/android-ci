@@ -60,39 +60,29 @@ jobs:
       - name: Patch file to build only arm64-v8a
         working-directory: ./squircle_ce_source
         run: |
-          awk '
-          BEGIN { in_android = 0; inserted = 0 }
-          /^android {/ { in_android = 1; print; next }
-          in_android && /^[[:space:]]*}/ {
-              if (!inserted) {
-                  print "    buildTypes {"
-                  print "        release {"
-                  print "            ndk {"
-                  print "                abiFilters += \"arm64-v8a\""
-                  print "            }"
-                  print "        }"
-                  print "    }"
-                  inserted = 1
-              }
-              print "}"
-              in_android = 0
-              next
+          perl -i -0777 -pe '
+          # 匹配 buildFeatures 块（从 "buildFeatures {" 到其后第一个独立成行的 "    }"）
+          if (/(buildFeatures \{[^\}]*?\n    \})/s) {
+              my $block = $1;
+              # 在块后插入 buildTypes 配置（保持缩进）
+              my $insert = "\n    buildTypes {\n        release {\n            val abiFilter = project.findProperty(\"abiFilter\") as? String\n            if (abiFilter != null) {\n                ndk { abiFilters.add(abiFilter) }\n            }\n        }\n    }";
+              s/$block/$block$insert/;
           }
-          { print }
-          ' app/build.gradle.kts > app/build.gradle.kts.tmp && mv app/build.gradle.kts.tmp app/build.gradle.kts
+          ' app/build.gradle.kts
           echo "===== Patched app/build.gradle.kts ====="
           cat app/build.gradle.kts
-
+ 
       - name: Build apk
         working-directory: ./squircle_ce_source
         run: |
           chmod +x ./gradlew
           ./gradlew :app:assembleGmsRelease \
+            -PabiFilter=arm64-v8a \
             --no-configuration-cache \
             --stacktrace \
             -x :app:produceGmsReleaseComposeMapping \
             -x :app:mergeGmsReleaseComposeMapping
-
+ 
       - name: List generated apk files
         working-directory: ./squircle_ce_source
         run: |
