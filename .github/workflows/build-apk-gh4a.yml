@@ -74,7 +74,7 @@ jobs:
           mkdir -p "${{ github.workspace }}/fonts"
           curl -L -o "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" "https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/pre/JetBrainsMapleMono-NF-XX-NL-XX.zip"
           unzip "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" -d "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX"
-          cp -f "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX/JetBrainsMapleMono-SemiBoldItalic.ttf" "./app/src/main/assets/fonts/JetBrainsMapleMono.ttf"
+          cp -f "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX/JetBrainsMapleMono-Italic.ttf" "./app/src/main/assets/fonts/JetBrainsMapleMono.ttf"
 
       # How to Build Octodroid
       # Ensure Android SDK platform and build-tools are installed
