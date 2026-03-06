@@ -5,7 +5,7 @@ on:
   workflow_call:
  
 env:
-  JDK_VERSION: '21'
+  JDK_VERSION: '22'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
@@ -56,8 +56,13 @@ jobs:
         run: |
           # 解码keystore文件
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-          # 获取keystore的绝对路径
           KEYSTORE_PATH=$(realpath keystore.p12)
+          cat > signing.properties << 'EOF'
+          storeFile=$KEYSTORE_PATH
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
           echo "STORE_FILE=$KEYSTORE_PATH" >> $GITHUB_ENV
           echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
           echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
