@@ -75,14 +75,6 @@ jobs:
               }
           }
           EOF
-
-      - name: Verify environment variables (debug)
-        run: |
-          if [ -z "$KEYSTORE_PASSWORD" ]; then echo "KEYSTORE_PASSWORD is empty!"; exit 1; else echo "KEYSTORE_PASSWORD is set"; fi
-          if [ -z "$KEY_ALIAS" ]; then echo "KEY_ALIAS is empty!"; exit 1; else echo "KEY_ALIAS is set"; fi
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
  
       - name: Build signed apk with init script
         working-directory: ./aegis_source
@@ -91,7 +83,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon -I init.gradle --info  # 添加 --info 可查看详细日志（可选）
+          ./gradlew assembleRelease --no-daemon -I init.gradle
  
       - name: List generated apk files
         working-directory: ./aegis_source
