@@ -49,38 +49,40 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
-
-      - name: Decode keystore and create init script for signing
+ 
+      - name: Decode keystore and create init script
         working-directory: ./aegis_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
           cat > init.gradle << EOF
-          gradle.projectsLoaded {
-              rootProject.allprojects { project ->
+          allprojects {
+              afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
-                      project.android {
-                          signingConfigs {
-                              release {
-                                  storeFile file('keystore.p12')
-                                  storePassword System.getenv('KEYSTORE_PASSWORD')
-                                  keyAlias System.getenv('KEY_ALIAS')
-                                  keyPassword System.getenv('KEYSTORE_PASSWORD')
-                                  storeType 'PKCS12'
-                                  enableV1Signing true
-                                  enableV2Signing true
-                                  enableV3Signing true
-                              }
-                          }
-                          buildTypes {
-                              release {
-                                  signingConfig signingConfigs.release
-                              }
-                          }
+                      if (!project.android.signingConfigs.hasProperty('release')) {
+                          project.android.signingConfigs.create('release')
                       }
+                      def releaseConfig = project.android.signingConfigs.getByName('release')
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
                   }
               }
           }
           EOF
+
+      - name: Verify environment variables (debug)
+        run: |
+          if [ -z "$KEYSTORE_PASSWORD" ]; then echo "KEYSTORE_PASSWORD is empty!"; exit 1; else echo "KEYSTORE_PASSWORD is set"; fi
+          if [ -z "$KEY_ALIAS" ]; then echo "KEY_ALIAS is empty!"; exit 1; else echo "KEY_ALIAS is set"; fi
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
  
       - name: Build signed apk with init script
         working-directory: ./aegis_source
@@ -89,7 +91,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon -I init.gradle
+          ./gradlew assembleRelease --no-daemon -I init.gradle --info  # 添加 --info 可查看详细日志（可选）
  
       - name: List generated apk files
         working-directory: ./aegis_source
