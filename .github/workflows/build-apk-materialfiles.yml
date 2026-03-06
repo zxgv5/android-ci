@@ -58,7 +58,7 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
           KEYSTORE_PATH=$(realpath keystore.p12)
           cat > signing.properties << 'EOF'
-          storeFile=$KEYSTORE_PATH
+          storeFile="$KEYSTORE_PATH"
           storePassword=${{ secrets.KEYSTORE_PASSWORD }}
           keyAlias=${{ secrets.KEY_ALIAS }}
           keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
