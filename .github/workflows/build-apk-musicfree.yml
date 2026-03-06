@@ -54,15 +54,8 @@ jobs:
       - name: Install dependencies
         working-directory: ./musicfree_source
         run: |
-          # 安装 synp
-          npm install -g synp
-          # 用 Yarn 安装依赖（确保 node_modules 与 yarn.lock 一致）
           yarn install --frozen-lockfile
-          # 转换为 package-lock.json
-          synp --source-file yarn.lock
-          # 切换至 npm 并重新安装（可选）
-          npm ci --prefer-offline --no-audit
-
+ 
       - name: Decode keystore.p12 and write signing.properties
         working-directory: ./musicfree_source/android
         run: |
