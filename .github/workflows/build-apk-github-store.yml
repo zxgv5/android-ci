@@ -54,7 +54,7 @@ jobs:
         run: |
           mkdir -p ./keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore/keystore.p12
-          cat > init.gradle << EOF
+          cat > init.gradle << 'EOF'
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
