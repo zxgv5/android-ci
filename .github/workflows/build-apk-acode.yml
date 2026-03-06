@@ -4,9 +4,6 @@ on:
   workflow_dispatch:
   workflow_call:
  
-permissions:
-  contents: write
- 
 env:
   JDK_VERSION: '22'
   ANDROID_COMPILE_SDK: '36'
@@ -105,31 +102,57 @@ jobs:
           npm run setup
           node utils/storage_manager.mjs y
           npm run build paid apk
+
+      - name: Create init script
+        working-directory: ./acode_source/platforms/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # 创建 init.gradle 脚本（使用单引号防止变量替换）
+          cat > init.gradle << 'EOF'
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.plugins.hasPlugin('com.android.application')) {
+                      println "Injecting signing config for ${project.name}"
+                      if (!project.android.signingConfigs.hasProperty('release')) {
+                          project.android.signingConfigs.create('release')
+                      }
+                      def releaseConfig = project.android.signingConfigs.getByName('release')
+                      releaseConfig.storeFile = file('/tmp/app-release.keystore')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEY_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
+                  }
+              }
+          }
+          EOF
  
-      - name: Build release apk files with gradle
+      - name: Build release apk files
         working-directory: ./acode_source/platforms/android
         run: |
           ./gradlew clean
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --no-daemon -I init.gradle
           mkdir -p "${{ github.workspace }}/dist"
           mv  app/build/outputs/apk/release/app-release-unsigned.apk "${{ github.workspace }}/dist/acode-unsigned.apk"
-          
-      - name: Sign the apk (pkcs12)
-        working-directory: ./acode_source
+ 
+      - name: List generated apk files
+        working-directory: ./acode_source/platforms/android
         run: |
-          # 设置Android build-tools路径
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
-          # 使用apksigner对APK签名
-          apksigner sign \
-            --ks "${{ env.STORE_FILE_PATH }}" \
-            --ks-pass "pass:${{ env.KEYSTORE_PASSWORD }}" \
-            --ks-key-alias "${{ env.KEY_ALIAS }}" \
-            --ks-type PKCS12 \
-            --out "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk" \
-            "${{ github.workspace }}/dist/acode-unsigned.apk"
-          # 验证签名
-          apksigner verify --verbose "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
+          echo "Listing all apk files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
+ 
+      - name: Rename and move
+        working-directory: ./acode_source/platforms/android
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
