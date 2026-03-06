@@ -57,7 +57,7 @@ jobs:
           # 全局安装锁文件转换工具
           npm install -g synp
           # 将yarn.lock转换为npm可识别的package-lock.json
-          synp --source yarn.lock --dest package-lock.json
+          synp --source-file yarn.lock --dest-file package-lock.json
           # 按转换后的锁文件安装依赖
           npm ci --prefer-offline --no-audit
 
@@ -65,7 +65,7 @@ jobs:
         working-directory: ./musicfree_source/android
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./app/keystore.p12
-          cat << 'EOF' > ./keystore.properties
+          cat << EOF > ./keystore.properties
           RELEASE_STORE_FILE=${{ github.workspace }}/musicfree_source/android/app/keystore.p12
           RELEASE_STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
