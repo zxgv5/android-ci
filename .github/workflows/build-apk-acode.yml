@@ -139,8 +139,6 @@ jobs:
         run: |
           ./gradlew clean
           ./gradlew assembleRelease --no-daemon -I init.gradle
-          mkdir -p "${{ github.workspace }}/dist"
-          mv  app/build/outputs/apk/release/app-release-unsigned.apk "${{ github.workspace }}/dist/acode-unsigned.apk"
  
       - name: List generated apk files
         working-directory: ./acode_source/platforms/android
