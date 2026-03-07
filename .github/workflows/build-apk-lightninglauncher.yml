@@ -83,7 +83,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleSideloadRelease --no-daemon -I init.gradle
+          ./gradlew assemblePlaystoreRelease --no-daemon -I init.gradle
 
       - name: List generated apk files
         working-directory: ./lightninglauncher_source/Launcher
