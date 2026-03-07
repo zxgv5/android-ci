@@ -76,6 +76,25 @@ jobs:
           }
           EOF
 
+      # 临时修复：创建缺失的 drawable 资源文件（占位）
+      - name: Create missing drawable resources
+        working-directory: ./lightninglauncher_source/Launcher/App/src/main/res
+        run: |
+          mkdir -p drawable
+          cd drawable
+          for name in ai_google ai_youtube ai_apkmirror ai_playstore; do
+            echo '<?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+            <path
+                android:fillColor="#FF000000"
+                android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z"/>
+          </vector>' > $name.xml
+          done
+
       - name: Build signed apk with init script
         working-directory: ./lightninglauncher_source/Launcher
         env:
@@ -83,7 +102,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assemblePlaystoreRelease --no-daemon -I init.gradle
+          # 构建默认的 sideload flavor
+          ./gradlew assembleSideloadRelease --no-daemon -I init.gradle
 
       - name: List generated apk files
         working-directory: ./lightninglauncher_source/Launcher
