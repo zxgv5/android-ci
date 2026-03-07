@@ -76,6 +76,14 @@ jobs:
           }
           EOF
 
+      # 创建 app.properties 文件（项目需要）
+      - name: Create app.properties file
+        working-directory: ./launchercompose_source
+        run: |
+          touch app.properties
+          # 如果 secrets 中有定义 APP_PROPERTIES 内容，可以用以下命令写入
+          # echo "${{ secrets.APP_PROPERTIES }}" > app.properties
+
       - name: Build signed apk with init script
         working-directory: ./launchercompose_source
         env:
