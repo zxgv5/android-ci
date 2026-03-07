@@ -1,0 +1,63 @@
+name: 'Zip with aes256 and release'
+ 
+description: '安装7zip，打包目录为.7z(启用aes256加密，及文件名加密)，并发布的可重用action'
+ 
+  ZIP_AES256_PWD:
+    description: '7z压缩包的AES256加密口令（用secrets传递）'
+    required: true
+    type: string
+  ARTIFACT_DIRECTORY_PATH:
+    description: '待打包目录路径'
+    required: true
+    type: string
+  RELEASE_TAG_NAME:
+    description: 'Release Tag名'
+    required: true
+    type: string
+ 
+runs:
+  using: "composite"  # 复合步骤Action（支持多shell命令）
+  steps:
+    - name: Install 7zip
+      shell: bash
+      run: |
+        set -e
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-recommends p7zip-full
+ 
+    - name: Create aes256 archive with filename encryption
+      shell: bash
+      working-directory: "${{ github.workspace }}"
+      run: |
+        set -e
+        pwd
+        # 打包并加密（参数说明：-mhe=on启用文件名加密，-mx=5中等压缩级别）
+        7z a \
+          -p"${{ inputs.ZIP_AES256_PWD }}" \
+          -mhe=on \
+          -t7z \
+          -m0=lzma2 \
+          -mx=5 \
+          -mfb=64 \
+          -md=32m \
+          -ms=on \
+          -mhc=on \
+          -ma=2 \
+          "${{ inputs.ARTIFACT_DIRECTORY_PATH }}.7z" \
+          "${{ inputs.ARTIFACT_DIRECTORY_PATH }}"
+        # 校验压缩包生成结果
+        if [ -f "${{ inputs.ARTIFACT_DIRECTORY_PATH }}.7z" ]; then
+          echo "✅ 加密压缩包已生成：${{ inputs.ARTIFACT_DIRECTORY_PATH }}.7z"
+        else
+          echo "❌ 压缩包生成失败"
+          exit 1
+        fi
+ 
+    - name: Create github release
+      uses: zxgv5/gh-ReleaseAction@master
+      with:
+        tag_name: ${{ inputs.RELEASE_TAG_NAME }}
+        draft: false
+        prerelease: false
+        files: |
+          ${{ github.workspace }}/${{ inputs.ARTIFACT_DIRECTORY_PATH }}.7z
