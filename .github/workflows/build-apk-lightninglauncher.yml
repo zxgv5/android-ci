@@ -5,7 +5,7 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '17'                     # 项目使用 Java 17
+  JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
@@ -52,7 +52,8 @@ jobs:
       - name: Decode keystore and create init script
         working-directory: ./lightninglauncher_source/Launcher
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          mkdir -p App
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > App/keystore.p12
           cat > init.gradle << EOF
           allprojects {
               afterEvaluate { project ->
@@ -61,7 +62,7 @@ jobs:
                           project.android.signingConfigs.create('release')
                       }
                       def releaseConfig = project.android.signingConfigs.getByName('release')
-                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storeFile = project.rootProject.file('App/keystore.p12')
                       releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
                       releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
                       releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
@@ -69,7 +70,6 @@ jobs:
                       releaseConfig.enableV1Signing = true
                       releaseConfig.enableV2Signing = true
                       releaseConfig.enableV3Signing = true
-                      // 覆盖默认的 debug 签名，使用我们的 release 签名
                       project.android.buildTypes.release.signingConfig = releaseConfig
                   }
               }
@@ -83,25 +83,24 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          # 构建默认 flavor (sideload) 的 release 包
           ./gradlew assembleSideloadRelease --no-daemon -I init.gradle
 
       - name: List generated apk files
         working-directory: ./lightninglauncher_source/Launcher
         run: |
           echo "Listing all apk files generated:"
-          find app/build/outputs -type f -name "*.apk" | sort
+          find App/build/outputs -type f -name "*.apk" | sort
 
       - name: Rename and move
         working-directory: ./lightninglauncher_source/Launcher
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/sideload/release/app-sideload-release.apk" "${{ github.workspace }}/dist/lightninglauncher-${{ env.BUILD_DATE }}.apk"
+          mv "./App/build/outputs/apk/sideload/release/app-sideload-release.apk" "${{ github.workspace }}/dist/lightninglauncher-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./lightninglauncher_source/Launcher/app/keystore.p12"
+          P12_KEYSTORE_PATH: "./lightninglauncher_source/Launcher/App/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/lightninglauncher-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-lightninglauncher"
