@@ -115,7 +115,7 @@ jobs:
         working-directory: ./lightninglauncher_source/Launcher
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./App/build/outputs/apk/sideload/release/app-sideload-release.apk" "${{ github.workspace }}/dist/lightninglauncher-${{ env.BUILD_DATE }}.apk"
+          mv "./App/build/outputs/apk/sideload/release/App-sideload-release.apk" "${{ github.workspace }}/dist/lightninglauncher-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
