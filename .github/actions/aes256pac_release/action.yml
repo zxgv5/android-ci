@@ -1,7 +1,8 @@
 name: 'Zip with aes256 and release'
  
 description: '安装7zip，打包目录为.7z(启用aes256加密，及文件名加密)，并发布的可重用action'
- 
+
+inputs:
   ZIP_AES256_PWD:
     description: '7z压缩包的AES256加密口令（用secrets传递）'
     required: true
