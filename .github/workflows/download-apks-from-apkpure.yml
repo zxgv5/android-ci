@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: "包名（多个包名用英文分号 ; 分隔）"
+        description: "包名"
         required: true
         default: "com.cxinventor.file.explorer;org.freedownloadmanager.fdm;com.rhmsoft.edit;com.rhmsoft.code;mark.via.gp;com.flyersoft.moonreader;com.azure.authenticator;org.mozilla.focus;com.mxtech.videoplayer.ad"
         type: string
@@ -21,6 +21,11 @@ jobs:
   download:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
