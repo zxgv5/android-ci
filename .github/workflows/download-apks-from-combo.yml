@@ -23,11 +23,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@main
+        with:
+          path: ci_source
 
       - name: Generate timestamp
         run: echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
 
-      - name: Setup Node.js
+      - name: Setup node.js
         uses: actions/setup-node@main
         with:
           node-version: '20'
@@ -55,9 +57,19 @@ jobs:
           for pkg in "${packages[@]}"; do
             pkg_trimmed=$(echo "$pkg" | xargs)
             if [ -n "$pkg_trimmed" ]; then
+              # 改进的 org 生成规则：提取包名中可能的应用名部分
               IFS='.' read -ra parts <<< "$pkg_trimmed"
-              # APKCombo 格式：org 取最后一段，repo 取完整包名
-              org="${parts[-1]}"
+              if [ ${#parts[@]} -ge 3 ]; then
+                # 去掉前两个部分，剩余部分用连字符连接（例如 com.cxinventor.file.explorer → file-explorer）
+                org=$(echo "${parts[@]:2}" | tr ' ' '-')
+                # 特殊处理 com.google.android 类应用，应用名取最后一段
+                if [[ "$pkg_trimmed" == com.google.android.* ]]; then
+                  org="${parts[-1]}"
+                fi
+              else
+                # 包名少于三段，直接取最后一段
+                org="${parts[-1]}"
+              fi
               repo="$pkg_trimmed"
               if [ "$first" = true ]; then
                 first=false
