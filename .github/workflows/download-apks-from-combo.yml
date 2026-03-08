@@ -110,11 +110,11 @@ jobs:
           echo "}" >> apps.json
           cat apps.json
 
-      - name: Download apks using npx apkcd
+      - name: Download apks using node cli
         run: |
           set -euo pipefail
-          # 使用 npx 直接运行 apkcd，无需手动下载二进制文件
-          npx @nirewen/apkcombo-downloader apps.json
+          # 直接调用 apkcombo-downloader 的 CLI 入口文件
+          node node_modules/@nirewen/apkcombo-downloader/dist/cli.js apps.json
           echo "下载完成，文件清单："
           ls -lh "./apks-combo-${{ env.BUILD_DATE }}/"
 
