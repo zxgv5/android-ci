@@ -110,16 +110,11 @@ jobs:
           echo "}" >> apps.json
           cat apps.json
 
-      - name: Download apkcd CLI
-        run: |
-          # 下载最新版 apkcd（Linux x86_64）
-          wget -q https://github.com/nirewen/apkcombo-downloader/releases/latest/download/apkcd-linux-amd64 -O apkcd
-          chmod +x apkcd
-
-      - name: Download apks using apkcd CLI
+      - name: Download apks using npx apkcd
         run: |
           set -euo pipefail
-          ./apkcd apps.json
+          # 使用 npx 直接运行 apkcd，无需手动下载二进制文件
+          npx @nirewen/apkcombo-downloader apps.json
           echo "下载完成，文件清单："
           ls -lh "./apks-combo-${{ env.BUILD_DATE }}/"
 
