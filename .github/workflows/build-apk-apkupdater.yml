@@ -76,24 +76,15 @@ jobs:
           }
           EOF
 
-      # 添加备用 Maven 仓库
-      - name: Add fallback maven repositories to settings.gradle
+      # 修改 settings.gradle.kts，添加备用海外源
+      - name: Add fallback maven repositories to settings.gradle.kts
         working-directory: ./apkupdater_source
         run: |
-          # 在 settings.gradle 的 dependencyResolutionManagement.repositories 块中添加备用源
-          cat >> settings.gradle << 'EOF'
-          dependencyResolutionManagement {
-              repositories {
-                  mavenCentral()
-                  google()
-                  maven { url 'https://jitpack.io' }
-                  maven { url 'https://repo1.maven.org/maven2' }
-                  maven { url 'https://uk.maven.org/maven2' }
-                  maven { url 'https://mirrors.dotsrc.org/maven2' }
-              }
-          }
-          EOF
- 
+          # 在 dependencyResolutionManagement.repositories 块的最后添加备用源
+          sed -i '/maven("https:\/\/gitlab.com\/api\/v4\/projects\/18497829\/packages\/maven")/a \        maven("https://repo1.maven.org/maven2")\n        maven("https://uk.maven.org/maven2")\n        maven("https://mirrors.dotsrc.org/maven2")' settings.gradle.kts
+          echo "Updated settings.gradle.kts content:"
+          cat settings.gradle.kts
+
       - name: Build signed apk with init script
         working-directory: ./apkupdater_source
         env:
