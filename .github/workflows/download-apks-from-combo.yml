@@ -110,33 +110,90 @@ jobs:
           echo "}" >> apps.json
           cat apps.json
 
-      - name: Download apks using node.js script
+      - name: Install axios and cheerio
+        run: npm install axios cheerio
+      
+      - name: Download apks using custom script
         run: |
           set -euo pipefail
-          cat > download.js << 'EOF'
+          cat > download-custom.js << 'EOF'
           const fs = require('fs');
-          const { APKComboDownloader } = require('@nirewen/apkcombo-downloader');
-
+          const axios = require('axios');
+          const cheerio = require('cheerio');
           const config = JSON.parse(fs.readFileSync('apps.json', 'utf8'));
           const { options, apps } = config;
           const failedApps = [];
-
+          async function downloadFile(url, dest) {
+            const writer = fs.createWriteStream(dest);
+            const response = await axios({
+              method: 'get',
+              url: url,
+              responseType: 'stream',
+              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+            });
+            response.data.pipe(writer);
+            return new Promise((resolve, reject) => {
+              writer.on('finish', resolve);
+              writer.on('error', reject);
+            });
+          }
+      
           (async () => {
-            const downloader = new APKComboDownloader(options);
             for (const app of apps) {
-              console.log(`\n▶️ 正在下载：${app.org}/${app.repo}`);
-
-              // 手动构造版本页面 URL 并打印，用于调试
+              console.log(`\n▶️ 正在处理：${app.org}/${app.repo}`);
               const versionPageUrl = `https://apkcombo.app/${app.org}/${app.repo}/`;
               console.log(`📄 版本页面 URL: ${versionPageUrl}`);
-
               try {
-                await downloader.download({
-                  org: app.org,
-                  repo: app.repo,
-                  outFile: app.outFile
+                // 获取版本页面 HTML
+                const { data: html } = await axios.get(versionPageUrl, {
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
                 });
-                console.log(`✅ 下载成功：${app.outFile}`);
+                const $ = cheerio.load(html);
+      
+                // 查找最新稳定版本的链接（根据实际页面结构调整选择器）
+                // 假设版本列表在 class="versions-list" 中，每个版本项包含 <a> 链接
+                const versionLink = $('a.version-link').first().attr('href'); // 需要根据实际页面调整
+                if (!versionLink) {
+                  throw new Error('未找到任何版本');
+                }
+                const versionUrl = new URL(versionLink, versionPageUrl).href;
+                console.log(`📦 版本详情页: ${versionUrl}`);
+                // 获取版本详情页（变体选择页）
+                const { data: versionHtml } = await axios.get(versionUrl, {
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+                });
+                const $v = cheerio.load(versionHtml);
+                // 查找下载链接（根据架构筛选）
+                // 通常每个变体会有一个下载按钮，例如 <a class="download-btn" href="...">
+                // 我们优先选择符合指定架构的变体
+                let downloadLink = null;
+                const arch = options.arch || 'universal';
+                $v('a.download-btn').each((i, el) => {
+                  const text = $v(el).text().toLowerCase();
+                  if (text.includes(arch) || text.includes('universal')) {
+                    downloadLink = $v(el).attr('href');
+                    return false; // 找到后停止
+                  }
+                });
+                // 如果没找到指定架构，取第一个下载按钮
+                if (!downloadLink) {
+                  downloadLink = $v('a.download-btn').first().attr('href');
+                }
+                if (!downloadLink) {
+                  // 有些页面的下载按钮可能不是直接链接，而是通过 onclick 跳转
+                  // 可尝试提取 data-url 或类似属性
+                  downloadLink = $v('[data-url]').first().attr('data-url');
+                }
+                if (!downloadLink) {
+                  throw new Error('未找到下载链接');
+                }
+                const downloadUrl = new URL(downloadLink, versionUrl).href;
+                console.log(`⬇️ 下载 URL: ${downloadUrl}`);
+                // 确定输出文件名
+                const outFile = app.outFile || `${app.repo}.apk`;
+                const dest = `${options.outDir}/${outFile}`;
+                await downloadFile(downloadUrl, dest);
+                console.log(`✅ 下载成功：${outFile}`);
               } catch (err) {
                 console.error(`❌ 下载失败：${app.org}/${app.repo} - ${err.message}`);
                 failedApps.push(app);
@@ -152,7 +209,7 @@ jobs:
             process.exit(1);
           });
           EOF
-          node download.js
+          node download-custom.js
           echo "下载完成，文件清单："
           ls -lh "./apks-combo-${{ env.BUILD_DATE }}/"
 
