@@ -50,7 +50,6 @@ jobs:
           echo '    "arch": "${{ inputs.architecture }}",' >> apps.json
           echo '    "outDir": "'$DOWNLOAD_DIR'",' >> apps.json
           echo '    "dpi": "nodpi"' >> apps.json
-          # 注意：combo 下载器没有 fallbackArch 选项，已移除
           echo '  },' >> apps.json
           echo '  "apps": [' >> apps.json
           first=true
@@ -117,23 +116,20 @@ jobs:
           cat > download.js << 'EOF'
           const fs = require('fs');
           const { APKComboDownloader } = require('@nirewen/apkcombo-downloader');
-          
-          // 调试：打印版本页面 URL 辅助诊断
-          const { makeRepoUrl } = require('@nirewen/apkcombo-downloader/dist/utils');
-          
+
           const config = JSON.parse(fs.readFileSync('apps.json', 'utf8'));
           const { options, apps } = config;
           const failedApps = [];
-          
+
           (async () => {
             const downloader = new APKComboDownloader(options);
             for (const app of apps) {
               console.log(`\n▶️ 正在下载：${app.org}/${app.repo}`);
-              
-              // 调试：输出版本页面 URL
-              const repoUrl = makeRepoUrl({ org: app.org, repo: app.repo });
-              console.log(`📄 版本页面 URL: ${repoUrl}`);
-              
+
+              // 手动构造版本页面 URL 并打印，用于调试
+              const versionPageUrl = `https://apkcombo.app/${app.org}/${app.repo}/`;
+              console.log(`📄 版本页面 URL: ${versionPageUrl}`);
+
               try {
                 await downloader.download({
                   org: app.org,
