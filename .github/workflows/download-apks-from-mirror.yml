@@ -75,7 +75,7 @@ jobs:
           echo "生成的配置文件内容："
           cat apps.json
 
-      - name: Download APKs using apkmirror-downloader
+      - name: Download apks
         run: |
           set -euo pipefail
           apkmd apps.json
