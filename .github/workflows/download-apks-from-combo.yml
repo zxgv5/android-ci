@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: "包名"
+        description: "包名（多个包名用英文分号 ; 分隔）"
         required: true
         type: string
         default: "com.cxinventor.file.explorer;org.freedownloadmanager.fdm;com.rhmsoft.edit;com.rhmsoft.code;mark.via.gp;com.flyersoft.moonreader;com.azure.authenticator;org.mozilla.focus;com.mxtech.videoplayer.ad"
       architecture:
-        description: "架构(universal等)"
+        description: "架构（arm64-v8a, armeabi-v7a, x86, x86_64, universal 等）"
         required: false
         default: "arm64-v8a"
         type: string
@@ -29,7 +29,7 @@ jobs:
       - name: Generate timestamp
         run: echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
 
-      - name: Setup node.js
+      - name: Setup Node.js
         uses: actions/setup-node@main
         with:
           node-version: '20'
@@ -49,27 +49,51 @@ jobs:
           echo '  "options": {' >> apps.json
           echo '    "arch": "${{ inputs.architecture }}",' >> apps.json
           echo '    "outDir": "'$DOWNLOAD_DIR'",' >> apps.json
-          echo '    "dpi": "nodpi",' >> apps.json
-          echo '    "fallbackArch": "universal"' >> apps.json
+          echo '    "dpi": "nodpi"' >> apps.json
+          # 注意：combo 下载器没有 fallbackArch 选项，已移除
           echo '  },' >> apps.json
           echo '  "apps": [' >> apps.json
           first=true
           for pkg in "${packages[@]}"; do
             pkg_trimmed=$(echo "$pkg" | xargs)
             if [ -n "$pkg_trimmed" ]; then
-              # 改进的 org 生成规则：提取包名中可能的应用名部分
               IFS='.' read -ra parts <<< "$pkg_trimmed"
-              if [ ${#parts[@]} -ge 3 ]; then
-                # 去掉前两个部分，剩余部分用连字符连接（例如 com.cxinventor.file.explorer → file-explorer）
-                org=$(echo "${parts[@]:2}" | tr ' ' '-')
-                # 特殊处理 com.google.android 类应用，应用名取最后一段
-                if [[ "$pkg_trimmed" == com.google.android.* ]]; then
+              
+              # 手动映射 org（请根据实际应用名调整）
+              case "$pkg_trimmed" in
+                com.cxinventor.file.explorer)
+                  org="cx-file-explorer"  # 假设的应用名，请验证
+                  ;;
+                org.freedownloadmanager.fdm)
+                  org="fdm"
+                  ;;
+                com.rhmsoft.edit)
+                  org="edit"
+                  ;;
+                com.rhmsoft.code)
+                  org="code"
+                  ;;
+                mark.via.gp)
+                  org="via-browser"  # 推测，请验证
+                  ;;
+                com.flyersoft.moonreader)
+                  org="moon-reader"
+                  ;;
+                com.azure.authenticator)
+                  org="microsoft-authenticator"  # 推测，请验证
+                  ;;
+                org.mozilla.focus)
+                  org="firefox-focus"
+                  ;;
+                com.mxtech.videoplayer.ad)
+                  org="mx-player"
+                  ;;
+                *)
+                  # 默认规则：取包名最后一段（可能不准确）
                   org="${parts[-1]}"
-                fi
-              else
-                # 包名少于三段，直接取最后一段
-                org="${parts[-1]}"
-              fi
+                  ;;
+              esac
+              
               repo="$pkg_trimmed"
               if [ "$first" = true ]; then
                 first=false
@@ -93,13 +117,23 @@ jobs:
           cat > download.js << 'EOF'
           const fs = require('fs');
           const { APKComboDownloader } = require('@nirewen/apkcombo-downloader');
+          
+          // 调试：打印版本页面 URL 辅助诊断
+          const { makeRepoUrl } = require('@nirewen/apkcombo-downloader/dist/utils');
+          
           const config = JSON.parse(fs.readFileSync('apps.json', 'utf8'));
           const { options, apps } = config;
           const failedApps = [];
+          
           (async () => {
             const downloader = new APKComboDownloader(options);
             for (const app of apps) {
-              console.log(`正在下载：${app.org}/${app.repo}`);
+              console.log(`\n▶️ 正在下载：${app.org}/${app.repo}`);
+              
+              // 调试：输出版本页面 URL
+              const repoUrl = makeRepoUrl({ org: app.org, repo: app.repo });
+              console.log(`📄 版本页面 URL: ${repoUrl}`);
+              
               try {
                 await downloader.download({
                   org: app.org,
@@ -113,7 +147,7 @@ jobs:
               }
             }
             if (failedApps.length > 0) {
-              console.error('\n以下应用下载失败：');
+              console.error('\n❌ 以下应用下载失败：');
               failedApps.forEach(app => console.error(`- ${app.org}/${app.repo}`));
               process.exit(1);
             }
