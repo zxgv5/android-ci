@@ -1,5 +1,5 @@
 name: download-apks-from-mirror
-
+ 
 on:
   workflow_dispatch:
     inputs:
@@ -13,28 +13,28 @@ on:
         required: false
         default: "arm64-v8a"
         type: string
-
+ 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 jobs:
   download:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@main
-
+ 
       - name: Setup Node.js
         uses: actions/setup-node@main
         with:
           node-version: '20'
-
+ 
       - name: Install apkmirror-downloader
         run: npm install -g apkmirror-downloader
-
+ 
       - name: Generate timestamp
         run: echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
-
+ 
       - name: Prepare download configuration
         run: |
           set -euo pipefail
@@ -74,14 +74,14 @@ jobs:
           echo "}" >> apps.json
           echo "生成的配置文件内容："
           cat apps.json
-
+ 
       - name: Download apks
         run: |
           set -euo pipefail
-          apkmd apps.json
+          npx apkmd apps.json
           echo "下载完成，文件清单："
           ls -lh "./apks-mirror-${{ env.BUILD_DATE }}/"
-
+ 
       - name: Encrypt apks and create release
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
