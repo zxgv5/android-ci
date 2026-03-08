@@ -34,13 +34,6 @@ jobs:
  
       - name: Install apkmirror-downloader
         run: npm install -g apkmirror-downloader
-
-      - name: Verify apkmd installation
-        run: |
-          which apkmd || echo "apkmd not in PATH"
-          head -n 2 $(which apkmd) || true
-          npm list -g apkmirror-downloader
-          npx apkmd --help || true
  
       - name: Prepare download configuration
         run: |
