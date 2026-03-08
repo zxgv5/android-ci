@@ -23,7 +23,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@main
- 
+
+      - name: Generate timestamp
+        run: echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
+
       - name: Setup Node.js
         uses: actions/setup-node@main
         with:
@@ -31,9 +34,13 @@ jobs:
  
       - name: Install apkmirror-downloader
         run: npm install -g apkmirror-downloader
- 
-      - name: Generate timestamp
-        run: echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
+
+      - name: Verify apkmd installation
+        run: |
+          which apkmd || echo "apkmd not in PATH"
+          head -n 2 $(which apkmd) || true
+          npm list -g apkmirror-downloader
+          npx apkmd --help || true
  
       - name: Prepare download configuration
         run: |
