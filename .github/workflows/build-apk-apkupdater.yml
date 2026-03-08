@@ -76,12 +76,11 @@ jobs:
           }
           EOF
 
-      # 修改 settings.gradle.kts，添加备用海外源
-      - name: Add fallback maven repositories to settings.gradle.kts
+      - name: Patch settings.gradle.kts
         working-directory: ./apkupdater_source
         run: |
-          # 在 dependencyResolutionManagement.repositories 块的最后添加备用源
-          sed -i '/maven("https:\/\/gitlab.com\/api\/v4\/projects\/18497829\/packages\/maven")/a \        maven("https://repo1.maven.org/maven2")\n        maven("https://uk.maven.org/maven2")\n        maven("https://mirrors.dotsrc.org/maven2")' settings.gradle.kts
+          # 替换为带 www 的版本，解决超时问题
+          sed -i 's|https://jitpack.io|https://www.jitpack.io|g' settings.gradle.kts
           echo "Updated settings.gradle.kts content:"
           cat settings.gradle.kts
 
