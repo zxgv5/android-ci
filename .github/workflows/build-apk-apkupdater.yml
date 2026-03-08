@@ -58,7 +58,6 @@ jobs:
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
-                      // 获取已有的 release signingConfig 或创建
                       def releaseConfig = project.android.signingConfigs.findByName('release')
                       if (releaseConfig == null) {
                           releaseConfig = project.android.signingConfigs.create('release')
@@ -71,9 +70,25 @@ jobs:
                       releaseConfig.enableV1Signing = true
                       releaseConfig.enableV2Signing = true
                       releaseConfig.enableV3Signing = true
-                      // 确保 release build type 使用此签名配置
                       project.android.buildTypes.release.signingConfig = releaseConfig
                   }
+              }
+          }
+          EOF
+
+      # 添加备用 Maven 仓库
+      - name: Add fallback maven repositories
+        working-directory: ./apkupdater_source
+        run: |
+          cat >> build.gradle << 'EOF'
+          allprojects {
+              repositories {
+                  mavenCentral()
+                  google()
+                  maven { url 'https://jitpack.io' }
+                  maven { url 'https://repo1.maven.org/maven2' }
+                  maven { url 'https://uk.maven.org/maven2' }
+                  maven { url 'https://mirrors.dotsrc.org/maven2' }
               }
           }
           EOF
