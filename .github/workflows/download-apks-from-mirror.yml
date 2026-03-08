@@ -82,12 +82,42 @@ jobs:
           echo "生成的配置文件内容："
           cat apps.json
  
-      - name: Download apks
+      # 用 Node.js 直接调用 apkmirror-downloader 编程接口，绕开有问题的cli
+      - name: Download apks using node.js
         run: |
           set -euo pipefail
-          npx apkmd apps.json
-          echo "下载完成，文件清单："
-          ls -lh "./apks-mirror-${{ env.BUILD_DATE }}/"
+          node -e "
+          const fs = require('fs');
+          const { APKMirrorDownloader } = require('apkmirror-downloader');
+          const config = JSON.parse(fs.readFileSync('apps.json', 'utf8'));
+          const { options, apps } = config;
+          const failedApps = [];
+          (async () => {
+            const downloader = new APKMirrorDownloader(options);
+            for (const app of apps) {
+              console.log(`正在下载：\${app.org}/\${app.repo}`);
+              try {
+                await downloader.download({
+                  org: app.org,
+                  repo: app.repo,
+                  outFile: app.outFile  // 使用包名作为基础文件名
+                });
+                console.log(`✅ 下载成功：\${app.outFile}`);
+              } catch (err) {
+                console.error(`❌ 下载失败：\${app.org}/\${app.repo} - \${err.message}`);
+                failedApps.push(app);
+              }
+            }
+            if (failedApps.length > 0) {
+              console.error('\\n以下应用下载失败：');
+              failedApps.forEach(app => console.error(`- \${app.org}/\${app.repo}`));
+              process.exit(1);
+            }
+          })().catch(err => {
+            console.error('脚本执行出错：', err);
+            process.exit(1);
+          });
+          "
  
       - name: Encrypt apks and create release
         uses: ./ci_source/.github/actions/aes256pac_release/
