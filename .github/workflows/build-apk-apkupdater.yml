@@ -77,11 +77,12 @@ jobs:
           EOF
 
       # 添加备用 Maven 仓库
-      - name: Add fallback maven repositories
+      - name: Add fallback maven repositories to settings.gradle
         working-directory: ./apkupdater_source
         run: |
-          cat >> build.gradle << 'EOF'
-          allprojects {
+          # 在 settings.gradle 的 dependencyResolutionManagement.repositories 块中添加备用源
+          cat >> settings.gradle << 'EOF'
+          dependencyResolutionManagement {
               repositories {
                   mavenCentral()
                   google()
@@ -92,7 +93,7 @@ jobs:
               }
           }
           EOF
-
+ 
       - name: Build signed apk with init script
         working-directory: ./apkupdater_source
         env:
