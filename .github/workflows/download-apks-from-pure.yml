@@ -9,7 +9,7 @@ on:
         default: "com.cxinventor.file.explorer;org.freedownloadmanager.fdm;com.rhmsoft.edit;com.rhmsoft.code;mark.via.gp;com.flyersoft.moonreader;com.azure.authenticator;org.mozilla.focus;com.mxtech.videoplayer.ad"
         type: string
       architecture:
-        description: "架构（arm64-v8a, armeabi-v7a, x86, x86_64）"
+        description: "架构(universal等)"
         required: false
         default: "arm64-v8a"
         type: string
@@ -26,7 +26,7 @@ jobs:
         with:
           path: ci_source
 
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
@@ -41,7 +41,7 @@ jobs:
           cargo install apkeep
           apkeep --version
 
-      - name: Create directory and download apk
+      - name: Create directory and download apks
         run: |
           set -euo pipefail
           mkdir -p "./apks-pure-${{ env.BUILD_DATE }}"
