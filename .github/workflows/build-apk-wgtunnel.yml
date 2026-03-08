@@ -25,7 +25,7 @@ jobs:
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
-          repository: wgtunnel/wgtunnel
+          repository: wgtunnel/android
           ref: master
           path: wgtunnel_source
           fetch-depth: 0
