@@ -1,0 +1,141 @@
+name: build-apk-acode
+ 
+on:
+  workflow_dispatch:
+  workflow_call:
+ 
+permissions:
+  contents: write
+ 
+env:
+  JDK_VERSION: '22'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: "${{secrets.GITHUB_TOKEN}}"
+  BUILD_JSON_PATH: "./build.json"
+  STORE_FILE_PATH: "/tmp/app-release.keystore"
+  KEYSTORE_PASSWORD: "${{secrets.KEYSTORE_PASSWORD}}"
+  KEY_ALIAS: "${{secrets.KEY_ALIAS}}"
+  KEY_PASSWORD: "${{secrets.KEY_PASSWORD}}"
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+          # 清理 Node.js/npm 缓存
+          rm -rf ~/.npm/
+          rm -rf ~/.cordova/
+          rm -rf ~/.cache/
+          # 清理 node_modules
+          if [ -d "./acode_source/node_modules" ]; then
+            rm -rf ./acode_source/node_modules
+          fi
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: Acode-Foundation/Acode
+          ref: main
+          path: acode_source
+          fetch-depth: 0
+          submodules: recursive
+ 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Initialization values
+        run: |
+          # 先获取当前commit信息
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Fix build-extras.gradle for release build
+        run: |
+          chmod +x ${{ github.workspace }}/ci_source/scripts/customize-acode.sh
+          ${{ github.workspace }}/ci_source/scripts/customize-acode.sh
+ 
+      - name: Set up java
+        uses: actions/setup-java@main
+        with:
+          distribution: 'temurin'
+          java-version: '${{ env.JDK_VERSION }}'
+ 
+      - name: Set up node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: ''
+          check-latest: true
+ 
+      # app-release.keystore和build.json的路径都在构建文件中被硬编码
+      - name: Add keystore and build.json from secrets
+        run: |
+          mkdir -p /tmp
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ env.STORE_FILE_PATH }}"
+          echo "${{ secrets.ACODE_BUILD_JSON_CONTENT_BASE64 }}" | base64 -d > "${{ env.BUILD_JSON_PATH }}"
+          echo "Keystore and build.json added successfully."
+ 
+      - name: Replace config.js with secured version
+        working-directory: ./acode_source
+        run: |
+          echo "正在替换 utils/config.js 文件..."
+          # 从secrets中获取base64编码的config.js内容并解码
+          if [ -z "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" ]; then
+            echo "错误: ACODE_BUILD_CONFIGJS_BASE64 secret 为空!"
+            exit 1
+          fi
+          echo "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" | base64 -d > utils/config.js
+ 
+      - name: Install bun
+        uses: oven-sh/setup-bun@main
+        with:
+          bun-version: latest
+ 
+      - name: Install setup and npm build
+        working-directory: ./acode_source
+        run: |
+          npm install
+          npm install -g cordova
+          npm run setup
+          node utils/storage_manager.mjs y
+          npm run build paid apk
+ 
+      - name: Build release apk files with gradle
+        working-directory: ./acode_source/platforms/android
+        run: |
+          ./gradlew clean
+          ./gradlew assembleRelease
+          mkdir -p "${{ github.workspace }}/dist"
+          mv  app/build/outputs/apk/release/app-release-unsigned.apk "${{ github.workspace }}/dist/acode-unsigned.apk"
+          
+      - name: Sign the apk (pkcs12)
+        working-directory: ./acode_source
+        run: |
+          # 设置Android build-tools路径
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
+          # 使用apksigner对APK签名
+          apksigner sign \
+            --ks "${{ env.STORE_FILE_PATH }}" \
+            --ks-pass "pass:${{ env.KEYSTORE_PASSWORD }}" \
+            --ks-key-alias "${{ env.KEY_ALIAS }}" \
+            --ks-type PKCS12 \
+            --out "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk" \
+            "${{ github.workspace }}/dist/acode-unsigned.apk"
+          # 验证签名
+          apksigner verify --verbose "${{ github.workspace }}/dist/acode-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "${{ env.BUILD_JSON_PATH }} ${{ env.STORE_FILE_PATH }}"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/acode-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-acode"

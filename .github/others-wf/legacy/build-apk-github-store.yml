@@ -1,0 +1,87 @@
+name: build-apk-github-store
+ 
+on:
+  workflow_dispatch:
+  workflow_call:
+ 
+env:
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+ 
+permissions:
+  contents: write
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          # 清理可能存在的全局缓存文件
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: rainxchzed/Github-Store
+          ref: main
+          path: ghstore_source
+          fetch-depth: 0
+ 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+ 
+      - name: Decode keystore
+        working-directory: ./ghstore_source
+        run: |
+          mkdir -p ./keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore/keystore.p12
+ 
+      - name: Build release apk
+        working-directory: ./ghstore_source
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease
+ 
+      - name: Sign the apk (pkcs12)
+        working-directory: ./ghstore_source
+        env:
+          ANDROID_KEYSTORE_PATH: "./keystore/keystore.p12"
+          ANDROID_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+          mkdir -p "${{ github.workspace }}/dist"
+          apksigner sign \
+            --ks "${{ env.ANDROID_KEYSTORE_PATH }}" \
+            --ks-pass "pass:${{ env.ANDROID_STORE_PASSWORD }}" \
+            --ks-key-alias "${{ env.ANDROID_KEY_ALIAS }}" \
+            --ks-type PKCS12 \
+            --out "${{ github.workspace }}/dist/github-store-${{ env.BUILD_DATE }}.apk" \
+            "./composeApp/build/outputs/apk/release/composeApp-release-unsigned.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./ghstore_source/keystore/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/github-store-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-github-store"

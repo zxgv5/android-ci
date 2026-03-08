@@ -1,0 +1,94 @@
+name: build-apk-musicfree
+ 
+on:
+  workflow_dispatch:
+  workflow_call:
+ 
+env:
+  JDK_VERSION: '17'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+ 
+permissions:
+  contents: write
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          # 清理可能存在的全局缓存文件
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: maotoumao/MusicFree
+          ref: master
+          # ref: dev
+          path: musicfree_source
+          fetch-depth: 0
+ 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "temurin"
+ 
+      - name: Setup node.js
+        uses: actions/setup-node@main
+        with: 
+          node-version: 20
+ 
+      - name: Install dependencies
+        working-directory: ./musicfree_source
+        run: npm ci --prefer-offline --no-audit      
+ 
+      - name: Decode keystore.p12 and write signing.properties
+        working-directory: ./musicfree_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/keystore.p12
+          cat << EOF > android/keystore.properties
+          RELEASE_STORE_FILE=${{ github.workspace }}/musicfree_source/android/app/keystore.p12
+          RELEASE_STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
+ 
+      - name: Build apk
+        working-directory: ./musicfree_source/android
+        run: | 
+          chmod +x ./gradlew
+          # ./gradlew clean :app:assembleRelease -Psplits.abi.enable=true -Psplits.abi.include=arm64-v8a -Psplits.abi.universalApk=false --parallel  --configure-on-demand
+          ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
+          # ./gradlew assembleRelease -Pandroid.injected.abiFilters=arm64-v8a
+          # ./gradlew assembleRelease -Psplits.abi.include=arm64-v8a -Psplits.abi.universalApk=false
+ 
+      - name: List generated apk and rename
+        working-directory: ./musicfree_source
+        run: |
+          echo "Generated APK files:"
+          find android/app/build/outputs/apk/release -name "*.apk" -exec ls -lh {} \;
+          mkdir -p ${{ github.workspace }}/dist
+          mv android/app/build/outputs/apk/release/app-arm64-v8a-release.apk "${{ github.workspace }}/dist/musicfree-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./musicfree_source/android/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/musicfree-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-musicfree"

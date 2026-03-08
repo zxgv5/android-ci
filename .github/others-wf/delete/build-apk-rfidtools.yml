@@ -1,0 +1,126 @@
+name: build-apk-rfidtools
+ 
+on:
+  workflow_dispatch:
+  workflow_call:
+ 
+env:
+  JDK_VERSION: '17'
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: RfidResearchGroup/RFIDtools
+          ref: master
+          path: rfidtools_source
+          fetch-depth: 0
+          submodules: recursive
+ 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Initialization values
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          distribution: '${{ env.JDK_DISTRIBUTION }}'
+          java-version: '${{ env.JDK_VERSION }}'
+ 
+      - name: Install required cmake version
+        run: |
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "cmake;3.10.2.4988404"
+          echo "ANDROID_CMAKE_HOME=$ANDROID_HOME/cmake/3.10.2.4988404" >> $GITHUB_ENV
+ 
+      - name: Fix incorrect macro definition in libflasher
+        working-directory: ./rfidtools_source
+        run: |
+          find libflasher -name "CMakeLists.txt" -exec sed -i '/getlocaledecpoint/s/^/#/' {} \;
+          echo "Fixed getlocaledecpoint macro in CMakeLists.txt"
+ 
+      - name: Write keystore info and prepare gradle.properties
+        working-directory: ./rfidtools_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/rfidtools_source/keystore.p12
+          if [ -f "gradle.properties" ]; then
+              if [ -s "gradle.properties" ] && [ "$(tail -c1 gradle.properties | wc -l)" -eq 0 ]; then
+                  echo "" >> gradle.properties
+              fi
+          fi
+          {
+            echo "KEYSTORE_FILE=${{ github.workspace }}/rfidtools_source/keystore.p12"
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}"
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
+            echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}"
+          } >> gradle.properties
+ 
+      - name: Fix gradle jvmargs for java 17
+        working-directory: ./rfidtools_source
+        run: |
+          sed -i 's/ -XX:MaxPermSize=[^ ]*//g' gradle.properties
+          sed -i 's/^-XX:MaxPermSize=[^ ]* //g' gradle.properties
+          sed -i 's/^-XX:MaxPermSize=[^ ]*$//g' gradle.properties
+ 
+      - name: Set up python 3.12
+        uses: actions/setup-python@main
+        with:
+          python-version: '3.12'
+ 
+      - name: Patch build.gradle
+        working-directory: ./rfidtools_source
+        run: |
+          python3 "${{ github.workspace }}/ci_source/scripts/patch_rfidtools_gradle.py" "./apprts/build.gradle"
+ 
+      - name: Setup gradle
+        uses: gradle/actions/setup-gradle@main
+        with:
+          dependency-graph: generate-and-submit
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
+ 
+      - name: Build with gradle
+        working-directory: ./rfidtools_source
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :apprts:assembleRelease
+ 
+      - name: List generated apk files
+        working-directory: ./rfidtools_source
+        run: |
+          echo "Listing all apk files generated:"
+          find apprts/build/outputs -name "*.apk" | sort
+ 
+      - name: Rename and move apk
+        working-directory: ./rfidtools_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          apkPath="apprts/build/outputs/apk/release/apprts-release.apk"
+          mv "$apkPath" "${{ github.workspace }}/dist/rfidtools-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./rfidtools_source/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/rfidtools-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-rfidtools"

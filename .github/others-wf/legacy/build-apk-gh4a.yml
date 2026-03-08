@@ -1,0 +1,149 @@
+name: build-apk-gh4a
+ 
+on:
+  workflow_dispatch:
+ 
+env:
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_MIN_SDK: '23'
+  ANDROID_TARGET_SDK: '33'
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  KEYSTORE_PATH: "$GITHUB_WORKSPACE/gh4a_source/keystore.p12"
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/transforms-*
+          rm -rf ~/.android/build-cache/
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: slapperwan/gh4a
+          ref: master
+          path: gh4a_source
+          fetch-depth: 0
+ 
+      - name: Checkout ci source repo (self)
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Setup jdk
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+ 
+      - name: Initialize build environment
+        id: init
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Decode keystore file
+        working-directory: ./gh4a_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${{ env.KEYSTORE_PATH }}
+ 
+      - name: Create signing properties
+        working-directory: ./gh4a_source
+        run: |
+          cat > signing.properties << EOF
+          STORE_FILE=${{ env.KEYSTORE_PATH }}
+          STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          EOF
+ 
+      # How to Build Octodroid
+      # Ensure Android SDK platform and build-tools are installed
+      # Register an application for your OctoDroid usage under your GitHub settings
+      # naming is up to you
+      # callback URL must be gh4a://oauth
+      # Create a client.properties file with the following content:
+      # ClientId="<CLIENT ID DISPLAYED IN APPLICATION SETTINGS>"
+      # ClientSecret="<CLIENT SECRET DISPLAYED IN APPLICATION SETTINGS>"
+      # Build using Gradle
+      # ./gradlew assembleDebug
+      # To get a full list of available tasks
+      # ./gradlew tasks
+ 
+      - name: Create client properties
+        working-directory: ./gh4a_source
+        run: |
+          cat > client.properties << 'EOF'
+          ClientId="${{ secrets.BUILD_GH4A_NEED_CLIENT_ID }}"
+          ClientSecret="${{ secrets.BUILD_GH4A_NEED_CLIENT_SECRET }}"
+          EOF
+          echo "client.properties content:"
+          cat client.properties
+          echo "client.properties created at: $(pwd)/client.properties"
+ 
+      - name: Verify files exist
+        working-directory: ./gh4a_source
+        run: |
+          echo "Checking files in $(pwd):"
+          ls -la
+          echo "Checking app directory:"
+          ls -la app/
+          echo "Checking if client.properties exists:"
+          ls -la client.properties
+          echo "Checking if signing.properties exists:"
+          ls -la signing.properties
+ 
+      - name: Build release
+        working-directory: ./gh4a_source
+        run: |
+          chmod +x ./gradlew
+          # 先清理构建缓存
+          ./gradlew clean
+          ./gradlew assembleRelease --stacktrace
+ 
+      - name: Find release apk
+        run: |
+          echo "Looking for APK files..."
+          RELEASE_APK=$(find ./gh4a_source -name "*release*.apk" ! -name "*unaligned*" -type f | head -1)
+          if [ -n "$RELEASE_APK" ]; then
+            echo "Found release APK: $RELEASE_APK"
+            echo "RELEASE_APK=$RELEASE_APK" >> $GITHUB_ENV
+            echo "apk_path=$RELEASE_APK" >> $GITHUB_OUTPUT
+          else
+            echo "No release APK found"
+            exit 1
+          fi
+ 
+      - name: Rename release apk
+        shell: bash
+        run: |
+          SRC_RELEASE_APK_PATH_NAME=$(dirname "${{ env.RELEASE_APK }}")
+          DST_RELEASE_APK_PATH_NAME="./gh4a_source/gh4a-${{ env.BUILD_DATE }}.apk"
+          # 3. 强制重命名
+          mv -f "${{ env.RELEASE_APK }}" "$DST_RELEASE_APK_PATH_NAME"
+          # 4. 验证结果+传递环境变量
+          if [ -f "$DST_RELEASE_APK_PATH_NAME" ]; then
+              echo "✅ 重命名成功：$DST_RELEASE_APK_PATH_NAME"
+              echo "RENAMED_APK=$DST_RELEASE_APK_PATH_NAME" >> "$GITHUB_ENV"
+          else
+              echo "❌ 重命名失败"
+              exit 1
+          fi
+ 
+      - name: Verify apk signature
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"
+          apksigner verify --verbose "${{ env.RENAMED_APK }}"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          # 文件路径为基于github.workspace的绝对路径
+          P12_KEYSTORE_PATH: "./gh4a_source/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "${{ env.RENAMED_APK }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-gh4a"
