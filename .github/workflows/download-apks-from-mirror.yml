@@ -43,26 +43,26 @@ jobs:
           DOWNLOAD_DIR="./apks-mirror-${{ env.BUILD_DATE }}"
           mkdir -p "$DOWNLOAD_DIR"
           IFS=';' read -ra packages <<< "${{ inputs.package_name }}"
-          # 开始构建 JSON 内容
           echo "{" > apps.json
           echo '  "options": {' >> apps.json
           echo '    "arch": "${{ inputs.architecture }}",' >> apps.json
-          echo '    "outDir": "'$DOWNLOAD_DIR'"' >> apps.json
+          echo '    "outDir": "'$DOWNLOAD_DIR'",' >> apps.json   # 注意这里增加了末尾逗号
+          echo '    "dpi": "nodpi",' >> apps.json                # 新增
+          echo '    "fallbackArch": "universal"' >> apps.json    # 新增（无逗号）
           echo '  },' >> apps.json
           echo '  "apps": [' >> apps.json
           first=true
           for pkg in "${packages[@]}"; do
             pkg_trimmed=$(echo "$pkg" | xargs)
             if [ -n "$pkg_trimmed" ]; then
-              # 将包名（如 com.google.android.youtube）拆分为 org 和 repo
               IFS='.' read -ra parts <<< "$pkg_trimmed"
-              org="${parts[1]}-inc"  # 转换为 APKMirror 格式，例如 google-inc
-              repo="${parts[-1]}"      # 取最后一部分作为仓库名
+              org="${parts[1]}-inc"
+              repo="${parts[-1]}"
               if [ "$first" = true ]; then
                 first=false
               else
                 echo "," >> apps.json
-              fi  
+              fi
               echo '    {' >> apps.json
               echo '      "org": "'$org'",' >> apps.json
               echo '      "repo": "'$repo'",' >> apps.json
@@ -72,8 +72,8 @@ jobs:
           done
           echo '  ]' >> apps.json
           echo "}" >> apps.json
-          cat apps.json  # 查看生成的配置
-      
+          cat apps.json
+ 
       - name: Download apks using node.js script
         run: |
           set -euo pipefail
