@@ -39,21 +39,22 @@ jobs:
         with:
           path: ci_source
 
-      # 确保子模块完全更新
-      - name: Update submodules
-        working-directory: ./sshd4a_source
-        run: git submodule update --init --recursive
-
       - name: Install build tools
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool
 
-      - name: Prepare native build
+      # 生成必要的头文件，避免原生编译失败
+      - name: Prepare native build (generate required headers)
         working-directory: ./sshd4a_source/app/src/main/cpp/dropbear
         run: |
-          chmod +x localoptions.sh
-          ./localoptions.sh
+          touch localoptions.h
+          cat > default_options_guard.h << 'EOF'
+          #ifndef DROPBEAR_DEFAULT_OPTIONS_GUARD_H_
+          #define DROPBEAR_DEFAULT_OPTIONS_GUARD_H_
+          #include "default_options.h"
+          #endif
+          EOF
 
       - name: Initialization values
         run: |
