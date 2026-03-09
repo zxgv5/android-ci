@@ -71,7 +71,7 @@ jobs:
                           project.android.signingConfigs.create('release')
                       }
                       def releaseConfig = project.android.signingConfigs.getByName('release')
-                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storeFile = project.rootProject.file('android/app/keystore.p12')
                       releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
                       releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
                       releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
