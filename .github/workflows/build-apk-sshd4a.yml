@@ -90,15 +90,28 @@ jobs:
       - name: Generate proto.h for rsync
         working-directory: ./sshd4a_source/app/src/main/cpp/rsync
         run: |
-          chmod +x mkproto.awk
-          echo "Checking for source files..."
-          ls -la *.c lib/*.c zlib/*.c popt/*.c || true
-          echo "Generating proto.h.full..."
-          awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h.full || { echo "awk failed"; exit 1; }
-          echo "Filtering proto.h..."
-          grep ';$' proto.h.full | grep -v '^#include' | grep -v 'Copyright' | grep -v 'Portions' | grep -v 'SMB_ACL_' > proto.h || { echo "grep failed"; exit 1; }
+          # 首先尝试使用 make proto.h
+          if [ -f Makefile ]; then
+            echo "Attempting to generate proto.h using make..."
+            make proto.h || true
+          fi
+          if [ ! -f proto.h ] || [ ! -s proto.h ]; then
+            echo "make proto.h failed or proto.h is empty, using awk fallback..."
+            chmod +x mkproto.awk
+            awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h.full || { echo "awk failed"; exit 1; }
+            if [ ! -s proto.h.full ]; then
+              echo "Error: proto.h.full is empty"
+              exit 1
+            fi
+            # 过滤出有效的函数声明
+            grep ';$' proto.h.full | grep -v '^#include' | grep -v 'Copyright' | grep -v 'Portions' | grep -v 'SMB_ACL_' > proto.h || true
+            if [ ! -s proto.h ]; then
+              echo "Warning: filtered proto.h is empty, using original"
+              cp proto.h.full proto.h
+            fi
+            rm -f proto.h.full
+          fi
           echo "proto.h generated, lines: $(wc -l < proto.h)"
-          rm -f proto.h.full
 
       - name: Initialization values
         run: |
