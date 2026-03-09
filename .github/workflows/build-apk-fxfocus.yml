@@ -7,7 +7,7 @@ on:
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
-  ANDROID_COMPILE_SDK: '36'          # Used only for reference; bootstrap installs correct version
+  ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -26,9 +26,8 @@ jobs:
           rm -rf .gradle
 
       # ------------------------------------------------------------------
-      # Checkout mozilla-central using git-cinnabar (Mercurial bridge)
-      # The key fix: add the git-cinnabar directory to GITHUB_PATH so it's
-      # available in all subsequent steps.
+      # Checkout mozilla-central using git-cinnabar
+      # Fix: export PATH within the step so git-remote-hg is immediately available
       # ------------------------------------------------------------------
       - name: Checkout source repo (mozilla-central via git-cinnabar)
         run: |
@@ -36,6 +35,8 @@ jobs:
           cd git-cinnabar
           curl -sL https://raw.githubusercontent.com/glandium/git-cinnabar/master/download.py -o download.py
           python3 download.py
+          # Add to PATH for this step and future steps
+          export PATH="$PWD:$PATH"
           echo "$PWD" >> $GITHUB_PATH
           git config --global core.askpass ""
           git config --global cinnabar.check false
@@ -57,9 +58,6 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      # ------------------------------------------------------------------
-      # Install system dependencies (some may already be present)
-      # ------------------------------------------------------------------
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -68,7 +66,6 @@ jobs:
       # ------------------------------------------------------------------
       # Official Mozilla bootstrap – automatically installs Android SDK/NDK,
       # accepts licenses, and sets up the required toolchains.
-      # This replaces manual sdkmanager steps and ensures compatibility.
       # ------------------------------------------------------------------
       - name: Bootstrap Mozilla build environment
         working-directory: ./fxfocus_source
@@ -76,8 +73,7 @@ jobs:
           ./mach --no-interactive bootstrap --application-choice="GeckoView/Firefox for Android"
 
       # ------------------------------------------------------------------
-      # Caching: speeds up subsequent runs by preserving the Mozilla build
-      # state and Gradle caches.
+      # Caching: speeds up subsequent runs
       # ------------------------------------------------------------------
       - name: Cache Mozilla build state
         uses: actions/cache@v4
