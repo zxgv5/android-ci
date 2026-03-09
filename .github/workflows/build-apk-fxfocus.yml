@@ -57,6 +57,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip pkg-config mercurial
 
+      # --- Set Android SDK/NDK paths EARLY so they are available for .mozconfig ---
+      - name: Set Android SDK/NDK environment variables
+        run: |
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | sort -V | tail -n1)
+          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
+
+      - name: Accept Android licenses
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Install required Android SDK components (if missing)
+        run: |
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-$ANDROID_COMPILE_SDK" "build-tools;$ANDROID_BUILD_TOOLS"
+
+      # --- Now create .mozconfig WITHOUT explicit SDK/NDK paths ---
       - name: Decode keystore and create init script
         working-directory: ./fxfocus_source
         run: |
@@ -69,9 +84,7 @@ jobs:
           ac_add_options --disable-debug
           ac_add_options --disable-tests
           ac_add_options --disable-updater
-          # Explicitly set Android SDK/NDK paths (GitHub runner defaults)
-          ac_add_options --with-android-sdk="$ANDROID_SDK_ROOT"
-          ac_add_options --with-android-ndk="$ANDROID_NDK_ROOT"
+          # SDK/NDK are detected from environment variables ANDROID_SDK_ROOT / ANDROID_NDK_ROOT
           EOF
           # Gradle init script for signing (compatible with Focus)
           cat > init.gradle << EOF
@@ -95,19 +108,6 @@ jobs:
               }
           }
           EOF
-
-      - name: Set Android SDK/NDK environment variables
-        run: |
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | sort -V | tail -n1)
-          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
-
-      - name: Accept Android licenses
-        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-      - name: Install required Android SDK components (if missing)
-        run: |
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-$ANDROID_COMPILE_SDK" "build-tools;$ANDROID_BUILD_TOOLS"
 
       - name: Configure mach build environment (verbose)
         working-directory: ./fxfocus_source
