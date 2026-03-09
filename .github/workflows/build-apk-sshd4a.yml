@@ -46,13 +46,10 @@ jobs:
 
       - name: Set up Android NDK environment
         run: |
-          # 设置 ANDROID_TARGET（这里使用 arm64，可根据需要调整）
           echo "ANDROID_TARGET=aarch64-linux-android" >> $GITHUB_ENV
           echo "ANDROID_MIN_SDK=30" >> $GITHUB_ENV
-          # 设置 NDK 路径（GitHub 运行器已预装 NDK）
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
           echo "TOOLCHAIN=$ANDROID_HOME/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
-          # 导出交叉编译工具链
           echo "AR=$TOOLCHAIN/bin/llvm-ar" >> $GITHUB_ENV
           echo "CC=$TOOLCHAIN/bin/${ANDROID_TARGET}${ANDROID_MIN_SDK}-clang" >> $GITHUB_ENV
           echo "AS=$TOOLCHAIN/bin/${ANDROID_TARGET}${ANDROID_MIN_SDK}-clang" >> $GITHUB_ENV
@@ -65,7 +62,7 @@ jobs:
         working-directory: ./sshd4a_source/app/src/main/cpp
         run: |
           chmod +x prebuild-rsyn.sh prebuild-dropbear.sh
-          # 运行预构建脚本（它们会下载源码、配置并生成所需文件）
+          # 预构建脚本会下载源码、配置交叉编译环境并生成必要的头文件
           ./prebuild-rsyn.sh
           ./prebuild-dropbear.sh
 
