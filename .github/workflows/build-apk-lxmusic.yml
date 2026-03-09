@@ -61,7 +61,10 @@ jobs:
       - name: Decode keystore and create init script
         working-directory: ./lxmusic_source/android
         run: |
+          # 解码真实的签名文件
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+
+          # 创建 init.gradle，用于在构建时强制使用上述 keystore 签名
           cat > init.gradle << 'EOF'
           allprojects {
               afterEvaluate { project ->
@@ -83,8 +86,15 @@ jobs:
               }
           }
           EOF
-          # 创建空的 keystore.properties 文件，避免 app/build.gradle 读取失败
-          touch keystore.properties
+
+          # 创建虚拟 keystore 文件和对应的属性文件，以通过项目默认的签名配置检查（后续会被覆盖）
+          touch dummy.keystore
+          cat > keystore.properties << EOF
+          storeFile=dummy.keystore
+          storePassword=dummy
+          keyAlias=dummy
+          keyPassword=dummy
+          EOF
 
       - name: Build signed apk with init script
         working-directory: ./lxmusic_source/android
