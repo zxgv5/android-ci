@@ -57,7 +57,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip pkg-config mercurial
 
-      # --- Set Android SDK/NDK paths EARLY so they are available for .mozconfig ---
       - name: Set Android SDK/NDK environment variables
         run: |
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
@@ -71,12 +70,11 @@ jobs:
         run: |
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-$ANDROID_COMPILE_SDK" "build-tools;$ANDROID_BUILD_TOOLS"
 
-      # --- Now create .mozconfig WITHOUT explicit SDK/NDK paths ---
       - name: Decode keystore and create init script
         working-directory: ./fxfocus_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
-          # Build configuration: arm64‑v8a release, artifact mode (fast CI)
+          # Build configuration: arm64‑v8a release, artifact mode
           cat > .mozconfig << EOF
           ac_add_options --enable-artifact-builds
           ac_add_options --target=aarch64-linux-android
@@ -84,9 +82,9 @@ jobs:
           ac_add_options --disable-debug
           ac_add_options --disable-tests
           ac_add_options --disable-updater
-          # SDK/NDK are detected from environment variables ANDROID_SDK_ROOT / ANDROID_NDK_ROOT
+          # SDK/NDK are detected from environment variables
           EOF
-          # Gradle init script for signing (compatible with Focus)
+          # Gradle init script for signing
           cat > init.gradle << EOF
           allprojects {
               afterEvaluate { project ->
@@ -109,10 +107,10 @@ jobs:
           }
           EOF
 
-      - name: Configure mach build environment (verbose)
+      - name: Configure mach build environment
         working-directory: ./fxfocus_source
         run: |
-          ./mach configure --verbose
+          ./mach configure
           # Sanity check: ensure GRADLE variable is set
           ./mach environment | grep GRADLE || (echo "ERROR: GRADLE not found after configure" && exit 1)
 
