@@ -70,11 +70,19 @@ jobs:
           # 使用 mkproto.awk 生成 proto.h
           chmod +x mkproto.awk
           awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h
-          # 清理 proto.h：删除 #include "rsync.h"、版权注释和 ACL 声明
+          # 清理 proto.h：删除 #include "rsync.h"、版权注释、ACL 声明以及所有 zlib 相关声明
           sed -i '/^#include "rsync.h"/d' proto.h
           sed -i '/Copyright/d' proto.h
           sed -i '/Portions/d' proto.h
           sed -i '/SMB_ACL_/d' proto.h
+          sed -i '/Permission/d' proto.h
+          sed -i '/^uLong/d' proto.h
+          sed -i '/^local/d' proto.h
+          sed -i '/ZEXPORT/d' proto.h
+          sed -i '/compress/d' proto.h
+          sed -i '/adler32/d' proto.h
+          sed -i '/crc32/d' proto.h
+          sed -i '/gf2_matrix/d' proto.h
 
       - name: Initialization values
         run: |
