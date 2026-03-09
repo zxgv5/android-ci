@@ -115,8 +115,7 @@ jobs:
         working-directory: ./apkupdater_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          APK_FILE=$(find app/build/outputs -type f -name "*.apk" | head -n1)
-          mv "$APK_FILE" "${{ github.workspace }}/dist/apkupdater-${{ env.BUILD_DATE }}.apk"
+          mv "app/build/outputs/apk/release/"*"release.apk" "${{ github.workspace }}/dist/apkupdater-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
