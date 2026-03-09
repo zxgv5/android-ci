@@ -61,10 +61,7 @@ jobs:
       - name: Decode keystore and create init script
         working-directory: ./lxmusic_source/android
         run: |
-          # 解码真实的签名文件
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
-
-          # 创建 init.gradle，用于在构建时强制使用上述 keystore 签名
           cat > init.gradle << 'EOF'
           allprojects {
               afterEvaluate { project ->
@@ -86,8 +83,7 @@ jobs:
               }
           }
           EOF
-
-          # 创建虚拟 keystore 文件和对应的属性文件，以通过项目默认的签名配置检查（后续会被覆盖）
+          # 创建虚拟 keystore 文件和对应的属性文件，以通过默认的签名配置检查（后续会被覆盖）
           touch dummy.keystore
           cat > keystore.properties << EOF
           storeFile=dummy.keystore
@@ -116,13 +112,7 @@ jobs:
         working-directory: ./lxmusic_source/android
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          # 查找 universal APK（包含 -universal.apk 的文件）
-          universal_apk=$(find app/build/outputs -name "*-universal.apk" -type f | head -n 1)
-          if [ -z "$universal_apk" ]; then
-            echo "Error: universal APK not found!"
-            exit 1
-          fi
-          mv "$universal_apk" "${{ github.workspace }}/dist/lxmusic-${{ env.BUILD_DATE }}.apk"
+          mv "app/build/outputs/apk/release/"*"-arm64-v8a.apk" "${{ github.workspace }}/dist/lxmusic-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
