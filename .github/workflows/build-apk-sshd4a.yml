@@ -65,8 +65,8 @@ jobs:
           cd ../rsync
           # 给相关脚本添加执行权限
           chmod +x configure packaging/* prepare-source 2>/dev/null || true
-          # 运行配置脚本，禁用 ACL、md2man 和 xxhash 支持
-          ./configure --disable-acl --disable-md2man --disable-xxhash
+          # 运行配置脚本，禁用 ACL、md2man、xxhash 和 openssl 支持
+          ./configure --disable-acl --disable-md2man --disable-xxhash --disable-openssl
           # 使用 mkproto.awk 生成 proto.h
           chmod +x mkproto.awk
           awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h
