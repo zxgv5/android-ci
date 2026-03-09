@@ -7,7 +7,7 @@ on:
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
-  ANDROID_COMPILE_SDK: '36'
+  ANDROID_COMPILE_SDK: '36'          # Used only for reference; bootstrap installs correct version
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -25,6 +25,11 @@ jobs:
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
 
+      # ------------------------------------------------------------------
+      # Checkout mozilla-central using git-cinnabar (Mercurial bridge)
+      # The key fix: add the git-cinnabar directory to GITHUB_PATH so it's
+      # available in all subsequent steps.
+      # ------------------------------------------------------------------
       - name: Checkout source repo (mozilla-central via git-cinnabar)
         run: |
           mkdir -p git-cinnabar
@@ -52,28 +57,55 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
+      # ------------------------------------------------------------------
+      # Install system dependencies (some may already be present)
+      # ------------------------------------------------------------------
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip pkg-config mercurial
 
-      - name: Set Android SDK/NDK environment variables
-        run: |
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | sort -V | tail -n1)
-          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
-
-      - name: Accept Android licenses
-        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-      - name: Install required Android SDK components (if missing)
-        run: |
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-$ANDROID_COMPILE_SDK" "build-tools;$ANDROID_BUILD_TOOLS"
-
-      - name: Decode keystore and create init script
+      # ------------------------------------------------------------------
+      # Official Mozilla bootstrap – automatically installs Android SDK/NDK,
+      # accepts licenses, and sets up the required toolchains.
+      # This replaces manual sdkmanager steps and ensures compatibility.
+      # ------------------------------------------------------------------
+      - name: Bootstrap Mozilla build environment
         working-directory: ./fxfocus_source
         run: |
+          ./mach --no-interactive bootstrap --application-choice="GeckoView/Firefox for Android"
+
+      # ------------------------------------------------------------------
+      # Caching: speeds up subsequent runs by preserving the Mozilla build
+      # state and Gradle caches.
+      # ------------------------------------------------------------------
+      - name: Cache Mozilla build state
+        uses: actions/cache@v4
+        with:
+          path: ~/.mozbuild
+          key: mozbuild-${{ runner.os }}-${{ hashFiles('.mozconfig') }}
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ------------------------------------------------------------------
+      # Create .mozconfig (artifact build, arm64 release) and init.gradle
+      # for APK signing.
+      # ------------------------------------------------------------------
+      - name: Decode keystore and create configuration files
+        working-directory: ./fxfocus_source
+        run: |
+          # Decode the base64-encoded keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
+
+          # .mozconfig – official artifact build settings
           cat > .mozconfig << EOF
           ac_add_options --enable-artifact-builds
           ac_add_options --target=aarch64-linux-android
@@ -81,7 +113,11 @@ jobs:
           ac_add_options --disable-debug
           ac_add_options --disable-tests
           ac_add_options --disable-updater
+          # Optional: set a predictable object directory
+          mk_add_options MOZ_OBJDIR=./objdir-focus-android
           EOF
+
+          # Gradle init script to sign the release APK
           cat > init.gradle << EOF
           allprojects {
               afterEvaluate { project ->
@@ -104,19 +140,32 @@ jobs:
           }
           EOF
 
+      # ------------------------------------------------------------------
+      # Configure the build (sets up the objdir and generates build files)
+      # ------------------------------------------------------------------
       - name: Configure mach build environment
         working-directory: ./fxfocus_source
         run: ./mach configure
 
+      # ------------------------------------------------------------------
+      # Download pre-compiled GeckoView binaries (artifact build)
+      # This also populates the build config and makes GRADLE available.
+      # ------------------------------------------------------------------
       - name: Download build artifacts (mach build)
         working-directory: ./fxfocus_source
         run: ./mach build
 
-      - name: Verify GRADLE variable is set
+      # ------------------------------------------------------------------
+      # Sanity check: ensure GRADLE is defined (should now be present)
+      # ------------------------------------------------------------------
+      - name: Verify GRADLE variable
         working-directory: ./fxfocus_source
         run: |
-          ./mach environment | grep GRADLE || (echo "ERROR: GRADLE still not found after build" && exit 1)
+          ./mach environment | grep GRADLE || (echo "ERROR: GRADLE not found after build" && exit 1)
 
+      # ------------------------------------------------------------------
+      # Build the signed APK using Gradle
+      # ------------------------------------------------------------------
       - name: Build signed APK with Gradle
         working-directory: ./fxfocus_source
         env:
@@ -127,6 +176,9 @@ jobs:
           chmod +x ./mach
           ./mach gradle focus:assembleFocusArm64Release --no-daemon -I init.gradle
 
+      # ------------------------------------------------------------------
+      # Locate the generated APK (official output path)
+      # ------------------------------------------------------------------
       - name: List generated APK files
         working-directory: ./fxfocus_source
         run: |
@@ -139,6 +191,9 @@ jobs:
           mkdir -p "${{ github.workspace }}/dist"
           mv ./mobile/android/focus-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk "${{ github.workspace }}/dist/fxfocus-${{ env.BUILD_DATE }}.apk"
 
+      # ------------------------------------------------------------------
+      # Custom action: erase keystore, encrypt package, and create release
+      # ------------------------------------------------------------------
       - name: Erase keystore, encrypt package, and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
