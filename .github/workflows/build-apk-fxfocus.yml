@@ -27,12 +27,14 @@ jobs:
 
       - name: Checkout source repo
         run: |
-          # 安装官方git-cinnabar工具，实现git命令克隆Mercurial格式仓库
-          CINNABAR_VERSION=$(curl -s https://api.github.com/repos/glandium/git-cinnabar/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
-          curl -sL https://github.com/glandium/git-cinnabar/releases/download/$CINNABAR_VERSION/git-cinnabar-linux-x86_64.tar.gz | tar -xz
-          export PATH=$PWD/git-cinnabar:$PATH
+          # 稳定安装git-cinnabar，规避GitHub API请求失败导致的解压报错
+          git clone https://github.com/glandium/git-cinnabar.git --depth 1 --branch master
+          cd git-cinnabar
+          ./git-cinnabar download
+          export PATH=$PWD:$PATH
           git config --global core.askpass ""
-          # 严格从指定的官方仓库克隆主分支(default)，浅克隆减少耗时
+          git config --global cinnabar.check false
+          # 严格从指定官方Mercurial仓库克隆主分支(default)，浅克隆减少拉取体积与耗时
           git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ./fxfocus_source
 
       - name: Checkout ci source repo (self)
