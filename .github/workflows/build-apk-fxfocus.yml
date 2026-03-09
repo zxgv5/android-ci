@@ -27,8 +27,13 @@ jobs:
 
       - name: Checkout source repo
         run: |
-          git clone --depth 1 --branch main https://github.com/mozilla/gecko-dev.git fxfocus_source
-        working-directory: ${{ github.workspace }}
+          # 安装官方git-cinnabar工具，实现git命令克隆Mercurial格式仓库
+          CINNABAR_VERSION=$(curl -s https://api.github.com/repos/glandium/git-cinnabar/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+          curl -sL https://github.com/glandium/git-cinnabar/releases/download/$CINNABAR_VERSION/git-cinnabar-linux-x86_64.tar.gz | tar -xz
+          export PATH=$PWD/git-cinnabar:$PATH
+          git config --global core.askpass ""
+          # 严格从指定的官方仓库克隆主分支(default)，浅克隆减少耗时
+          git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ./fxfocus_source
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
@@ -48,12 +53,13 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip pkg-config
+          sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip pkg-config mercurial
 
       - name: Decode keystore and create init script
         working-directory: ./fxfocus_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
+          # 构建配置：仅arm64-v8a release、artifact模式加速CI构建
           cat > .mozconfig << EOF
           ac_add_options --enable-artifact-builds
           ac_add_options --target=aarch64-linux-android
@@ -62,6 +68,7 @@ jobs:
           ac_add_options --disable-tests
           ac_add_options --disable-updater
           EOF
+          # 签名配置脚本，完全兼容原模板逻辑
           cat > init.gradle << EOF
           allprojects {
               afterEvaluate { project ->
