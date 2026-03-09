@@ -46,10 +46,14 @@ jobs:
 
       - name: Set up Android NDK environment
         run: |
-          echo "ANDROID_TARGET=aarch64-linux-android" >> $GITHUB_ENV
-          echo "ANDROID_MIN_SDK=30" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
-          echo "TOOLCHAIN=$ANDROID_HOME/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64" >> $GITHUB_ENV
+          ANDROID_TARGET=aarch64-linux-android
+          ANDROID_MIN_SDK=30
+          ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865
+          TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64
+          echo "ANDROID_TARGET=$ANDROID_TARGET" >> $GITHUB_ENV
+          echo "ANDROID_MIN_SDK=$ANDROID_MIN_SDK" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+          echo "TOOLCHAIN=$TOOLCHAIN" >> $GITHUB_ENV
           echo "AR=$TOOLCHAIN/bin/llvm-ar" >> $GITHUB_ENV
           echo "CC=$TOOLCHAIN/bin/${ANDROID_TARGET}${ANDROID_MIN_SDK}-clang" >> $GITHUB_ENV
           echo "AS=$TOOLCHAIN/bin/${ANDROID_TARGET}${ANDROID_MIN_SDK}-clang" >> $GITHUB_ENV
@@ -61,10 +65,17 @@ jobs:
       - name: Run prebuild scripts (rsync and dropbear)
         working-directory: ./sshd4a_source/app/src/main/cpp
         run: |
+          set -x
           chmod +x prebuild-rsyn.sh prebuild-dropbear.sh
-          # 预构建脚本会下载源码、配置交叉编译环境并生成必要的头文件
+          echo "Running prebuild-rsyn.sh..."
           ./prebuild-rsyn.sh
+          echo "prebuild-rsyn.sh exit code: $?"
+          echo "Running prebuild-dropbear.sh..."
           ./prebuild-dropbear.sh
+          echo "prebuild-dropbear.sh exit code: $?"
+          # 列出一些生成的文件以验证
+          ls -la ../../
+          find . -name "*.h" -o -name "config.h" | head -20
 
       - name: Initialization values
         run: |
