@@ -62,20 +62,22 @@ jobs:
           echo "RANLIB=$TOOLCHAIN/bin/llvm-ranlib" >> $GITHUB_ENV
           echo "STRIP=$TOOLCHAIN/bin/llvm-strip" >> $GITHUB_ENV
 
-      - name: Run prebuild scripts (rsync and dropbear)
-        working-directory: ./sshd4a_source/app/src/main/cpp
+      - name: Configure dropbear for Android
+        working-directory: ./sshd4a_source/app/src/main/cpp/dropbear
         run: |
-          set -x
-          chmod +x prebuild-rsyn.sh prebuild-dropbear.sh
-          echo "Running prebuild-rsyn.sh..."
-          ./prebuild-rsyn.sh
-          echo "prebuild-rsyn.sh exit code: $?"
-          echo "Running prebuild-dropbear.sh..."
-          ./prebuild-dropbear.sh
-          echo "prebuild-dropbear.sh exit code: $?"
-          # 列出一些生成的文件以验证
-          ls -la ../../
-          find . -name "*.h" -o -name "config.h" | head -20
+          chmod +x configure
+          ./configure --host $ANDROID_TARGET \
+                      --disable-syslog --disable-lastlog \
+                      --disable-utmp --disable-wtmp \
+                      --enable-bundled-libtom --enable-largefile
+
+      - name: Configure rsync for Android
+        working-directory: ./sshd4a_source/app/src/main/cpp/rsync
+        run: |
+          chmod +x configure
+          ./configure --host $ANDROID_TARGET \
+                      --disable-acl --disable-md2man --disable-xxhash --disable-openssl \
+                      --disable-zstd --disable-lz4 --enable-largefile
 
       - name: Initialization values
         run: |
