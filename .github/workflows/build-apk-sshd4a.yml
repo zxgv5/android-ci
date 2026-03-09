@@ -63,17 +63,10 @@ jobs:
 
           # ---------- rsync ----------
           cd ../rsync
-          # 生成 configure（如需要）
-          if [ ! -f configure.sh ]; then
-            autoreconf -i
-          fi
-          # 给 packaging 目录下的脚本添加执行权限（configure 可能会调用它们）
-          chmod +x packaging/* 2>/dev/null || true
-          # 给 prepare-source 脚本添加执行权限（如果存在）
-          chmod +x prepare-source 2>/dev/null || true
-          chmod +x configure.sh
-          # 运行 configure.sh，禁用 ACL、md2man 和 xxhash 支持
-          ./configure.sh --disable-acl --disable-md2man --disable-xxhash
+          # 给相关脚本添加执行权限
+          chmod +x configure packaging/* prepare-source 2>/dev/null || true
+          # 运行配置脚本，禁用 ACL、md2man 和 xxhash 支持
+          ./configure --disable-acl --disable-md2man --disable-xxhash
           # 使用 mkproto.awk 生成 proto.h
           chmod +x mkproto.awk
           awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h
