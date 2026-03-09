@@ -35,6 +35,7 @@ jobs:
           echo "$PWD" >> $GITHUB_PATH
           git config --global core.askpass ""
           git config --global cinnabar.check false
+          git config --global cinnabar.refs tips
           git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ../fxfocus_source
 
       - name: Checkout ci source repo
@@ -105,7 +106,7 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
+          KEY_ALIAS_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleFocusArm64Release --no-daemon -I ../../init.gradle
@@ -114,7 +115,7 @@ jobs:
         run: |
           find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs" -type f -name "*.apk" | sort
 
-      - name: Rename and move apk
+      - name: Rename and move
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk" \
