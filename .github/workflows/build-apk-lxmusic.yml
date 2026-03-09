@@ -8,7 +8,7 @@ env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'       # 与项目 android/build.gradle 中的 buildToolsVersion 一致
+  ANDROID_BUILD_TOOLS: '35.0.0'       # 与项目 android/build.gradle 中的 buildToolsVersion 一致
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 permissions:
@@ -38,6 +38,15 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
+
+      - name: Setup node
+        uses: actions/setup-node@main
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./lxmusic_source
+        run: npm install
 
       - name: Initialization values
         run: |
