@@ -87,6 +87,17 @@ jobs:
                       --disable-acl --disable-md2man --disable-xxhash --disable-openssl \
                       --disable-zstd --disable-lz4 --enable-largefile
 
+      - name: Generate proto.h for rsync
+        working-directory: ./sshd4a_source/app/src/main/cpp/rsync
+        run: |
+          chmod +x mkproto.awk
+          awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h
+          # 清理 proto.h：删除 #include "rsync.h"、版权注释和 ACL 声明
+          sed -i '/^#include "rsync.h"/d' proto.h
+          sed -i '/Copyright/d' proto.h
+          sed -i '/Portions/d' proto.h
+          sed -i '/SMB_ACL_/d' proto.h
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
