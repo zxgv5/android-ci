@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: lyswhut/lx-music-mobile
-          ref: master
+          ref: dev
           path: lxmusic_source
           fetch-depth: 0
           submodules: recursive
