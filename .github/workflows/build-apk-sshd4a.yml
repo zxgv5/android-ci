@@ -71,6 +71,8 @@ jobs:
           chmod +x mkproto.awk
           awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h
           # 清理 proto.h：删除 #include "rsync.h"、版权注释、ACL 声明以及所有 zlib 相关声明
+          echo "proto.h content before patch: "
+          cat proto.h
           sed -i '/^#include "rsync.h"/d' proto.h
           sed -i '/Copyright/d' proto.h
           sed -i '/Portions/d' proto.h
@@ -83,6 +85,9 @@ jobs:
           sed -i '/adler32/d' proto.h
           sed -i '/crc32/d' proto.h
           sed -i '/gf2_matrix/d' proto.h
+          echo "proto.h content after patch: "
+          cat proto.h
+
 
       - name: Initialization values
         run: |
