@@ -8,7 +8,7 @@ env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '35.0.0'       # 与项目 android/build.gradle 中的 buildToolsVersion 一致
+  ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 permissions:
@@ -62,7 +62,7 @@ jobs:
         working-directory: ./lxmusic_source/android
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
-          cat > init.gradle << EOF
+          cat > init.gradle << 'EOF'
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
@@ -83,6 +83,8 @@ jobs:
               }
           }
           EOF
+          # 创建空的 keystore.properties 文件，避免 app/build.gradle 读取失败
+          touch keystore.properties
 
       - name: Build signed apk with init script
         working-directory: ./lxmusic_source/android
