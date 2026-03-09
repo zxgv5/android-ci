@@ -75,30 +75,27 @@ jobs:
               }
           }
           EOF
-
-      - name: Configure gradle timeout and retry settings
-        working-directory: ./apkupdater_source
-        run: |
-          cat >> gradle.properties << 'EOF'
-          # 增加依赖下载超时时间（毫秒）
-          org.gradle.internal.http.connectionTimeout=60000
-          org.gradle.internal.http.socketTimeout=60000
-          # Maven 依赖下载失败重试次数
-          maven.wagon.http.retryHandler.count=5
-          maven.wagon.http.retryHandler.requestSent=true
-          # 限制并行工作线程数，避免过多请求被限流
-          org.gradle.workers.max=4
-          EOF
-
-      - name: Modify dependencies in app/build.gradle.kts
-        working-directory: ./apkupdater_source
-        run: |
-          sed -i 's/implementation("com.github.topjohnwu.libsu:core:5.2.1")/implementation("com.github.topjohnwu.libsu:core:{latest version}")/' app/build.gradle.kts
-          sed -i 's/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs-gson:0.4.3")/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs-gson:{latest version}")/' app/build.gradle.kts
-          sed -i 's/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs:0.4.3")/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs:{latest version}")/' app/build.gradle.kts
-          echo "Modified app/build.gradle.kts content:"
-          cat app/build.gradle.kts
-
+ 
+      # - name: Configure gradle timeout and retry settings
+      #   working-directory: ./apkupdater_source
+      #   run: |
+      #     cat >> gradle.properties << 'EOF'
+      #     org.gradle.internal.http.connectionTimeout=60000
+      #     org.gradle.internal.http.socketTimeout=60000
+      #     maven.wagon.http.retryHandler.count=5
+      #     maven.wagon.http.retryHandler.requestSent=true
+      #     org.gradle.workers.max=4
+      #     EOF
+ 
+      # - name: Modify dependencies in app/build.gradle.kts
+      #   working-directory: ./apkupdater_source
+      #   run: |
+      #     sed -i 's/implementation("com.github.topjohnwu.libsu:core:5.2.1")/implementation("com.github.topjohnwu.libsu:core:{latest version}")/' app/build.gradle.kts
+      #     sed -i 's/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs-gson:0.4.3")/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs-gson:{latest version}")/' app/build.gradle.kts
+      #     sed -i 's/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs:0.4.3")/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs:{latest version}")/' app/build.gradle.kts
+      #     echo "Modified app/build.gradle.kts content:"
+      #     cat app/build.gradle.kts
+ 
       - name: Build signed apk with init script
         working-directory: ./apkupdater_source
         env:
