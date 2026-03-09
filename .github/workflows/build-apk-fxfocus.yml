@@ -9,7 +9,7 @@ env:
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
 
-      - name: Checkout source repo
+      - name: Checkout source repo (mozilla-central via git-cinnabar)
         run: |
           mkdir -p git-cinnabar
           cd git-cinnabar
@@ -42,11 +42,11 @@ jobs:
         with:
           path: ci_source
 
-      - name: Initialization values
+      - name: Set build date
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      - name: Setup java
+      - name: Setup Java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
@@ -60,7 +60,8 @@ jobs:
       - name: Decode keystore and create init script
         working-directory: ./fxfocus_source
         run: |
-          # ... existing commands ...
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
+          # Build configuration: arm64‑v8a release, artifact mode (fast CI)
           cat > .mozconfig << EOF
           ac_add_options --enable-artifact-builds
           ac_add_options --target=aarch64-linux-android
@@ -68,8 +69,11 @@ jobs:
           ac_add_options --disable-debug
           ac_add_options --disable-tests
           ac_add_options --disable-updater
+          # Explicitly set Android SDK/NDK paths (GitHub runner defaults)
+          ac_add_options --with-android-sdk="$ANDROID_SDK_ROOT"
+          ac_add_options --with-android-ndk="$ANDROID_NDK_ROOT"
           EOF
-          # 签名配置脚本，完全兼容原模板逻辑
+          # Gradle init script for signing (compatible with Focus)
           cat > init.gradle << EOF
           allprojects {
               afterEvaluate { project ->
@@ -92,39 +96,49 @@ jobs:
           }
           EOF
 
-      - name: Set android sdk paths
+      - name: Set Android SDK/NDK environment variables
         run: |
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | sort -V | tail -n1)
           echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-      - name: Configure mach build environment
+      - name: Accept Android licenses
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Install required Android SDK components (if missing)
+        run: |
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platforms;android-$ANDROID_COMPILE_SDK" "build-tools;$ANDROID_BUILD_TOOLS"
+
+      - name: Configure mach build environment (verbose)
         working-directory: ./fxfocus_source
-        run: ./mach configure
+        run: |
+          ./mach configure --verbose
+          # Sanity check: ensure GRADLE variable is set
+          ./mach environment | grep GRADLE || (echo "ERROR: GRADLE not found after configure" && exit 1)
 
-      - name: Build signed apk with init script
+      - name: Build signed APK with Gradle
         working-directory: ./fxfocus_source
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
         run: |
+          chmod +x ./mach
           ./mach gradle focus:assembleFocusArm64Release --no-daemon -I init.gradle
 
-      - name: List generated apk files
+      - name: List generated APK files
         working-directory: ./fxfocus_source
         run: |
           echo "Listing all apk files generated:"
           find mobile/android/focus-android/app/build/outputs -type f -name "*.apk" | sort
 
-      - name: Rename and move
+      - name: Rename and move APK to dist/
         working-directory: ./fxfocus_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv ./mobile/android/focus-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk "${{ github.workspace }}/dist/fxfocus-${{ env.BUILD_DATE }}.apk"
 
-      - name: Erase keystore, encrypt package and create release
+      - name: Erase keystore, encrypt package, and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./fxfocus_source/mobile/android/focus-android/keystore.p12"
