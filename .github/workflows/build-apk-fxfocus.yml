@@ -109,10 +109,16 @@ jobs:
 
       - name: Configure mach build environment
         working-directory: ./fxfocus_source
+        run: ./mach configure
+
+      - name: Download build artifacts (mach build)
+        working-directory: ./fxfocus_source
+        run: ./mach build
+
+      - name: Verify GRADLE variable is set
+        working-directory: ./fxfocus_source
         run: |
-          ./mach configure
-          # Sanity check: ensure GRADLE variable is set
-          ./mach environment | grep GRADLE || (echo "ERROR: GRADLE not found after configure" && exit 1)
+          ./mach environment | grep GRADLE || (echo "ERROR: GRADLE still not found after build" && exit 1)
 
       - name: Build signed APK with Gradle
         working-directory: ./fxfocus_source
