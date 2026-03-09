@@ -90,7 +90,6 @@ jobs:
       - name: Generate proto.h for rsync
         working-directory: ./sshd4a_source/app/src/main/cpp/rsync
         run: |
-          # 首先尝试使用 make proto.h
           if [ -f Makefile ]; then
             echo "Attempting to generate proto.h using make..."
             make proto.h || true
@@ -103,7 +102,6 @@ jobs:
               echo "Error: proto.h.full is empty"
               exit 1
             fi
-            # 过滤出有效的函数声明
             grep ';$' proto.h.full | grep -v '^#include' | grep -v 'Copyright' | grep -v 'Portions' | grep -v 'SMB_ACL_' > proto.h || true
             if [ ! -s proto.h ]; then
               echo "Warning: filtered proto.h is empty, using original"
@@ -112,6 +110,23 @@ jobs:
             rm -f proto.h.full
           fi
           echo "proto.h generated, lines: $(wc -l < proto.h)"
+
+      - name: Generate rounding.h for rsync
+        working-directory: ./sshd4a_source/app/src/main/cpp/rsync
+        run: |
+          if [ -f Makefile ]; then
+            echo "Attempting to generate rounding.h using make..."
+            make rounding.h || true
+          fi
+          if [ ! -f rounding.h ]; then
+            echo "Warning: rounding.h not generated, creating placeholder"
+            cat > rounding.h << 'EOF'
+            #ifndef ROUNDING_H
+            #define ROUNDING_H
+            #include "config.h"
+            #endif
+            EOF
+          fi
 
       - name: Initialization values
         run: |
