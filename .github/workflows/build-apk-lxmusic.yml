@@ -60,7 +60,7 @@ jobs:
           npm install
 
       - name: Decode keystore and create init script
-        working-directory: ./lxmusic_source
+        working-directory: ./lxmusic_source/android
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
           cat > init.gradle << EOF
@@ -86,7 +86,7 @@ jobs:
           EOF
 
       - name: Build signed apk with init script
-        working-directory: ./lxmusic_source
+        working-directory: ./lxmusic_source/android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -95,13 +95,13 @@ jobs:
           ./gradlew assembleRelease --no-daemon -I init.gradle
 
       - name: List generated apk files
-        working-directory: ./lxmusic_source
+        working-directory: ./lxmusic_source/android
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
 
       - name: Rename and move
-        working-directory: ./lxmusic_source
+        working-directory: ./lxmusic_source/android
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           # Try to find the universal APK first; if not, use the default release APK
@@ -122,7 +122,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./lxmusic_source/app/keystore.p12"
+          P12_KEYSTORE_PATH: "./lxmusic_source/android/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/lxmusic-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-lxmusic"
