@@ -8,8 +8,8 @@ env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  ANDROID_BUILD_TOOLS: '36.0.0'       # 与项目 android/build.gradle 中的 buildToolsVersion 一致
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 permissions:
   contents: write
@@ -49,16 +49,6 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Setup node.js
-        uses: actions/setup-node@main
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        working-directory: ./lxmusic_source
-        run: |
-          npm install
-
       - name: Decode keystore and create init script
         working-directory: ./lxmusic_source/android
         run: |
@@ -71,10 +61,10 @@ jobs:
                           project.android.signingConfigs.create('release')
                       }
                       def releaseConfig = project.android.signingConfigs.getByName('release')
-                      releaseConfig.storeFile = project.rootProject.file('android/app/keystore.p12')
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
                       releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
                       releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
-                      releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyPassword = System.getenv('KEY_ALIAS_PASSWORD')
                       releaseConfig.storeType = 'PKCS12'
                       releaseConfig.enableV1Signing = true
                       releaseConfig.enableV2Signing = true
@@ -90,6 +80,7 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -I init.gradle
@@ -104,20 +95,13 @@ jobs:
         working-directory: ./lxmusic_source/android
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          # Try to find the universal APK first; if not, use the default release APK
-          if [ -f "./app/build/outputs/apk/release/app-universal-release.apk" ]; then
-            mv "./app/build/outputs/apk/release/app-universal-release.apk" "${{ github.workspace }}/dist/lxmusic-${{ env.BUILD_DATE }}.apk"
-          elif [ -f "./app/build/outputs/apk/release/app-release.apk" ]; then
-            mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/lxmusic-${{ env.BUILD_DATE }}.apk"
-          else
-            # Fallback: move the first APK found
-            APK_FILE=$(find app/build/outputs -type f -name "*.apk" | head -n1)
-            if [ -n "$APK_FILE" ]; then
-              mv "$APK_FILE" "${{ github.workspace }}/dist/lxmusic-${{ env.BUILD_DATE }}.apk"
-            else
-              echo "No APK found!" && exit 1
-            fi
+          # 查找 universal APK（包含 -universal.apk 的文件）
+          universal_apk=$(find app/build/outputs -name "*-universal.apk" -type f | head -n 1)
+          if [ -z "$universal_apk" ]; then
+            echo "Error: universal APK not found!"
+            exit 1
           fi
+          mv "$universal_apk" "${{ github.workspace }}/dist/lxmusic-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
