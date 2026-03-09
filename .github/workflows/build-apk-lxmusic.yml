@@ -61,21 +61,24 @@ jobs:
       - name: Decode keystore and create init script
         working-directory: ./lxmusic_source/android
         run: |
+          # 解码签名文件
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
-          # 创建 init.gradle，包含依赖解析策略和签名配置
+
           cat > init.gradle << 'EOF'
-          // dev分支ci错误修正：强制将 ahbottomnavigation 使用 AAR 类型
+          // 为构建dev分支进行的修改：全局依赖解析：强制将 ahbottomnavigation 使用 AAR 扩展，但不修改版本字符串
           allprojects {
               configurations.all {
-                  resolutionStrategy {
-                      eachDependency { details ->
-                          if (details.requested.group == 'com.github.wix-playground' && details.requested.name == 'ahbottomnavigation') {
-                              details.useTarget("com.github.wix-playground:ahbottomnavigation:${details.requested.version}@aar")
-                          }
+                  resolutionStrategy.eachDependency { details ->
+                      if (details.requested.group == 'com.github.wix-playground' && details.requested.name == 'ahbottomnavigation') {
+                          details.useTarget group: details.requested.group,
+                                            name: details.requested.name,
+                                            version: details.requested.version,
+                                            extension: 'aar'
                       }
                   }
               }
-              // 原有签名配置
+
+              // 签名配置
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
                       if (!project.android.signingConfigs.hasProperty('release')) {
@@ -95,6 +98,7 @@ jobs:
               }
           }
           EOF
+
           # 创建虚拟 keystore 文件和属性文件，用于通过默认签名检查
           touch dummy.keystore
           cat > keystore.properties << EOF
