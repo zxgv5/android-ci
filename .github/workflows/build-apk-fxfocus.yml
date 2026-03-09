@@ -26,16 +26,16 @@ jobs:
           rm -rf .gradle
 
       - name: Checkout source repo
-         run: |
-           mkdir -p git-cinnabar
-           cd git-cinnabar
-           curl -sL https://raw.githubusercontent.com/glandium/git-cinnabar/master/download.py -o download.py
-           python3 download.py
-           export PATH=$PWD:$PATH
-           git config --global core.askpass ""
-           git config --global cinnabar.check false
-           git config --global cinnabar.refs tips
-           git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ../fxfocus_source
+        run: |
+          mkdir -p git-cinnabar
+          cd git-cinnabar
+          curl -sL https://raw.githubusercontent.com/glandium/git-cinnabar/master/download.py -o download.py
+          python3 download.py
+          export PATH=$PWD:$PATH
+          git config --global core.askpass ""
+          git config --global cinnabar.check false
+          git config --global cinnabar.refs tips
+          git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ../fxfocus_source
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
