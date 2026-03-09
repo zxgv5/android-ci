@@ -39,6 +39,22 @@ jobs:
         with:
           path: ci_source
 
+      # 确保子模块完全更新
+      - name: Update submodules
+        working-directory: ./sshd4a_source
+        run: git submodule update --init --recursive
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool
+
+      - name: Prepare native build
+        working-directory: ./sshd4a_source/app/src/main/cpp/dropbear
+        run: |
+          chmod +x localoptions.sh
+          ./localoptions.sh
+
       - name: Initialization values
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -53,7 +69,6 @@ jobs:
         working-directory: ./sshd4a_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
-          # 解决签名配置报错
           cat > dummy.properties << EOF
           sign.storeFile=dummy
           sign.storePassword=dummy
