@@ -91,9 +91,13 @@ jobs:
         working-directory: ./sshd4a_source/app/src/main/cpp/rsync
         run: |
           chmod +x mkproto.awk
-          awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h.full
-          # 只保留以分号结尾的函数声明行，排除版权注释和 ACL 相关
-          grep ';$' proto.h.full | grep -v '^#include' | grep -v 'Copyright' | grep -v 'Portions' | grep -v 'SMB_ACL_' > proto.h
+          echo "Checking for source files..."
+          ls -la *.c lib/*.c zlib/*.c popt/*.c || true
+          echo "Generating proto.h.full..."
+          awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h.full || { echo "awk failed"; exit 1; }
+          echo "Filtering proto.h..."
+          grep ';$' proto.h.full | grep -v '^#include' | grep -v 'Copyright' | grep -v 'Portions' | grep -v 'SMB_ACL_' > proto.h || { echo "grep failed"; exit 1; }
+          echo "proto.h generated, lines: $(wc -l < proto.h)"
           rm -f proto.h.full
 
       - name: Initialization values
