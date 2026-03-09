@@ -94,12 +94,7 @@ jobs:
         working-directory: ./keepassdx_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          APK_PATH=$(find app/build/outputs -type f -name "*.apk" | head -1)
-          if [ -z "$APK_PATH" ]; then
-            echo "No apk found"
-            exit 1
-          fi
-          mv "$APK_PATH" "${{ github.workspace }}/dist/keepassdx-${{ env.BUILD_DATE }}.apk"
+          mv "app/build/outputs/apk/libre/release/app-libre-release.apk" "${{ github.workspace }}/dist/keepassdx-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
