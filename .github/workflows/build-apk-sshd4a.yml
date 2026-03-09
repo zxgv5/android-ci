@@ -53,16 +53,21 @@ jobs:
         working-directory: ./sshd4a_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
-          cat > init.gradle << EOF
+          # 解决签名配置报错
+          cat > dummy.properties << EOF
+          sign.storeFile=dummy
+          sign.storePassword=dummy
+          sign.keyAlias=dummy
+          sign.keyPassword=dummy
+          EOF
+          cat > init.gradle << 'EOF'
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
-                      // Ensure signing config exists
                       def releaseConfig = project.android.signingConfigs.findByName('release')
                       if (releaseConfig == null) {
                           releaseConfig = project.android.signingConfigs.create('release')
                       }
-                      // Override with our keystore and passwords
                       releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
                       releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
                       releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
@@ -71,8 +76,6 @@ jobs:
                       releaseConfig.enableV1Signing = true
                       releaseConfig.enableV2Signing = true
                       releaseConfig.enableV3Signing = true
-
-                      // Ensure release build type uses this signing config
                       if (project.android.buildTypes.findByName('release') != null) {
                           project.android.buildTypes.release.signingConfig = releaseConfig
                       }
@@ -89,7 +92,7 @@ jobs:
           KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon -I init.gradle
+          ./gradlew assembleRelease --no-daemon -I init.gradle -P Sshd4a.properties=dummy.properties
 
       - name: List generated apk files
         working-directory: ./sshd4a_source
