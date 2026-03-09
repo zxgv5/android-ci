@@ -9,7 +9,7 @@ env:
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
 
-      - name: Checkout source repo (mozilla-central via git-cinnabar)
+      - name: Checkout source repo
         run: |
           mkdir -p git-cinnabar
           cd git-cinnabar
@@ -35,10 +35,9 @@ jobs:
           echo "$PWD" >> $GITHUB_PATH
           git config --global core.askpass ""
           git config --global cinnabar.check false
-          git config --global cinnabar.refs tips
           git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ../fxfocus_source
 
-      - name: Checkout ci source repo (self)
+      - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
@@ -56,14 +55,14 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip pkg-config
+          sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip
 
       - name: Bootstrap mozilla build environment
         working-directory: ./fxfocus_source
         run: |
-          ./mach --no-interactive bootstrap --application-choice="GeckoView/Firefox for Android"
+          ./mach --no-interactive bootstrap --application-choice="Firefox for Android Artifact Mode"
 
-      - name: Decode keystore and create configuration files
+      - name: Decode keystore and create configs
         working-directory: ./fxfocus_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
@@ -76,7 +75,7 @@ jobs:
           ac_add_options --disable-debug
           ac_add_options --disable-tests
           ac_add_options --disable-updater
-          mk_add_options MOZ_OBJDIR=./objdir-focus-android
+          mk_add_options MOZ_OBJDIR=./obj-focus-arm64
           EOF
 
           cat > init.gradle << EOF
@@ -86,41 +85,40 @@ jobs:
                       if (!project.android.signingConfigs.hasProperty('release')) {
                           project.android.signingConfigs.create('release')
                       }
-                      def releaseConfig = project.android.signingConfigs.getByName('release')
-                      releaseConfig.storeFile = project.rootProject.file('mobile/android/focus-android/keystore.p12')
-                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
-                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
-                      releaseConfig.keyPassword = System.getenv('KEY_ALIAS_PASSWORD')
-                      releaseConfig.storeType = 'PKCS12'
-                      releaseConfig.enableV1Signing = true
-                      releaseConfig.enableV2Signing = true
-                      releaseConfig.enableV3Signing = true
-                      project.android.buildTypes.release.signingConfig = releaseConfig
+                      def cfg = project.android.signingConfigs.release
+                      cfg.storeFile = project.rootProject.file('mobile/android/focus-android/keystore.p12')
+                      cfg.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      cfg.keyAlias = System.getenv('KEY_ALIAS')
+                      cfg.keyPassword = System.getenv('KEY_ALIAS_PASSWORD')
+                      cfg.storeType = 'PKCS12'
+                      cfg.enableV1Signing = true
+                      cfg.enableV2Signing = true
+                      cfg.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = cfg
                   }
               }
           }
           EOF
 
       - name: Build signed apk with gradle
-        working-directory: ./fxfocus_source
+        working-directory: ./fxfocus_source/mobile/android/focus-android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
         run: |
-          ./mach gradle focus:assembleFocusArm64Release --no-daemon -I init.gradle
+          chmod +x ./gradlew
+          ./gradlew assembleFocusArm64Release --no-daemon -I ../../init.gradle
 
       - name: List generated apk files
-        working-directory: ./fxfocus_source
         run: |
-          echo "Listing all apk files generated:"
-          find mobile/android/focus-android/app/build/outputs -type f -name "*.apk" | sort
+          find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs" -type f -name "*.apk" | sort
 
-      - name: Rename and move
-        working-directory: ./fxfocus_source
+      - name: Rename and move apk
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv ./mobile/android/focus-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk "${{ github.workspace }}/dist/fxfocus-${{ env.BUILD_DATE }}.apk"
+          mv "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk" \
+             "${{ github.workspace }}/dist/fxfocus-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
