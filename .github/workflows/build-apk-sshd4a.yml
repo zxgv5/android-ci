@@ -62,12 +62,6 @@ jobs:
           mv -f default_options_guard.h.tmp default_options_guard.h
           # ---------- rsync ----------
           cd ../rsync
-          if [ ! -f configure ]; then
-            autoreconf -i
-          fi
-          # 给 configure 添加执行权限并运行
-          chmod +x configure
-          ./configure
           # 使用 mkproto.awk 生成 proto.h
           chmod +x mkproto.awk
           awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h
