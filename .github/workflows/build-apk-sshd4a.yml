@@ -92,7 +92,7 @@ jobs:
         run: |
           chmod +x mkproto.awk
           awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h
-          # sed -i '/^#include "rsync.h"/d' proto.h
+          sed -i '/^#include "rsync.h"/d' proto.h
 
       - name: Initialization values
         run: |
