@@ -74,7 +74,7 @@ jobs:
       - name: Configure rsync for Android
         working-directory: ./sshd4a_source/app/src/main/cpp/rsync
         run: |
-          chmod +x configure packaging/* 2>/dev/null || true
+          chmod +x configure packaging/* prepare-source 2>/dev/null || true
           ./configure --host $ANDROID_TARGET \
                       --disable-acl --disable-md2man --disable-xxhash --disable-openssl \
                       --disable-zstd --disable-lz4 --enable-largefile
