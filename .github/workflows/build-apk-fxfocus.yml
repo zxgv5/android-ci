@@ -60,8 +60,7 @@ jobs:
       - name: Decode keystore and create init script
         working-directory: ./fxfocus_source
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
-          # 构建配置：仅arm64-v8a release、artifact模式加速CI构建
+          # ... existing commands ...
           cat > .mozconfig << EOF
           ac_add_options --enable-artifact-builds
           ac_add_options --target=aarch64-linux-android
@@ -93,6 +92,17 @@ jobs:
           }
           EOF
 
+      - name: Set android sdk paths
+        run: |
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          NDK_PATH=$(ls -d /usr/local/lib/android/sdk/ndk/* | sort -V | tail -n1)
+          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Configure mach build environment
+        working-directory: ./fxfocus_source
+        run: ./mach configure
+
       - name: Build signed apk with init script
         working-directory: ./fxfocus_source
         env:
@@ -100,7 +110,6 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_ALIAS_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
         run: |
-          chmod +x ./mach
           ./mach gradle focus:assembleFocusArm64Release --no-daemon -I init.gradle
 
       - name: List generated apk files
