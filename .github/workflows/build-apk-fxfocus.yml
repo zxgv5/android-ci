@@ -28,14 +28,14 @@ jobs:
       - name: Checkout source repo
         run: |
           # 稳定安装git-cinnabar，规避GitHub API请求失败导致的解压报错
-          git clone https://github.com/glandium/git-cinnabar.git --depth 1 --branch master
+          git clone https://github.com/glandium/git-cinnabar.git --depth 1 --branch master ./git-cinnabar
           cd git-cinnabar
           ./git-cinnabar download
           export PATH=$PWD:$PATH
           git config --global core.askpass ""
           git config --global cinnabar.check false
           # 严格从指定官方Mercurial仓库克隆主分支(default)，浅克隆减少拉取体积与耗时
-          git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ./fxfocus_source
+          git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ../fxfocus_source
 
       - name: Checkout ci source repo (self)
         uses: actions/checkout@main
