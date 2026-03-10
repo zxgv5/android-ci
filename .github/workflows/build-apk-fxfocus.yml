@@ -45,35 +45,6 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Setup Android cmdline-tools (action)
-        uses: android-actions/setup-android@v3
-        with:
-          # Install only the command-line tools here; we'll install SDK components explicitly
-          cmdline-tools-version: 16.0
-          accept-android-sdk-licenses: true
-          log-accepted-android-sdk-licenses: true
-
-      - name: Install Android SDK platforms, build-tools and platform-tools (explicit sdkmanager call)
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-        run: |
-          set -euo pipefail
-          # Locate sdkmanager in the installed cmdline-tools
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
-          fi
-
-          echo "Using sdkmanager: $SDKMANAGER"
-          "$SDKMANAGER" --version || true
-
-          # Install packages with sdkmanager as separate arguments to avoid newline/quoting issues
-          yes | "$SDKMANAGER" "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" "platform-tools"
-
-          # Accept any remaining licenses (should be non-interactive due to yes| above)
-          yes | "$SDKMANAGER" --licenses || true
-
       - name: Install system build dependencies
         run: |
           set -euo pipefail
