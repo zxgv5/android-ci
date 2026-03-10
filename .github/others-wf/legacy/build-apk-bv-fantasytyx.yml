@@ -21,7 +21,7 @@ jobs:
           rm -rf ~/.android/build-cache/
  
        # 检出ci仓库，以便在runner中调用sh脚本
-      - name: Checkout ci source repo (self)
+      - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           # 指定一个子目录放ci仓库，避免与源仓库混淆

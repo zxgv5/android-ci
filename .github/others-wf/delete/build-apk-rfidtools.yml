@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
  
-      - name: Checkout ci source repo (self)
+      - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source

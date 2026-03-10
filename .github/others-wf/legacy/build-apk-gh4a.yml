@@ -29,7 +29,7 @@ jobs:
           path: gh4a_source
           fetch-depth: 0
  
-      - name: Checkout ci source repo (self)
+      - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source

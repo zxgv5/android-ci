@@ -41,7 +41,7 @@ jobs:
           cd btremote_source
           git submodule update --init --recursive
 
-      - name: Checkout ci source repo (self)
+      - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source

@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive  # 如果有子模块需要拉取
  
-      - name: Checkout ci source repo (self)
+      - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
