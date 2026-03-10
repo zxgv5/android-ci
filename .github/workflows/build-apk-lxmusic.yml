@@ -2,7 +2,12 @@ name: build-apk-lxmusic
  
 on:
   workflow_dispatch:
-  workflow_call:
+    inputs:
+      branch_name:
+        description: "分支"
+        required: true
+        default: "dev"
+        type: string
  
 env:
   JDK_VERSION: '21'
@@ -29,7 +34,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: lyswhut/lx-music-mobile
-          ref: master
+          ref: '${{ inputs.branch_name }}'
           path: lxmusic_source
           fetch-depth: 0
           submodules: recursive
