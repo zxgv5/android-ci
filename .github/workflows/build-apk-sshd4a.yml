@@ -121,11 +121,11 @@ jobs:
           if [ ! -f rounding.h ]; then
             echo "Warning: rounding.h not generated, creating placeholder"
             cat > rounding.h << EOF
-        #ifndef ROUNDING_H
-        #define ROUNDING_H
-        #include "config.h"
-        #endif
-        EOF
+            #ifndef ROUNDING_H
+            #define ROUNDING_H
+            #include "config.h"
+            #endif
+EOF
           fi
  
       - name: Initialization values
