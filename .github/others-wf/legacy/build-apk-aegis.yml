@@ -39,7 +39,7 @@ jobs:
         with:
           path: ci_source
  
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
@@ -68,7 +68,7 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
  
-      - name: Sign the apk (pkcs12)
+      - name: Sign the apk pkcs12
         working-directory: ./aegis_source
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk

@@ -36,7 +36,7 @@ jobs:
         with:
           path: ci_source
  
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
@@ -80,7 +80,7 @@ jobs:
           sed -i 's/^-XX:MaxPermSize=[^ ]* //g' gradle.properties
           sed -i 's/^-XX:MaxPermSize=[^ ]*$//g' gradle.properties
  
-      - name: Set up python 3.12
+      - name: Setup python 3.12
         uses: actions/setup-python@main
         with:
           python-version: '3.12'

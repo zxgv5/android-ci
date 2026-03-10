@@ -41,7 +41,7 @@ jobs:
         with:
           path: ci_source
  
-      - name: Set build date
+      - name: Generate timestamp
         run: echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV
  
       - name: Setup java
@@ -135,7 +135,7 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
  
-      - name: Sign apk (pkcs12)
+      - name: Sign apk pkcs12
         working-directory: ./koreader_source
         run: |
           export PATH="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}:$PATH"

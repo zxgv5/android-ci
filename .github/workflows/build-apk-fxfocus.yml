@@ -34,7 +34,7 @@ jobs:
         with:
           path: ci_source
 
-      - name: Set build date
+      - name: Generate timestamp
         run: |
           set -euo pipefail
           echo "BUILD_DATE=$(TZ=UTC-8 date +'%y.%m.%d-%H.%M.%S')" >> $GITHUB_ENV

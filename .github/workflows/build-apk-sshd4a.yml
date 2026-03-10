@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool wget p7zip-full
  
-      - name: Set up android ndk environment
+      - name: Setup android ndk environment
         run: |
           ANDROID_TARGET=aarch64-linux-android
           ANDROID_MIN_SDK=30
@@ -91,7 +91,7 @@ jobs:
           chmod +x prebuild-rsyn.sh
           ./prebuild-rsyn.sh
 
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  

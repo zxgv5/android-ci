@@ -39,11 +39,11 @@ jobs:
         with:
           path: ci_source
  
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
-      - name: Set up jdk 21 adopt
+      - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}
@@ -51,7 +51,7 @@ jobs:
           java-package: '${{ env.JDK_PACKAGE }}'
           cache: gradle
  
-      - name: Set up keystore
+      - name: Setup keystore
         working-directory: ./imagetoolbox_source
         run: |
           sudo apt update -y || true

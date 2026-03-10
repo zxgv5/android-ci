@@ -48,9 +48,8 @@ jobs:
         with:
           path: ci_source
  
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
-          # 先获取当前commit信息
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
       - name: Fix build-extras.gradle for release build
@@ -58,13 +57,13 @@ jobs:
           chmod +x ${{ github.workspace }}/ci_source/scripts/customize-acode.sh
           ${{ github.workspace }}/ci_source/scripts/customize-acode.sh
  
-      - name: Set up java
+      - name: Setup java
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
           java-version: '${{ env.JDK_VERSION }}'
  
-      - name: Set up node.js
+      - name: Setup node.js
         uses: actions/setup-node@main
         with:
           node-version: ''

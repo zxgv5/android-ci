@@ -53,7 +53,7 @@ jobs:
         working-directory: ./lxmusic_source
         run: npm install
  
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  

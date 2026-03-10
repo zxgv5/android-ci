@@ -33,7 +33,7 @@ jobs:
           path: ci_source
  
       # 并行克隆两个仓库
-      - name: Checkout source repo (leonwu85-bv)
+      - name: Checkout source repo
         uses: actions/checkout@main
         with:
           repository: leonwu85/bv
@@ -42,7 +42,7 @@ jobs:
           path: leonwu85-bv-source
           fetch-depth: 0
  
-      - name: Checkout pre-built libs repo (bv-libs)
+      - name: Checkout pre-built libs repo
         uses: actions/checkout@main
         with:
           repository: zxgv5/bv-libs
@@ -50,13 +50,12 @@ jobs:
           ref: main
           path: bv-libs-source
  
-      # 环境变量初始化
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
       # 安装python3（改用官方action，避免apt兼容性问题）
-      - name: Set up python 3.12
+      - name: Setup python 3.12
         uses: actions/setup-python@main
         with:
           python-version: '3.12'
@@ -123,7 +122,7 @@ jobs:
             leonwu85-bv-source/.gradle
           key: ${{ runner.os }}-gradle-${{ hashFiles('leonwu85-bv-source/gradle/wrapper/gradle-wrapper.properties') }}
  
-      - name: Set up jdk 21
+      - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}

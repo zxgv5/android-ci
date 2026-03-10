@@ -32,22 +32,21 @@ jobs:
         with:
           path: ci_source
  
-      - name: Initialization values
+      - name: Generate timestamp etc
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           GRADLE_VERSION=$(grep -oP 'distributionUrl=.*/gradle-(.*)-bin.zip' $GITHUB_WORKSPACE/wgtunnel_source/gradle/wrapper/gradle-wrapper.properties | grep -oP '(?<=gradle-).*(?=-bin.zip)')
           echo "GRADLE_VERSION=$GRADLE_VERSION" >> $GITHUB_ENV
         shell: bash
  
-      - name: Set up jdk 17
+      - name: Setup java
         uses: actions/setup-java@main
         with:
           distribution: 'temurin'
           java-version: '17'
           cache: 'gradle'
  
-      # 替代android-actions/setup-android@main
-      - name: Set up android sdk components
+      - name: Setup android sdk components
         shell: bash
         run: |
           # 设置 Android SDK 环境变量（如果已安装）
@@ -63,9 +62,6 @@ jobs:
             yes | sdkmanager --licenses || true
             sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk-bundle"
           fi
- 
-      # - name: Set up android sdk
-      #   uses: zxgv5/setup-android@main
  
       - name: Enable gradle build cache
         working-directory: ./wgtunnel_source

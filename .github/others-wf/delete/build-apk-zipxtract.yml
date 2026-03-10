@@ -108,7 +108,7 @@ jobs:
           echo "Total APK files found: $APK_COUNT"
           echo "APK_COUNT=$APK_COUNT" >> $GITHUB_ENV
  
-      - name: Sign the apk (pkcs12)
+      - name: Sign the apk pkcs12
         working-directory: ./zipxtract_source
         run: |
           # 设置Android build-tools路径

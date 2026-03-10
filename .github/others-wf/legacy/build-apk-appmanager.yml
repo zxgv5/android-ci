@@ -35,7 +35,7 @@ jobs:
         with:
           path: ci_source
  
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
@@ -55,7 +55,7 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleRelease
  
-      - name: Sign the apk (pkcs12)
+      - name: Sign the apk pkcs12
         env:
           ANDROID_KEYSTORE_PATH: "./keystore/keystore.p12"
           ANDROID_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}

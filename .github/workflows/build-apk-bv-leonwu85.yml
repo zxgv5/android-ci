@@ -24,7 +24,7 @@ jobs:
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
  
-      - name: Checkout source repo (bv)
+      - name: Checkout source repo
         uses: actions/checkout@main
         with:
           repository: leonwu85/bv
@@ -38,7 +38,7 @@ jobs:
         with:
           path: ci_source
 
-      - name: Initialization values
+      - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
@@ -48,7 +48,7 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
 
-      - name: Set up python 3.12
+      - name: Setup python 3.12
         uses: actions/setup-python@main
         with:
           python-version: '3.12'

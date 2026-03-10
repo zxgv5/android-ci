@@ -168,7 +168,7 @@ jobs:
           find . -path "*/build/outputs/apk/*" -name "*.apk" 2>/dev/null | head -10
           find . -path "*/build/outputs/bundle/*" -name "*.aab" 2>/dev/null | head -10
  
-      - name: Sign the apk (pkcs12)
+      - name: Sign the apk pkcs12
         working-directory: ${{ github.workspace }}/localdesktop_source
         run: |
           # 设置Android build-tools路径

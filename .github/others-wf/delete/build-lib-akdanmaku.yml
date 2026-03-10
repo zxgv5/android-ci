@@ -41,7 +41,7 @@ jobs:
           sparse-checkout-cone-mode: false
  
       # 环境变量初始化
-      - name: Initialization values
+      - name: Generate timestamp etc
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
           echo "SOURCE_DIR=akdanmaku-source/akdanmaku" >> $GITHUB_ENV
@@ -68,13 +68,13 @@ jobs:
             akdanmaku-source/.gradle
           key: ${{ runner.os }}-gradle-${{ hashFiles('akdanmaku-source/gradle/wrapper/gradle-wrapper.properties') }}
  
-      - name: Set up jdk 21
+      - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: 'temurin'
  
-      # - name: Setup android sdk (minimal)
+      # - name: Setup android sdk
       #   uses: android-actions/setup-android@main
       #   with:
       #     api-level: ${{ env.ANDROID_COMPILE_SDK }}
