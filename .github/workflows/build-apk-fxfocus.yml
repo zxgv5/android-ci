@@ -45,18 +45,34 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Setup Android SDK
+      - name: Setup Android cmdline-tools (action)
         uses: android-actions/setup-android@v3
         with:
-          # If you want to force a specific cmdline-tools package, set it here;
-          # leaving it unset will use the action defaults and avoid re-downloading on runners.
-          # cmdline-tools-version: 9477386
-          packages: |
-            platforms;android-${{ env.ANDROID_COMPILE_SDK }}
-            build-tools;${{ env.ANDROID_BUILD_TOOLS }}
-            platform-tools
+          # Install only the command-line tools here; we'll install SDK components explicitly
+          cmdline-tools-version: 16.0
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: true
+
+      - name: Install Android SDK platforms, build-tools and platform-tools (explicit sdkmanager call)
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+        run: |
+          set -euo pipefail
+          # Locate sdkmanager in the installed cmdline-tools
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
+          fi
+
+          echo "Using sdkmanager: $SDKMANAGER"
+          "$SDKMANAGER" --version || true
+
+          # Install packages with sdkmanager as separate arguments to avoid newline/quoting issues
+          yes | "$SDKMANAGER" "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" "platform-tools"
+
+          # Accept any remaining licenses (should be non-interactive due to yes| above)
+          yes | "$SDKMANAGER" --licenses || true
 
       - name: Install system build dependencies
         run: |
@@ -85,12 +101,10 @@ jobs:
           python3 download.py
           export PATH="$PWD:$PATH"
           echo "$PWD" >> $GITHUB_PATH
-          # Configure cinnabar to behave more robustly on CI
           git config --global core.askpass ""
           git config --global cinnabar.check false
           git config --global cinnabar.refs tips
           cd ..
-          # Clone mozilla-central via cinnabar (git-cinnabar provides hg:: helper)
           git clone --depth 1 --branch default --retry 5 hg::https://hg.mozilla.org/mozilla-central/ fxfocus_source
 
       - name: Bootstrap mozilla build environment
@@ -105,11 +119,9 @@ jobs:
         working-directory: ./fxfocus_source
         run: |
           set -euo pipefail
-          # Decode signing keystore; ensure secrets are configured in repo settings
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
           chmod 600 mobile/android/focus-android/keystore.p12
 
-          # Create .mozconfig for artifact mode builds
           cat > .mozconfig <<EOF
           ac_add_options --enable-artifact-builds
           ac_add_options --disable-compile-environment
@@ -122,7 +134,6 @@ jobs:
           mk_add_options MOZ_OBJDIR=./obj-focus-arm64
           EOF
 
-          # Create a simple init.gradle that injects signing config into Android projects
           cat > init.gradle <<EOF
           allprojects {
               afterEvaluate { project ->
@@ -155,7 +166,7 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
 
-          # Try the primary Focus arm64 release task; if it doesn't exist fall back to assembleRelease
+          # Prefer the Focus arm64 task if present, otherwise fall back to assembleRelease
           if ./gradlew -q :app:tasks --all | grep -q 'assembleFocusArm64Release'; then
             ./gradlew assembleFocusArm64Release --no-daemon -I ../../init.gradle
           else
@@ -171,11 +182,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${{ github.workspace }}/dist"
-          # Find the produced APK (first match)
-          APK_PATH=$(find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android" -type f -name "*.apk" | sort | tail -n +1 | head -n1 || true)
+          APK_PATH=$(find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android" -type f -name "*.apk" | sort | head -n1 || true)
           if [ -z "$APK_PATH" ]; then
             echo "ERROR: No APK found in build outputs"
-            echo "Existing files under the build dir:"
             ls -R "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android" || true
             exit 1
           fi
