@@ -76,7 +76,7 @@ jobs:
           git config --global cinnabar.check false
           git config --global cinnabar.refs tips
           cd ..
-          git clone --depth 1 --branch default --retry 5 hg::https://hg.mozilla.org/mozilla-central/ fxfocus_source
+          git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ fxfocus_source
 
       - name: Bootstrap mozilla build environment
         working-directory: ./fxfocus_source
