@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool wget p7zip-full
  
-      - name: Set up Android NDK environment
+      - name: Set up android ndk environment
         run: |
           ANDROID_TARGET=aarch64-linux-android
           ANDROID_MIN_SDK=30
@@ -71,7 +71,7 @@ jobs:
                       --disable-utmp --disable-wtmp \
                       --enable-bundled-libtom --enable-largefile
  
-      - name: Generate default_options_guard.h for dropbear
+      - name: Generate header file for dropbear
         working-directory: ./sshd4a_source/app/src/main/cpp/dropbear
         run: |
           chmod +x src/ifndef_wrapper.sh
@@ -89,24 +89,21 @@ jobs:
                       --disable-roll-simd --disable-md5-asm --disable-roll-asm \
                       --enable-largefile
  
-      - name: Generate proto.h for rsync
+      - name: Generate header file for rsync
         working-directory: ./sshd4a_source/app/src/main/cpp/rsync
         run: |
           chmod +x mkproto.awk
           awk -f mkproto.awk *.c lib/*.c zlib/*.c popt/*.c > proto.h.full || { echo "awk failed"; exit 1; }
           echo "proto.h generated, lines: $(wc -l < proto.h)"
+          cd ..
+          chmod +x prebuild-rsyn.sh
+          ./prebuild-rsyn.sh
  
       # - name: Generate rounding.h for rsync
       #   working-directory: ./sshd4a_source/app/src/main/cpp/rsync
       #   run: |
       #     echo "Attempting to generate rounding.h using make..."
       #     make rounding.h || true
- 
-      - name: Run prebuild-rsyn.sh to generate missing headers
-        working-directory: ./sshd4a_source/app/src/main/cpp
-        run: |
-          chmod +x prebuild-rsyn.sh
-          ./prebuild-rsyn.sh
  
       - name: Initialization values
         run: |
