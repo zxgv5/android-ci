@@ -1,84 +1,132 @@
 name: build-apk-fxfocus
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+  MOZBUILD_STATE_PATH: /home/runner/.mozbuild
+  ANDROID_HOME: /home/runner/Android/Sdk
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Clean runner environment
         run: |
+          set -euo pipefail
           rm -rf ~/.gradle/caches/
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
-      - name: Checkout source repo
+          rm -rf ~/.mozbuild
+ 
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Set build date
         run: |
+          set -euo pipefail
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+ 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 11076708
+          packages: >
+            platforms;android-${{ env.ANDROID_COMPILE_SDK }}
+            build-tools;${{ env.ANDROID_BUILD_TOOLS }}
+            platform-tools
+          accept-android-sdk-licenses: true
+ 
+      - name: Install system build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf2.13 \
+            build-essential \
+            libssl-dev \
+            libxml2-utils \
+            zip \
+            unzip \
+            python3 \
+            python3-pip \
+            python3-venv \
+            mercurial \
+            curl \
+            git
+ 
+      - name: Install git-cinnabar & clone mozilla-central source
+        run: |
+          set -euo pipefail
+          # 安装git-cinnabar（官方推荐的git访问hg.mozilla.org工具）
           mkdir -p git-cinnabar
           cd git-cinnabar
           curl -sL https://raw.githubusercontent.com/glandium/git-cinnabar/master/download.py -o download.py
           python3 download.py
           export PATH="$PWD:$PATH"
           echo "$PWD" >> $GITHUB_PATH
+          # 配置git-cinnabar
           git config --global core.askpass ""
           git config --global cinnabar.check false
           git config --global cinnabar.refs tips
-          git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ ../fxfocus_source
-
-      - name: Checkout ci source repo
-        uses: actions/checkout@main
-        with:
-          path: ci_source
-
-      - name: Set build date
-        run: |
-          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
-      - name: Setup java
-        uses: actions/setup-java@main
-        with:
-          java-version: "${{ env.JDK_VERSION }}"
-          distribution: "${{ env.JDK_DISTRIBUTION }}"
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y autoconf2.13 build-essential libssl-dev libxml2-utils zip unzip python3 python3-pip
-
+          # 克隆源码，添加重试机制解决CDN网络波动
+          cd ..
+          git clone --depth 1 --branch default --retry 5 hg::https://hg.mozilla.org/mozilla-central/ fxfocus_source
+ 
       - name: Bootstrap mozilla build environment
         working-directory: ./fxfocus_source
         run: |
-          ./mach --no-interactive bootstrap --application-choice="Firefox for Android Artifact Mode"
-
-      - name: Decode keystore and create configs
+          set -euo pipefail
+          # 核心修复：使用官方合法的Android Artifact模式短别名
+          # --no-system-changes：CI环境推荐配置，禁止mach修改系统包，避免权限/网络问题
+          ./mach --no-interactive bootstrap \
+            --application-choice="mobile_android_artifact_mode" \
+            --no-system-changes
+ 
+      - name: Decode keystore and create build configs
         working-directory: ./fxfocus_source
         run: |
+          set -euo pipefail
+          # 解码签名密钥，设置安全权限
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
-
+          chmod 600 mobile/android/focus-android/keystore.p12
+ 
+          # 生成.mozconfig，与bootstrap的Artifact模式完全对齐
           cat > .mozconfig << EOF
+          # 启用Artifact构建模式
           ac_add_options --enable-artifact-builds
           ac_add_options --disable-compile-environment
+          # Android目标平台与SDK配置
           ac_add_options --target=aarch64-linux-android
+          ac_add_options --with-android-sdk="$ANDROID_HOME"
+          # 发布构建优化
           ac_add_options --enable-release
           ac_add_options --disable-debug
           ac_add_options --disable-tests
           ac_add_options --disable-updater
+          # 指定构建输出目录
           mk_add_options MOZ_OBJDIR=./obj-focus-arm64
           EOF
-
+ 
+          # 生成全局签名配置gradle脚本
           cat > init.gradle << EOF
           allprojects {
               afterEvaluate { project ->
@@ -100,27 +148,31 @@ jobs:
               }
           }
           EOF
-
-      - name: Build signed apk with gradle
+ 
+      - name: Build signed release APK
         working-directory: ./fxfocus_source/mobile/android/focus-android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_ALIAS_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
+          set -euo pipefail
           chmod +x ./gradlew
           ./gradlew assembleFocusArm64Release --no-daemon -I ../../init.gradle
-
-      - name: List generated apk files
+ 
+      - name: List generated APK files
         run: |
+          set -euo pipefail
           find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs" -type f -name "*.apk" | sort
-
-      - name: Rename and move
+ 
+      - name: Rename and move APK to dist directory
         run: |
+          set -euo pipefail
           mkdir -p "${{ github.workspace }}/dist"
-          mv "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk" \
+          # 修复APK输出路径，匹配Focus构建的实际产物名称
+          mv "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs/apk/focusArm64/release/app-focus-arm64-release.apk" \
              "${{ github.workspace }}/dist/fxfocus-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
