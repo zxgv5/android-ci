@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       branch_name:
-        description: "分支"
+        description: '分支'
         required: true
-        default: "dev"
+        default: 'dev'
         type: string
  
 env:
