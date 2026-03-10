@@ -7,8 +7,8 @@ on:
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
-  ANDROID_COMPILE_SDK: '34'              # Use latest supported unless Focus requires another version
-  ANDROID_BUILD_TOOLS: '34.0.0'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   MOZBUILD_STATE_PATH: /home/runner/.mozbuild
   ANDROID_HOME: /home/runner/Android/Sdk
@@ -48,12 +48,15 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          cmdline-tools-version: 9477386    # Use latest or matching with compile SDK/build-tools
+          # If you want to force a specific cmdline-tools package, set it here;
+          # leaving it unset will use the action defaults and avoid re-downloading on runners.
+          # cmdline-tools-version: 9477386
           packages: |
             platforms;android-${{ env.ANDROID_COMPILE_SDK }}
             build-tools;${{ env.ANDROID_BUILD_TOOLS }}
             platform-tools
           accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: true
 
       - name: Install system build dependencies
         run: |
@@ -82,11 +85,13 @@ jobs:
           python3 download.py
           export PATH="$PWD:$PATH"
           echo "$PWD" >> $GITHUB_PATH
+          # Configure cinnabar to behave more robustly on CI
           git config --global core.askpass ""
           git config --global cinnabar.check false
           git config --global cinnabar.refs tips
           cd ..
-          git clone --depth 1 --branch default hg::https://hg.mozilla.org/mozilla-central/ fxfocus_source
+          # Clone mozilla-central via cinnabar (git-cinnabar provides hg:: helper)
+          git clone --depth 1 --branch default --retry 5 hg::https://hg.mozilla.org/mozilla-central/ fxfocus_source
 
       - name: Bootstrap mozilla build environment
         working-directory: ./fxfocus_source
@@ -100,11 +105,12 @@ jobs:
         working-directory: ./fxfocus_source
         run: |
           set -euo pipefail
+          # Decode signing keystore; ensure secrets are configured in repo settings
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > mobile/android/focus-android/keystore.p12
           chmod 600 mobile/android/focus-android/keystore.p12
 
-          # Generate .mozconfig
-          cat > .mozconfig << EOF
+          # Create .mozconfig for artifact mode builds
+          cat > .mozconfig <<EOF
           ac_add_options --enable-artifact-builds
           ac_add_options --disable-compile-environment
           ac_add_options --target=aarch64-linux-android
@@ -116,8 +122,8 @@ jobs:
           mk_add_options MOZ_OBJDIR=./obj-focus-arm64
           EOF
 
-          # Generate global signing config for Gradle
-          cat > init.gradle << EOF
+          # Create a simple init.gradle that injects signing config into Android projects
+          cat > init.gradle <<EOF
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
@@ -148,19 +154,33 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew assembleFocusArm64Release --no-daemon -I ../../init.gradle
+
+          # Try the primary Focus arm64 release task; if it doesn't exist fall back to assembleRelease
+          if ./gradlew -q :app:tasks --all | grep -q 'assembleFocusArm64Release'; then
+            ./gradlew assembleFocusArm64Release --no-daemon -I ../../init.gradle
+          else
+            ./gradlew assembleRelease --no-daemon -I ../../init.gradle
+          fi
 
       - name: List generated APK files
         run: |
           set -euo pipefail
-          find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs" -type f -name "*.apk" | sort
+          find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs" -type f -name "*.apk" | sort || true
 
       - name: Rename and move APK to dist directory
         run: |
           set -euo pipefail
           mkdir -p "${{ github.workspace }}/dist"
-          mv "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android/app/build/outputs/apk/focusArm64/release/app-focus-arm64-release.apk" \
-             "${{ github.workspace }}/dist/fxfocus-${{ env.BUILD_DATE }}.apk"
+          # Find the produced APK (first match)
+          APK_PATH=$(find "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android" -type f -name "*.apk" | sort | tail -n +1 | head -n1 || true)
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK found in build outputs"
+            echo "Existing files under the build dir:"
+            ls -R "${{ github.workspace }}/fxfocus_source/mobile/android/focus-android" || true
+            exit 1
+          fi
+          cp "$APK_PATH" "${{ github.workspace }}/dist/fxfocus-${{ env.BUILD_DATE }}.apk"
+          ls -l "${{ github.workspace }}/dist"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
