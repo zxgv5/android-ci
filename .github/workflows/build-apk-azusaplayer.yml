@@ -92,6 +92,8 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SENTRY_SKIP_UPLOAD: 'true'
+          SENTRY_DISABLE_AUTO_UPLOAD: 'true' # 备用，禁用自动上传
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -I init.gradle
