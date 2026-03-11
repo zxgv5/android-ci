@@ -54,13 +54,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Resolve dependencies
-        working-directory: ./localsend_source/app
-        run: |
-          rm -f pubspec.lock
-          flutter clean
-          flutter pub get || flutter pub upgrade --major-versions
-
       - name: Decode and write keys
         working-directory: ./localsend_source/app
         run: |
@@ -72,6 +65,12 @@ jobs:
             echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> key.properties
             echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> key.properties
           fi
+
+      - name: Install dependencies
+        working-directory: ./localsend_source/app
+        run: |
+          flutter clean
+          flutter pub get
 
       - name: Flutter build release apk
         working-directory: ./localsend_source/app
