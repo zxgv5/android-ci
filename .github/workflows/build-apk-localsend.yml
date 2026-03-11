@@ -51,7 +51,8 @@ jobs:
         uses: subosito/flutter-action@main
         id: flutter-action
         with:
-          flutter-version: '3.31.x'
+          channel: stable
+          flutter-version: '3.31.0'          # 同时指定 channel 和确切版本
           cache: true
 
       - name: Decode and write keys
