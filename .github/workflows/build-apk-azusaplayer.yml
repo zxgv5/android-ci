@@ -54,12 +54,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Enable corepack
-        run: corepack enable
-
-      - name: Install dependencies
+      - name: Enable corepack and install dependencies
         working-directory: ./azusaplayer_source
         run: |
+          corepack enable
           # 启用 Corepack 后，yarn 命令会自动使用项目所需的版本
           yarn install --frozen-lockfile
 
