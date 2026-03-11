@@ -5,7 +5,6 @@ on:
   workflow_call:
 
 env:
-  # 用于Gradle构建的JDK和SDK版本（保持与项目兼容）
   JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '30'
@@ -44,57 +43,60 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      # 步骤1：安装旧版Android SDK和NDK（遵循官方指南）
+      # 修正：分步下载并解压旧版 SDK 和 NDK，避免管道传输问题
       - name: Install old android sdk and ndk
         run: |
-          # 定义安装路径
+          set -e
           export OLD_SDK_HOME=$HOME/old-android-sdk
           export OLD_NDK_HOME=$HOME/old-android-ndk
           mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
 
-          # 下载并解压SDK r24.4.1
-          wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O - | tar xz -C $OLD_SDK_HOME --strip-components=1
-          # 下载platform-tools r29.0.1
-          wget -q http://dl.google.com/android/repository/platform-tools_r29.0.1-linux.zip
-          unzip -q platform-tools_r29.0.1-linux.zip -d $OLD_SDK_HOME
-          # 下载build-tools r29.0.1
-          wget -q http://dl.google.com/android/repository/build-tools_r29.0.1-linux.zip
-          unzip -q build-tools_r29.0.1-linux.zip -d $OLD_SDK_HOME/build-tools
-          # 下载android-19 platform
-          wget -q http://dl.google.com/android/repository/android-19_r04.zip
-          unzip -q android-19_r04.zip -d $OLD_SDK_HOME/platforms
-          # 下载NDK r13b
-          wget -q https://dl.google.com/android/repository/android-ndk-r13b-linux-x86_64.zip
-          unzip -q android-ndk-r13b-linux-x86_64.zip -d $OLD_NDK_HOME --strip-components=1
+          # SDK r24.4.1
+          wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
+          tar xzf sdk.tgz -C $OLD_SDK_HOME --strip-components=1
+          rm sdk.tgz
 
-          # 清理zip文件
-          rm -f *.zip
+          # platform-tools r29.0.1
+          wget -q http://dl.google.com/android/repository/platform-tools_r29.0.1-linux.zip -O platform-tools.zip
+          unzip -q platform-tools.zip -d $OLD_SDK_HOME
+          rm platform-tools.zip
 
-          # 设置环境变量文件供后续步骤使用
+          # build-tools r29.0.1
+          wget -q http://dl.google.com/android/repository/build-tools_r29.0.1-linux.zip -O build-tools.zip
+          unzip -q build-tools.zip -d $OLD_SDK_HOME/build-tools
+          rm build-tools.zip
+
+          # android-19 platform
+          wget -q http://dl.google.com/android/repository/android-19_r04.zip -O platform-19.zip
+          unzip -q platform-19.zip -d $OLD_SDK_HOME/platforms
+          rm platform-19.zip
+
+          # NDK r13b（备用 r17c）
+          wget -q https://dl.google.com/android/repository/android-ndk-r13b-linux-x86_64.zip -O ndk.zip || {
+              echo "Failed to download NDK r13b, trying NDK r17c"
+              wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip -O ndk.zip
+          }
+          unzip -q ndk.zip -d $OLD_NDK_HOME --strip-components=1
+          rm ndk.zip
+
+          # 设置环境变量
           echo "OLD_SDK_HOME=$OLD_SDK_HOME" >> $GITHUB_ENV
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
-          # 将旧版工具加入PATH（仅用于后续步骤，不影响Gradle）
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
 
-      # 步骤2：编译本地库（GMP和PARI）使用旧版工具
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         run: |
-          # 临时设置旧版环境变量
           export ANDROID_HOME=$OLD_SDK_HOME
           export NDK=$OLD_NDK_HOME
-          # 进入PariDroid子目录，更新Android项目
           cd PariDroid
           android update project --target android-19 -s -p .
           cd ..
-          # 执行make，编译GMP和PARI，并生成库文件到jni目录
           make
         env:
-          # 确保使用旧版SDK和NDK
           OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
           OLD_NDK_HOME: ${{ env.OLD_NDK_HOME }}
 
-      # 步骤3：解码keystore并创建init.gradle（签名配置）
       - name: Decode keystore and create init script
         working-directory: ./paridroid_source/PariDroid
         run: |
@@ -139,7 +141,6 @@ jobs:
           echo "" >> gradle.properties
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
-          # 检查gradle-wrapper.jar是否存在（不存在则使用全局gradle）
           if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
             chmod +x ./gradlew
             ./gradlew assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
