@@ -87,8 +87,14 @@ jobs:
           echo "" >> gradle.properties
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
-          chmod +x ./gradlew
-          ./gradlew assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
+          # 检查 gradle-wrapper.jar 是否存在，若存在则使用 wrapper，否则使用全局 gradle
+          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
+          else
+            echo "Gradle wrapper jar not found, using global gradle"
+            gradle assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
+          fi
 
       - name: List generated apk files
         working-directory: ./paridroid_source/PariDroid
