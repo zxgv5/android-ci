@@ -49,6 +49,23 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
+      - name: Setup node
+        uses: actions/setup-node@main
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./azusaplayer_source
+        run: |
+          # 根据锁定文件选择包管理器
+          if [ -f "yarn.lock" ]; then
+            yarn install --frozen-lockfile
+          elif [ -f "package-lock.json" ]; then
+            npm ci
+          else
+            npm install
+          fi
+
       - name: Decode keystore and create init script
         working-directory: ./azusaplayer_source/android
         run: |
