@@ -54,17 +54,14 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Install dependencies
         working-directory: ./azusaplayer_source
         run: |
-          # 根据锁定文件选择包管理器
-          if [ -f "yarn.lock" ]; then
-            yarn install --frozen-lockfile
-          elif [ -f "package-lock.json" ]; then
-            npm ci
-          else
-            npm install
-          fi
+          # 启用 Corepack 后，yarn 命令会自动使用项目所需的版本
+          yarn install --frozen-lockfile
 
       - name: Decode keystore and create init script
         working-directory: ./azusaplayer_source/android
