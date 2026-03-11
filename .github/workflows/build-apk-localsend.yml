@@ -51,8 +51,8 @@ jobs:
       - name: Decode and write keys
         working-directory: ./localsend_source/app
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./android/keystore.p12
-          echo "storeFile=$｛｛ github.workspace ｝｝/localsend_source/app/android/keystore.p12" > key.properties
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
+          echo "storeFile=$｛｛ github.workspace ｝｝/localsend_source/app/keystore.p12" > key.properties
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> key.properties
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> key.properties
           echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> key.properties
