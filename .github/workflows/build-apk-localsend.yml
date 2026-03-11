@@ -47,15 +47,18 @@ jobs:
         with:
           java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
- 
+
       - name: Decode and write keys
         working-directory: ./localsend_source/app
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
-          echo "storeFile=$｛｛ github.workspace ｝｝/localsend_source/app/keystore.p12" > key.properties
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> key.properties
-          echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> key.properties
+          mkdir -p android
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.p12
+          cat > android/key.properties << 'EOF'
+          storeFile=${{ github.workspace }}/localsend_source/app/android/app/keystore.p12
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
  
       - name: Setup flutter
         uses: subosito/flutter-action@main
@@ -84,7 +87,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./localsend_source/app/keystore.p12 ./localsend_source/app/key.properties"
+          P12_KEYSTORE_PATH: "./localsend_source/app/android/app/keystore.p12 ./localsend_source/app/android/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/localsend-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-localsend"
