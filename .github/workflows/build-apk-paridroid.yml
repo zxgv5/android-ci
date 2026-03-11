@@ -43,7 +43,7 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      # 修正：分步下载并解压旧版 SDK 和 NDK，避免管道传输问题
+      # 修正：完全移除 --strip-components，采用手动目录移动
       - name: Install old android sdk and ndk
         run: |
           set -e
@@ -51,14 +51,16 @@ jobs:
           export OLD_NDK_HOME=$HOME/old-android-ndk
           mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
 
-          # SDK r24.4.1
+          # SDK r24.4.1 (tgz)
           wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
-          tar xzf sdk.tgz -C $OLD_SDK_HOME --strip-components=1
-          rm sdk.tgz
+          mkdir -p sdk_tmp
+          tar xzf sdk.tgz -C sdk_tmp
+          mv sdk_tmp/* $OLD_SDK_HOME/
+          rm -rf sdk_tmp sdk.tgz
 
           # platform-tools r29.0.1
           wget -q http://dl.google.com/android/repository/platform-tools_r29.0.1-linux.zip -O platform-tools.zip
-          unzip -q platform-tools.zip -d $OLD_SDK_HOME
+          unzip -q platform-tools.zip -d $OLD_SDK_HOME/
           rm platform-tools.zip
 
           # build-tools r29.0.1
@@ -71,15 +73,17 @@ jobs:
           unzip -q platform-19.zip -d $OLD_SDK_HOME/platforms
           rm platform-19.zip
 
-          # NDK r13b（备用 r17c）
+          # NDK r13b (fallback to r17c)
           wget -q https://dl.google.com/android/repository/android-ndk-r13b-linux-x86_64.zip -O ndk.zip || {
               echo "Failed to download NDK r13b, trying NDK r17c"
               wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip -O ndk.zip
           }
-          unzip -q ndk.zip -d $OLD_NDK_HOME --strip-components=1
-          rm ndk.zip
+          mkdir -p ndk_tmp
+          unzip -q ndk.zip -d ndk_tmp
+          mv ndk_tmp/* $OLD_NDK_HOME/
+          rm -rf ndk_tmp ndk.zip
 
-          # 设置环境变量
+          # 设置环境变量供后续步骤使用
           echo "OLD_SDK_HOME=$OLD_SDK_HOME" >> $GITHUB_ENV
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
