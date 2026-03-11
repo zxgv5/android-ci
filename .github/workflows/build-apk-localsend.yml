@@ -82,7 +82,7 @@ jobs:
         working-directory: ./localsend_source/app
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./build/app/outputs/flutter-apk/app-arm64-v8a-normal-release.apk" "${{ github.workspace }}/dist/localsend-${{ env.BUILD_DATE }}.apk"
+          mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/localsend-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
