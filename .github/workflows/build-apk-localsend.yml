@@ -47,7 +47,7 @@ jobs:
         with:
           java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
-
+ 
       - name: Decode and write keys
         working-directory: ./localsend_source/app
         run: |
@@ -70,7 +70,12 @@ jobs:
       - name: Flutter build release apk
         working-directory: ./localsend_source/app
         run: |
-          flutter build apk --release --target-platform=android-arm64 --split-per-abi
+          flutter build apk --release \
+            --target-platform=android-arm64 \
+            --split-per-abi \
+            --obfuscate \
+            --split-debug-info=build/app/symbols \
+            --tree-shake-icons
  
       - name: List generated apk files
         working-directory: ./localsend_source/app
