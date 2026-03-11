@@ -51,6 +51,7 @@ jobs:
         uses: subosito/flutter-action@main
         id: flutter-action
         with:
+          flutter-version: '3.22.x'
           channel: stable
           cache: true
 
