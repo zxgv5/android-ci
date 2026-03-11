@@ -47,7 +47,6 @@ jobs:
           java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
 
-      # 修改点：移除 flutter-version-file，让 action 自动选择最新的稳定版
       - name: Setup flutter
         uses: subosito/flutter-action@main
         id: flutter-action
@@ -59,8 +58,8 @@ jobs:
         working-directory: ./obtainium_source
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/key.p12
-            echo storeFile='app/key.p12' >> android/key.properties
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.p12
+            echo storeFile='keystore.p12' >> android/key.properties
             echo storePassword='${{ secrets.KEYSTORE_PASSWORD }}' >> android/key.properties
             echo keyAlias='${{ secrets.KEY_ALIAS }}' >> android/key.properties
             echo keyPassword='${{ secrets.KEY_ALIAS_PASSWORD }}' >> android/key.properties
@@ -86,7 +85,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./obtainium_source/android/app/key.p12 ./obtainium_source/android/key.properties"
+          P12_KEYSTORE_PATH: "./obtainium_source/android/app/keystore.p12 ./obtainium_source/android/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/obtainium-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-obtainium"
