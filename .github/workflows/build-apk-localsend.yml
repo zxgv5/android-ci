@@ -10,6 +10,7 @@ env:
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  FLUTTER_VERSION: '3.38.10'
 
 jobs:
   build:
@@ -47,30 +48,24 @@ jobs:
           java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
 
-      - name: Setup flutter
-        uses: subosito/flutter-action@main
-        id: flutter-action
-        with:
-          flutter-version: '3.38.10'
-          cache: true
-
       - name: Decode and write keys
         working-directory: ./localsend_source/app
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            mkdir -p android/app
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.p12
-            echo "storeFile=android/app/keystore.p12" >> key.properties
+            # 将 keystore 和 key.properties 都放在 app 根目录，简化路径
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > keystore.p12
+            echo "storeFile=keystore.p12" > key.properties
             echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> key.properties
             echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> key.properties
             echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> key.properties
           fi
 
-      - name: Install dependencies
-        working-directory: ./localsend_source/app
-        run: |
-          flutter clean
-          flutter pub get
+      - name: Setup flutter
+        uses: subosito/flutter-action@main
+        id: flutter-action
+        with:
+          flutter-version: '${{ env.FLUTTER_VERSION }}'
+          cache: true
 
       - name: Flutter build release apk
         working-directory: ./localsend_source/app
@@ -92,7 +87,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./localsend_source/app/android/app/keystore.p12 ./localsend_source/app/key.properties"
+          P12_KEYSTORE_PATH: "./localsend_source/app/keystore.p12 ./localsend_source/app/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/localsend-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-localsend"
