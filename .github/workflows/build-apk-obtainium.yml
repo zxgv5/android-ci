@@ -72,15 +72,22 @@ jobs:
         run: |
           flutter build apk --release --flavor normal --target-platform=android-arm64 --split-per-abi
 
-      - name: Rename apk file
+      - name: List generated apk files
         working-directory: ./obtainium_source
         run: |
-          mv "./build/app/outputs/flutter-apk/app-arm64-v8a-normal-release.apk" "./build/app/outputs/flutter-apk/obtainium-${{ env.BUILD_DATE }}.apk"
+          echo "Listing all apk files generated:"
+          find ./build/app/outputs -type f -name "*.apk" | sort
+
+      - name: Rename and move
+        working-directory: ./obtainium_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./build/app/outputs/flutter-apk/app-arm64-v8a-normal-release.apk" "${{ github.workspace }}/dist/obtainium-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./obtainium_source/android/app/key.p12 ./obtainium_source/android/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./obtainium_source/build/app/outputs/flutter-apk/obtainium-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./dist/obtainium-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-obtainium"
