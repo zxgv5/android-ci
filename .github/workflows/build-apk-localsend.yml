@@ -58,16 +58,17 @@ jobs:
         working-directory: ./localsend_source/app
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            # 创建 android/app 目录（如果不存在）
             mkdir -p android/app
-            # 将 keystore 解码到 android/app/keystore.p12
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.p12
-            # 在项目根目录（app/）创建 key.properties，使用相对路径指向 keystore
             echo "storeFile=android/app/keystore.p12" >> key.properties
             echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> key.properties
             echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> key.properties
             echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> key.properties
           fi
+
+      - name: Upgrade dependencies
+        working-directory: ./localsend_source/app
+        run: flutter pub upgrade
 
       - name: Flutter build release apk
         working-directory: ./localsend_source/app
@@ -89,7 +90,6 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          # 提供正确的密钥文件路径（相对于 github.workspace）
           P12_KEYSTORE_PATH: "./localsend_source/app/android/app/keystore.p12 ./localsend_source/app/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/localsend-${{ env.BUILD_DATE }}.apk"
