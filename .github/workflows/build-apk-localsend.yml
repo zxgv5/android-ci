@@ -76,7 +76,7 @@ jobs:
       - name: Flutter build release apk
         working-directory: ./localsend_source/app
         run: |
-          flutter build apk --release --flavor normal --target-platform=android-arm64 --split-per-abi
+          flutter build apk --release --target-platform=android-arm64 --split-per-abi
 
       - name: List generated apk files
         working-directory: ./localsend_source/app
