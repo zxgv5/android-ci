@@ -55,14 +55,14 @@ jobs:
           cache: true
 
       - name: Decode and write keys
-        working-directory: ./localsend_source
+        working-directory: ./localsend_source/app
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             # 创建 android/app 目录（如果不存在）
             mkdir -p android/app
-            # 将 base64 解码为 keystore 文件
+            # 将 keystore 解码到 android/app/keystore.p12
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.p12
-            # 在项目根目录创建 key.properties，路径指向 android/app/keystore.p12
+            # 在项目根目录（app/）创建 key.properties，使用相对路径指向 keystore
             echo "storeFile=android/app/keystore.p12" >> key.properties
             echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> key.properties
             echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> key.properties
@@ -70,18 +70,18 @@ jobs:
           fi
 
       - name: Flutter build release apk
-        working-directory: ./localsend_source
+        working-directory: ./localsend_source/app
         run: |
           flutter build apk --release --flavor normal --target-platform=android-arm64 --split-per-abi
 
       - name: List generated apk files
-        working-directory: ./localsend_source
+        working-directory: ./localsend_source/app
         run: |
           echo "Listing all apk files generated:"
           find ./build/app/outputs -type f -name "*.apk" | sort
 
       - name: Rename and move
-        working-directory: ./localsend_source
+        working-directory: ./localsend_source/app
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./build/app/outputs/flutter-apk/app-arm64-v8a-normal-release.apk" "${{ github.workspace }}/dist/localsend-${{ env.BUILD_DATE }}.apk"
@@ -89,7 +89,8 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./localsend_source/android/app/keystore.p12 ./localsend_source/key.properties"
+          # 提供正确的密钥文件路径（相对于 github.workspace）
+          P12_KEYSTORE_PATH: "./localsend_source/app/android/app/keystore.p12 ./localsend_source/app/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/localsend-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-localsend"
