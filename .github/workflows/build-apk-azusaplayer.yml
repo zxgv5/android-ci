@@ -110,7 +110,7 @@ jobs:
         working-directory: ./azusaplayer_source/android
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/azusaplayer-${{ env.BUILD_DATE }}.apk"
+          mv "./app/build/outputs/apk/release/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/azusaplayer-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
