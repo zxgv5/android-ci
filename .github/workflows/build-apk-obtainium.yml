@@ -47,12 +47,12 @@ jobs:
           java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
 
+      # 修改点：移除 flutter-version-file，让 action 自动选择最新的稳定版
       - name: Setup flutter
         uses: subosito/flutter-action@main
         id: flutter-action
         with:
           channel: stable
-          flutter-version-file: ./obtainium_source/pubspec.yaml
           cache: true
 
       - name: Decode and write keys
@@ -60,7 +60,6 @@ jobs:
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/key.p12
-            # 注意：storeFile 使用相对路径 app/key.p12（相对于 android/ 目录）
             echo storeFile='app/key.p12' >> android/key.properties
             echo storePassword='${{ secrets.KEYSTORE_PASSWORD }}' >> android/key.properties
             echo keyAlias='${{ secrets.KEY_ALIAS }}' >> android/key.properties
