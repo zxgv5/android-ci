@@ -1,21 +1,19 @@
-name: build-apk-localsend
- 
+name: build-apk-paridroid
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
-  JDK_VERSION: '21'
+  JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
-  ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-  FLUTTER_VERSION: '3.38.10'
- 
+  ANDROID_COMPILE_SDK: '30'
+  ANDROID_BUILD_TOOLS: '30.0.3'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: write-all
     steps:
       - name: Clean runner environment
         run: |
@@ -23,76 +21,171 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
- 
+
       - name: Checkout source repo
-        uses: actions/checkout@main
-        with:
-          repository: localsend/localsend
-          ref: main
-          path: localsend_source
-          fetch-depth: 0
-          submodules: recursive
- 
+        run: |
+          git clone --branch master https://pari.math.u-bordeaux.fr/git/paridroid.git paridroid_source
+          cd paridroid_source
+          git submodule update --init --recursive
+
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
+
       - name: Setup java
         uses: actions/setup-java@main
         with:
-          java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
- 
-      - name: Decode and write keys
-        working-directory: ./localsend_source/app
+          java-version: '${{ env.JDK_VERSION }}'
+
+      - name: Install old android sdk and ndk
         run: |
-          mkdir -p android
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.p12
-          cat > android/key.properties << 'EOF'
-          storeFile=${{ github.workspace }}/localsend_source/app/android/app/keystore.p12
-          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}
+          set -e
+          export OLD_SDK_HOME=$HOME/old-android-sdk
+          export OLD_NDK_HOME=$HOME/old-android-ndk
+          mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
+
+          # SDK r24.4.1 - 解压后移动内容
+          wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
+          tar xzf sdk.tgz
+          # 解压出的目录名通常是 android-sdk-linux
+          mv android-sdk-linux/* $OLD_SDK_HOME/
+          mv android-sdk-linux/.* $OLD_SDK_HOME/ 2>/dev/null || true
+          rm -rf android-sdk-linux sdk.tgz
+
+          # platform-tools r29.0.1
+          wget -q http://dl.google.com/android/repository/platform-tools_r29.0.1-linux.zip -O platform-tools.zip
+          unzip -q platform-tools.zip -d $OLD_SDK_HOME/
+          rm platform-tools.zip
+
+          # build-tools r29.0.1
+          wget -q http://dl.google.com/android/repository/build-tools_r29.0.1-linux.zip -O build-tools.zip
+          unzip -q build-tools.zip -d $OLD_SDK_HOME/build-tools
+          rm build-tools.zip
+
+          # android-19 platform
+          wget -q http://dl.google.com/android/repository/android-19_r04.zip -O platform-19.zip
+          unzip -q platform-19.zip -d $OLD_SDK_HOME/platforms
+          rm platform-19.zip
+
+          # NDK r13b (fallback to r17c)
+          wget -q https://dl.google.com/android/repository/android-ndk-r13b-linux-x86_64.zip -O ndk.zip || {
+              echo "Failed to download NDK r13b, trying NDK r17c"
+              wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip -O ndk.zip
+          }
+          unzip -q ndk.zip
+          mv android-ndk-r*/* $OLD_NDK_HOME/
+          mv android-ndk-r*/.* $OLD_NDK_HOME/ 2>/dev/null || true
+          rm -rf android-ndk-r* ndk.zip
+
+          # 调试：列出 tools 目录内容
+          echo "=== Contents of $OLD_SDK_HOME/tools ==="
+          ls -la $OLD_SDK_HOME/tools || echo "tools directory not found"
+
+          # 设置环境变量
+          echo "OLD_SDK_HOME=$OLD_SDK_HOME" >> $GITHUB_ENV
+          echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
+          echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
+
+      - name: Debug sdk tools
+        run: |
+          echo "=== Searching for android command ==="
+          find $OLD_SDK_HOME -name "android" -type f 2>/dev/null || echo "android not found"
+
+      - name: Build native libraries with make
+        working-directory: ./paridroid_source
+        run: |
+          export ANDROID_HOME=$OLD_SDK_HOME
+          export NDK=$OLD_NDK_HOME
+          # 动态查找 android 命令
+          ANDROID_CMD=$(find $OLD_SDK_HOME -name "android" -type f | head -n1)
+          if [ -z "$ANDROID_CMD" ]; then
+            echo "ERROR: android command not found in SDK"
+            exit 1
+          fi
+          chmod +x "$ANDROID_CMD"
+          export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
+          cd PariDroid
+          android update project --target android-19 -s -p .
+          cd ..
+          make
+        env:
+          OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
+          OLD_NDK_HOME: ${{ env.OLD_NDK_HOME }}
+
+      - name: Decode keystore and create init script
+        working-directory: ./paridroid_source/PariDroid
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
+          cat > init.gradle << 'EOF'
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.plugins.hasPlugin('com.android.application')) {
+                      if (!project.android.signingConfigs.hasProperty('release')) {
+                          project.android.signingConfigs.create('release')
+                      }
+                      def releaseConfig = project.android.signingConfigs.getByName('release')
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEY_ALIAS_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
+                  }
+              }
+          }
           EOF
- 
-      - name: Setup flutter
-        uses: subosito/flutter-action@main
-        id: flutter-action
+
+      - name: Setup gradle
+        uses: gradle/actions/setup-gradle@main
         with:
-          flutter-version: '${{ env.FLUTTER_VERSION }}'
-          cache: true
- 
-      - name: Flutter build release apk
-        working-directory: ./localsend_source/app
+          gradle-version: '7.4'
+          dependency-graph: generate-and-submit
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
+
+      - name: Build with gradle
+        working-directory: ./paridroid_source/PariDroid
         run: |
-          flutter build apk --release \
-            --target-platform=android-arm64 \
-            --split-per-abi \
-            --obfuscate \
-            --split-debug-info=build/app/symbols \
-            --tree-shake-icons
- 
+          echo "" >> gradle.properties
+          echo 'org.gradle.caching=true' >> gradle.properties
+          echo 'org.gradle.parallel=true' >> gradle.properties
+          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
+          else
+            echo "Gradle wrapper jar not found, using global gradle"
+            gradle assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
+          fi
+
       - name: List generated apk files
-        working-directory: ./localsend_source/app
+        working-directory: ./paridroid_source/PariDroid
         run: |
           echo "Listing all apk files generated:"
-          find ./build/app/outputs -type f -name "*.apk" | sort
- 
+          find app/build/outputs -name "*.apk" | sort
+
       - name: Rename and move
-        working-directory: ./localsend_source/app
+        working-directory: ./paridroid_source/PariDroid
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/localsend-${{ env.BUILD_DATE }}.apk"
- 
+          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/paridroid-${{ env.BUILD_DATE }}.apk"
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./localsend_source/app/android/app/keystore.p12 ./localsend_source/app/android/key.properties"
+          P12_KEYSTORE_PATH: "./paridroid_source/PariDroid/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/localsend-${{ env.BUILD_DATE }}.apk"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-localsend"
+          BUILD_ARTIFACT_PATH: "./dist/paridroid-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-paridroid"
