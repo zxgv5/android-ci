@@ -43,7 +43,6 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      # 安装 Mercurial（GMP 源码需要）
       - name: Install mercurial
         run: |
           sudo apt-get update
@@ -56,29 +55,24 @@ jobs:
           export OLD_NDK_HOME=$HOME/old-android-ndk
           mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
 
-          # SDK r24.4.1
           wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
           tar xzf sdk.tgz
           mv android-sdk-linux/* $OLD_SDK_HOME/
           mv android-sdk-linux/.* $OLD_SDK_HOME/ 2>/dev/null || true
           rm -rf android-sdk-linux sdk.tgz
 
-          # platform-tools r29.0.1
           wget -q http://dl.google.com/android/repository/platform-tools_r29.0.1-linux.zip -O platform-tools.zip
           unzip -q platform-tools.zip -d $OLD_SDK_HOME/
           rm platform-tools.zip
 
-          # build-tools r29.0.1
           wget -q http://dl.google.com/android/repository/build-tools_r29.0.1-linux.zip -O build-tools.zip
           unzip -q build-tools.zip -d $OLD_SDK_HOME/build-tools
           rm build-tools.zip
 
-          # android-19 platform
           wget -q http://dl.google.com/android/repository/android-19_r04.zip -O platform-19.zip
           unzip -q platform-19.zip -d $OLD_SDK_HOME/platforms
           rm platform-19.zip
 
-          # NDK r22b
           wget -q https://dl.google.com/android/repository/android-ndk-r22b-linux-x86_64.zip -O ndk.zip
           unzip -q ndk.zip
           mv android-ndk-r22b/* $OLD_NDK_HOME/
@@ -95,7 +89,6 @@ jobs:
           export ANDROID_HOME=$OLD_SDK_HOME
           export NDK=$OLD_NDK_HOME
 
-          # 查找 android 命令
           ANDROID_CMD=$(find $OLD_SDK_HOME -name "android" -type f | head -n1)
           if [ -z "$ANDROID_CMD" ]; then
             echo "ERROR: android command not found in SDK"
@@ -104,15 +97,11 @@ jobs:
           chmod +x "$ANDROID_CMD"
           export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
 
-          # 在 app 子目录更新 Android 项目（AndroidManifest.xml 所在位置）
           cd PariDroid/app
           android update project --target android-19 -s -p .
           cd ../..
 
-          # 首先获取 PARI 源码（会自动克隆）
           make pari-checkout
-
-          # 仅构建 arm64-v8a 架构（GMP 和 PARI）
           make APP_ABI="arm64-v8a" pari-build-aarch64
         env:
           OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
@@ -146,6 +135,15 @@ jobs:
               }
           }
           EOF
+
+      # 新增步骤：临时限制 NDK ABI 为 arm64-v8a
+      - name: Restrict ndk abi to arm64-v8a in build.gradle
+        working-directory: ./paridroid_source/PariDroid
+        run: |
+          # 在 defaultConfig.ndk 块内添加 abiFilters "arm64-v8a"
+          sed -i '/ndk {/a \            abiFilters "arm64-v8a"' app/build.gradle
+          echo "Updated app/build.gradle ndk block:"
+          grep -A5 "ndk {" app/build.gradle || true
 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
