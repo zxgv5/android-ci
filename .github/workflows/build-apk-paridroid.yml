@@ -50,12 +50,13 @@ jobs:
           export OLD_NDK_HOME=$HOME/old-android-ndk
           mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
 
-          # SDK r24.4.1
+          # SDK r24.4.1 - 解压后移动内容
           wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
-          mkdir -p sdk_tmp
-          tar xzf sdk.tgz -C sdk_tmp
-          mv sdk_tmp/* $OLD_SDK_HOME/
-          rm -rf sdk_tmp sdk.tgz
+          tar xzf sdk.tgz
+          # 解压出的目录名通常是 android-sdk-linux
+          mv android-sdk-linux/* $OLD_SDK_HOME/
+          mv android-sdk-linux/.* $OLD_SDK_HOME/ 2>/dev/null || true
+          rm -rf android-sdk-linux sdk.tgz
 
           # platform-tools r29.0.1
           wget -q http://dl.google.com/android/repository/platform-tools_r29.0.1-linux.zip -O platform-tools.zip
@@ -77,24 +78,38 @@ jobs:
               echo "Failed to download NDK r13b, trying NDK r17c"
               wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip -O ndk.zip
           }
-          mkdir -p ndk_tmp
-          unzip -q ndk.zip -d ndk_tmp
-          mv ndk_tmp/* $OLD_NDK_HOME/
-          rm -rf ndk_tmp ndk.zip
+          unzip -q ndk.zip
+          mv android-ndk-r*/* $OLD_NDK_HOME/
+          mv android-ndk-r*/.* $OLD_NDK_HOME/ 2>/dev/null || true
+          rm -rf android-ndk-r* ndk.zip
 
+          # 调试：列出 tools 目录内容
+          echo "=== Contents of $OLD_SDK_HOME/tools ==="
+          ls -la $OLD_SDK_HOME/tools || echo "tools directory not found"
+
+          # 设置环境变量
           echo "OLD_SDK_HOME=$OLD_SDK_HOME" >> $GITHUB_ENV
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
 
-      # 修正：显式添加 PATH 并确保 android 命令可执行
+      - name: Debug sdk tools
+        run: |
+          echo "=== Searching for android command ==="
+          find $OLD_SDK_HOME -name "android" -type f 2>/dev/null || echo "android not found"
+
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         run: |
           export ANDROID_HOME=$OLD_SDK_HOME
           export NDK=$OLD_NDK_HOME
-          # 显式将 tools 加入 PATH（确保 android 命令可用）
-          export PATH=$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools:$PATH
-          chmod +x $OLD_SDK_HOME/tools/android || true
+          # 动态查找 android 命令
+          ANDROID_CMD=$(find $OLD_SDK_HOME -name "android" -type f | head -n1)
+          if [ -z "$ANDROID_CMD" ]; then
+            echo "ERROR: android command not found in SDK"
+            exit 1
+          fi
+          chmod +x "$ANDROID_CMD"
+          export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
           cd PariDroid
           android update project --target android-19 -s -p .
           cd ..
