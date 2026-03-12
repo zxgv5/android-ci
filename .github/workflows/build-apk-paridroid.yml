@@ -83,6 +83,13 @@ jobs:
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
 
+      - name: Debug ndk toolchain
+        run: |
+          echo "=== NDK toolchains (arm64) ==="
+          find $OLD_NDK_HOME -name "aarch64-linux-android*" -type f | sort || true
+          echo "=== NDK platforms ==="
+          ls -la $OLD_NDK_HOME/platforms/ || true
+
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         run: |
@@ -98,13 +105,34 @@ jobs:
           chmod +x "$ANDROID_CMD"
           export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
 
-          # 更新 Android 项目（生成必要的配置文件）
+          # 设置正确的编译器路径和 sysroot（根据 NDK r17c 实际结构）
+          export CC_AARCH64=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android-clang
+          export SYSROOT_AARCH64=$NDK/platforms/android-19/arch-arm64
+
+          # 检查编译器是否存在
+          if [ ! -f "$CC_AARCH64" ]; then
+            echo "ERROR: Compiler $CC_AARCH64 not found"
+            exit 1
+          fi
+          # 创建符号链接以匹配 Makefile 中使用的名称 aarch64-linux-android30-clang
+          ln -sf $CC_AARCH64 $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang
+
+          # 检查 sysroot 是否存在
+          if [ ! -d "$SYSROOT_AARCH64" ]; then
+            echo "ERROR: Sysroot $SYSROOT_AARCH64 not found"
+            exit 1
+          fi
+
+          # 更新 Android 项目
           cd PariDroid
           android update project --target android-19 -s -p .
           cd ..
 
-          # 仅构建 arm64-v8a 架构的 GMP 和 PARI 库
-          make APP_ABI="arm64-v8a" pari-build-aarch64
+          # 仅构建 arm64-v8a 架构，并传递修正后的变量
+          make APP_ABI="arm64-v8a" \
+               CC_AARCH64=$CC_AARCH64 \
+               SYSROOT_AARCH64=$SYSROOT_AARCH64 \
+               pari-build-aarch64
         env:
           OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
           OLD_NDK_HOME: ${{ env.OLD_NDK_HOME }}
