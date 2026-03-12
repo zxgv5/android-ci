@@ -43,6 +43,7 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
+      # 安装旧版 SDK 和 NDK（NDK 固定为 r17c）
       - name: Install old android sdk and ndk
         run: |
           set -e
@@ -50,10 +51,9 @@ jobs:
           export OLD_NDK_HOME=$HOME/old-android-ndk
           mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
 
-          # SDK r24.4.1 - 解压后移动内容
+          # SDK r24.4.1
           wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
           tar xzf sdk.tgz
-          # 解压出的目录名通常是 android-sdk-linux
           mv android-sdk-linux/* $OLD_SDK_HOME/
           mv android-sdk-linux/.* $OLD_SDK_HOME/ 2>/dev/null || true
           rm -rf android-sdk-linux sdk.tgz
@@ -73,36 +73,57 @@ jobs:
           unzip -q platform-19.zip -d $OLD_SDK_HOME/platforms
           rm platform-19.zip
 
-          # NDK r13b (fallback to r17c)
-          wget -q https://dl.google.com/android/repository/android-ndk-r13b-linux-x86_64.zip -O ndk.zip || {
-              echo "Failed to download NDK r13b, trying NDK r17c"
-              wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip -O ndk.zip
-          }
+          # NDK r17c（更稳定，工具链完整）
+          wget -q https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip -O ndk.zip
           unzip -q ndk.zip
-          mv android-ndk-r*/* $OLD_NDK_HOME/
-          mv android-ndk-r*/.* $OLD_NDK_HOME/ 2>/dev/null || true
-          rm -rf android-ndk-r* ndk.zip
+          mv android-ndk-r17c/* $OLD_NDK_HOME/
+          mv android-ndk-r17c/.* $OLD_NDK_HOME/ 2>/dev/null || true
+          rm -rf android-ndk-r17c ndk.zip
 
-          # 调试：列出 tools 目录内容
-          echo "=== Contents of $OLD_SDK_HOME/tools ==="
-          ls -la $OLD_SDK_HOME/tools || echo "tools directory not found"
-
-          # 设置环境变量
           echo "OLD_SDK_HOME=$OLD_SDK_HOME" >> $GITHUB_ENV
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
 
-      - name: Debug sdk tools
+      # 调试：查看 NDK 工具链
+      - name: Debug ndk toolchain
         run: |
-          echo "=== Searching for android command ==="
-          find $OLD_SDK_HOME -name "android" -type f 2>/dev/null || echo "android not found"
+          echo "=== NDK toolchains (arm64) ==="
+          find $OLD_NDK_HOME -name "aarch64-linux-android*" -type f | head -20 || true
 
+      # 编译本地库（仅 arm64）
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         run: |
           export ANDROID_HOME=$OLD_SDK_HOME
           export NDK=$OLD_NDK_HOME
-          # 动态查找 android 命令
+          # 设置目标架构为 arm64
+          export HOST=aarch64-linux-android
+          
+          # 优先使用 clang（如果存在），否则回退到 gcc
+          if [ -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang" ]; then
+            export CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang
+            export CXX=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang++
+          elif [ -f "$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc" ]; then
+            export CC=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-gcc
+            export CXX=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-g++
+          else
+            echo "ERROR: No suitable compiler found for aarch64"
+            exit 1
+          fi
+          
+          # 设置其他工具
+          export AR=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-ar
+          export LD=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-ld
+          export RANLIB=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-ranlib
+          export STRIP=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip
+          
+          # 验证编译器
+          if [ ! -x "$CC" ]; then
+            echo "ERROR: Compiler $CC not found or not executable"
+            exit 1
+          fi
+          
+          # 查找 android 命令
           ANDROID_CMD=$(find $OLD_SDK_HOME -name "android" -type f | head -n1)
           if [ -z "$ANDROID_CMD" ]; then
             echo "ERROR: android command not found in SDK"
@@ -110,14 +131,20 @@ jobs:
           fi
           chmod +x "$ANDROID_CMD"
           export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
+          
+          # 更新 Android 项目
           cd PariDroid
           android update project --target android-19 -s -p .
           cd ..
-          make
+          
+          # 尝试仅构建 arm64（假设 Makefile 支持 ANDROID_ABIS 变量）
+          export ANDROID_ABIS=arm64-v8a
+          make HOST=$HOST
         env:
           OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
           OLD_NDK_HOME: ${{ env.OLD_NDK_HOME }}
 
+      # 后续步骤保持不变（解码 keystore、Gradle 构建、重命名、发布）
       - name: Decode keystore and create init script
         working-directory: ./paridroid_source/PariDroid
         run: |
