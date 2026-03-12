@@ -43,7 +43,6 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
-      # 修正：完全移除 --strip-components，采用手动目录移动
       - name: Install old android sdk and ndk
         run: |
           set -e
@@ -51,7 +50,7 @@ jobs:
           export OLD_NDK_HOME=$HOME/old-android-ndk
           mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
 
-          # SDK r24.4.1 (tgz)
+          # SDK r24.4.1
           wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
           mkdir -p sdk_tmp
           tar xzf sdk.tgz -C sdk_tmp
@@ -83,16 +82,19 @@ jobs:
           mv ndk_tmp/* $OLD_NDK_HOME/
           rm -rf ndk_tmp ndk.zip
 
-          # 设置环境变量供后续步骤使用
           echo "OLD_SDK_HOME=$OLD_SDK_HOME" >> $GITHUB_ENV
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
 
+      # 修正：显式添加 PATH 并确保 android 命令可执行
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         run: |
           export ANDROID_HOME=$OLD_SDK_HOME
           export NDK=$OLD_NDK_HOME
+          # 显式将 tools 加入 PATH（确保 android 命令可用）
+          export PATH=$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools:$PATH
+          chmod +x $OLD_SDK_HOME/tools/android || true
           cd PariDroid
           android update project --target android-19 -s -p .
           cd ..
