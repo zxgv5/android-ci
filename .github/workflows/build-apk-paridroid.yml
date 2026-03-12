@@ -66,9 +66,6 @@ jobs:
           NDK22B_HOME: ${{ env.NDK22B_HOME }}
         run: |
           export NDK=$NDK22B_HOME
-          cd PariDroid/app
-          android update project --target android-19 -s -p .
-          cd ../..
           make pari-checkout
           make APP_ABI="arm64-v8a" pari-build-aarch64
  
