@@ -105,7 +105,16 @@ jobs:
           sed -i '/ndk {/a \            abiFilters "arm64-v8a"' app/build.gradle
           echo "Updated app/build.gradle ndk block:"
           grep -A5 "ndk {" app/build.gradle || true
- 
+
+      - name: Setup gradle
+        uses: gradle/actions/setup-gradle@main
+        with:
+          gradle-version: '7.4'
+          dependency-graph: generate-and-submit
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
+
       - name: Build with gradle
         working-directory: ./paridroid_source/PariDroid
         run: |
