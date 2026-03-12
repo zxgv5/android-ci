@@ -72,7 +72,7 @@ jobs:
           unzip -q platform-19.zip -d $OLD_SDK_HOME/platforms
           rm platform-19.zip
 
-          # NDK r22b (与项目根 Makefile 默认版本一致)
+          # NDK r22b
           wget -q https://dl.google.com/android/repository/android-ndk-r22b-linux-x86_64.zip -O ndk.zip
           unzip -q ndk.zip
           mv android-ndk-r22b/* $OLD_NDK_HOME/
@@ -83,12 +83,22 @@ jobs:
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
 
-      - name: Debug ndk toolchain
+      - name: Prepare gmp source
+        working-directory: ./paridroid_source
         run: |
-          echo "=== NDK toolchains (arm64) ==="
-          find $OLD_NDK_HOME -name "aarch64-linux-android*" -type f | sort || true
-          echo "=== NDK sysroot ==="
-          ls -la $OLD_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/ || true
+          mkdir -p ../srclib
+          cd ../srclib
+          if [ ! -d gmp ]; then
+            echo "Downloading GMP source tarball..."
+            wget -q https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz
+            tar xf gmp-6.2.1.tar.xz
+            mv gmp-6.2.1 gmp
+            rm gmp-6.2.1.tar.xz
+            cd gmp
+            if [ -f .bootstrap ]; then
+              ./.bootstrap
+            fi
+          fi
 
       - name: Build native libraries with make
         working-directory: ./paridroid_source
@@ -105,12 +115,12 @@ jobs:
           chmod +x "$ANDROID_CMD"
           export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
 
-          # 更新 Android 项目
-          cd PariDroid
+          # 在 app 子目录更新 Android 项目
+          cd PariDroid/app
           android update project --target android-19 -s -p .
-          cd ..
+          cd ../..
 
-          # 仅构建 arm64-v8a 架构（让 Makefile 使用默认的 NDK 路径和编译器）
+          # 仅构建 arm64-v8a 架构
           make APP_ABI="arm64-v8a" pari-build-aarch64
         env:
           OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
