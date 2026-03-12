@@ -43,6 +43,12 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
 
+      # 安装 Mercurial（GMP 源码需要）
+      - name: Install mercurial
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mercurial
+
       - name: Install old android sdk and ndk
         run: |
           set -e
@@ -83,23 +89,6 @@ jobs:
           echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
           echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
 
-      - name: Prepare gmp source
-        working-directory: ./paridroid_source
-        run: |
-          mkdir -p ../srclib
-          cd ../srclib
-          if [ ! -d gmp ]; then
-            echo "Downloading GMP source tarball..."
-            wget -q https://gmplib.org/download/gmp/gmp-6.2.1.tar.xz
-            tar xf gmp-6.2.1.tar.xz
-            mv gmp-6.2.1 gmp
-            rm gmp-6.2.1.tar.xz
-            cd gmp
-            if [ -f .bootstrap ]; then
-              ./.bootstrap
-            fi
-          fi
-
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         run: |
@@ -115,12 +104,15 @@ jobs:
           chmod +x "$ANDROID_CMD"
           export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
 
-          # 在 app 子目录更新 Android 项目
+          # 在 app 子目录更新 Android 项目（AndroidManifest.xml 所在位置）
           cd PariDroid/app
           android update project --target android-19 -s -p .
           cd ../..
 
-          # 仅构建 arm64-v8a 架构
+          # 首先获取 PARI 源码（会自动克隆）
+          make pari-checkout
+
+          # 仅构建 arm64-v8a 架构（GMP 和 PARI）
           make APP_ABI="arm64-v8a" pari-build-aarch64
         env:
           OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
