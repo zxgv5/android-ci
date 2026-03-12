@@ -1,0 +1,189 @@
+name: build-apk-paridroid
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '17'
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '30'
+  ANDROID_BUILD_TOOLS: '30.0.3'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        run: |
+          git clone --branch master https://pari.math.u-bordeaux.fr/git/paridroid.git paridroid_source
+          cd paridroid_source
+          git submodule update --init --recursive
+
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          distribution: '${{ env.JDK_DISTRIBUTION }}'
+          java-version: '${{ env.JDK_VERSION }}'
+
+      - name: Install mercurial
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mercurial
+
+      - name: Install old android sdk and ndk
+        run: |
+          set -e
+          export OLD_SDK_HOME=$HOME/old-android-sdk
+          export OLD_NDK_HOME=$HOME/old-android-ndk
+          mkdir -p $OLD_SDK_HOME $OLD_NDK_HOME
+
+          wget -q http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz -O sdk.tgz
+          tar xzf sdk.tgz
+          mv android-sdk-linux/* $OLD_SDK_HOME/
+          mv android-sdk-linux/.* $OLD_SDK_HOME/ 2>/dev/null || true
+          rm -rf android-sdk-linux sdk.tgz
+
+          wget -q http://dl.google.com/android/repository/platform-tools_r29.0.1-linux.zip -O platform-tools.zip
+          unzip -q platform-tools.zip -d $OLD_SDK_HOME/
+          rm platform-tools.zip
+
+          wget -q http://dl.google.com/android/repository/build-tools_r29.0.1-linux.zip -O build-tools.zip
+          unzip -q build-tools.zip -d $OLD_SDK_HOME/build-tools
+          rm build-tools.zip
+
+          wget -q http://dl.google.com/android/repository/android-19_r04.zip -O platform-19.zip
+          unzip -q platform-19.zip -d $OLD_SDK_HOME/platforms
+          rm platform-19.zip
+
+          wget -q https://dl.google.com/android/repository/android-ndk-r22b-linux-x86_64.zip -O ndk.zip
+          unzip -q ndk.zip
+          mv android-ndk-r22b/* $OLD_NDK_HOME/
+          mv android-ndk-r22b/.* $OLD_NDK_HOME/ 2>/dev/null || true
+          rm -rf android-ndk-r22b ndk.zip
+
+          echo "OLD_SDK_HOME=$OLD_SDK_HOME" >> $GITHUB_ENV
+          echo "OLD_NDK_HOME=$OLD_NDK_HOME" >> $GITHUB_ENV
+          echo "$OLD_SDK_HOME/tools:$OLD_SDK_HOME/platform-tools" >> $GITHUB_PATH
+
+      - name: Build native libraries with make
+        working-directory: ./paridroid_source
+        run: |
+          export ANDROID_HOME=$OLD_SDK_HOME
+          export NDK=$OLD_NDK_HOME
+
+          ANDROID_CMD=$(find $OLD_SDK_HOME -name "android" -type f | head -n1)
+          if [ -z "$ANDROID_CMD" ]; then
+            echo "ERROR: android command not found in SDK"
+            exit 1
+          fi
+          chmod +x "$ANDROID_CMD"
+          export PATH=$(dirname "$ANDROID_CMD"):$OLD_SDK_HOME/platform-tools:$PATH
+
+          cd PariDroid/app
+          android update project --target android-19 -s -p .
+          cd ../..
+
+          make pari-checkout
+          make APP_ABI="arm64-v8a" pari-build-aarch64
+        env:
+          OLD_SDK_HOME: ${{ env.OLD_SDK_HOME }}
+          OLD_NDK_HOME: ${{ env.OLD_NDK_HOME }}
+
+      - name: Decode keystore and create init script
+        working-directory: ./paridroid_source/PariDroid
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "KEY_ALIAS_PASSWORD=${{ secrets.KEY_ALIAS_PASSWORD }}" >> $GITHUB_ENV
+          cat > init.gradle << 'EOF'
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.plugins.hasPlugin('com.android.application')) {
+                      if (!project.android.signingConfigs.hasProperty('release')) {
+                          project.android.signingConfigs.create('release')
+                      }
+                      def releaseConfig = project.android.signingConfigs.getByName('release')
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEY_ALIAS_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
+                  }
+              }
+          }
+          EOF
+
+      # 新增步骤：临时限制 NDK ABI 为 arm64-v8a
+      - name: Restrict ndk abi to arm64-v8a in build.gradle
+        working-directory: ./paridroid_source/PariDroid
+        run: |
+          # 在 defaultConfig.ndk 块内添加 abiFilters "arm64-v8a"
+          sed -i '/ndk {/a \            abiFilters "arm64-v8a"' app/build.gradle
+          echo "Updated app/build.gradle ndk block:"
+          grep -A5 "ndk {" app/build.gradle || true
+
+      - name: Setup gradle
+        uses: gradle/actions/setup-gradle@main
+        with:
+          gradle-version: '7.4'
+          dependency-graph: generate-and-submit
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
+
+      - name: Build with gradle
+        working-directory: ./paridroid_source/PariDroid
+        run: |
+          echo "" >> gradle.properties
+          echo 'org.gradle.caching=true' >> gradle.properties
+          echo 'org.gradle.parallel=true' >> gradle.properties
+          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
+          else
+            echo "Gradle wrapper jar not found, using global gradle"
+            gradle assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
+          fi
+
+      - name: List generated apk files
+        working-directory: ./paridroid_source/PariDroid
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -name "*.apk" | sort
+
+      - name: Rename and move
+        working-directory: ./paridroid_source/PariDroid
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/paridroid-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./paridroid_source/PariDroid/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/paridroid-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-paridroid"
