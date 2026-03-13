@@ -48,17 +48,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mercurial
  
-      - name: Install ndk22b
+      - name: Install ndk27d
         run: |
           set -e
-          export NDK22B_HOME=$HOME/android-ndk22b
-          mkdir -p $NDK22B_HOME
-          wget -q https://dl.google.com/android/repository/android-ndk-r22b-linux-x86_64.zip -O ndk.zip
+          export NDK27D_HOME=$HOME/android-ndk27d
+          mkdir -p $NDK27D_HOME
+          wget -q https://dl.google.com/android/repository/android-ndk-r27d-linux-x86_64.zip -O ndk.zip
           unzip -q ndk.zip
-          mv android-ndk-r22b/* $NDK22B_HOME/
-          mv android-ndk-r22b/.* $NDK22B_HOME/ 2>/dev/null || true
-          rm -rf android-ndk-r22b ndk.zip
-          echo "NDK22B_HOME=$NDK22B_HOME" >> $GITHUB_ENV
+          mv android-ndk-r27d/* $NDK27D_HOME/
+          mv android-ndk-r27d/.* $NDK27D_HOME/ 2>/dev/null || true
+          rm -rf android-ndk-r27d ndk.zip
+          echo "NDK27D_HOME=$NDK27D_HOME" >> $GITHUB_ENV
 
       # 提取准备好gmp仓库代码，避免Makefile中去hg clone 等操作导致的网络超时问题
       - name: Prepare gmp source from git mirror
@@ -80,9 +80,9 @@ jobs:
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         env:
-          NDK22B_HOME: ${{ env.NDK22B_HOME }}
+          NDK27D_HOME: ${{ env.NDK27D_HOME }}
         run: |
-          export NDK=$NDK22B_HOME
+          export NDK=$NDK27D_HOME
           make pari-checkout
           make APP_ABI="arm64-v8a" pari-build-aarch64
  
