@@ -27,7 +27,7 @@ jobs:
           git clone --branch master https://pari.math.u-bordeaux.fr/git/paridroid.git paridroid_source
           cd paridroid_source
           git submodule update --init --recursive
-
+ 
       - name: Checkout gmp lib source repo
         uses: actions/checkout@main
         with:
@@ -36,7 +36,7 @@ jobs:
           path: srclib/gmp
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
@@ -59,10 +59,8 @@ jobs:
  
       - name: Build native libraries with make
         working-directory: ./paridroid_source
-        # env:
-          # NDK27D_HOME: ${{ env.NDK27D_HOME }}
         run: |
-          export NDK=$"ANDROID_NDK_HOME
+          export NDK=$ANDROID_NDK_HOME
           echo "NDK = $NDK"
           make pari-checkout
           make APP_ABI="arm64-v8a" pari-build-aarch64
@@ -103,7 +101,7 @@ jobs:
           sed -i '/ndk {/a \            abiFilters "arm64-v8a"' app/build.gradle
           echo "Updated app/build.gradle ndk block:"
           grep -A5 "ndk {" app/build.gradle || true
-
+ 
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
         with:
@@ -112,7 +110,7 @@ jobs:
           build-scan-publish: true
           build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
           build-scan-terms-of-use-agree: "yes"
-
+ 
       - name: Build with gradle
         working-directory: ./paridroid_source/PariDroid
         run: |
