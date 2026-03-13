@@ -60,12 +60,24 @@ jobs:
           rm -rf android-ndk-r22b ndk.zip
           echo "NDK22B_HOME=$NDK22B_HOME" >> $GITHUB_ENV
 
-      - name: Use git mirror for gmp
+      # 提取准备好gmp仓库代码，避免Makefile中去hg clone 等操作导致的网络超时问题
+      - name: Prepare gmp source from git mirror
         working-directory: ./paridroid_source
         run: |
-          sed -i 's|hg clone https://gmplib.org/repo/gmp $(GMP_SRC)|git clone https://github.com/gmp-mirror/gmp.git $(GMP_SRC)|' Makefile
-          echo "Updated Makefile:"
-          grep -A1 "gmp.git" Makefile || true
+          GMP_SRC_DIR="${{ github.workspace }}/srclib/gmp"
+          if [ ! -d "$GMP_SRC_DIR" ]; then
+            echo "Cloning GMP mirror and checking out required commit..."
+            mkdir -p "$(dirname "$GMP_SRC_DIR")"
+            git clone https://github.com/gmp-mirror/gmp.git "$GMP_SRC_DIR"
+            cd "$GMP_SRC_DIR"
+            # GMP_VERSION 格式为 "18415:bc0ec1699e58"，提取冒号后的部分作为 commit hash
+            GMP_COMMIT=$(echo "18415:bc0ec1699e58" | cut -d: -f2)
+            git checkout "$GMP_COMMIT"
+            # 运行 bootstrap（如果存在），与原始行为一致
+            if [ -f .bootstrap ]; then ./.bootstrap; fi
+          else
+            echo "GMP source already exists, skipping."
+          fi
 
       - name: Build native libraries with make
         working-directory: ./paridroid_source
