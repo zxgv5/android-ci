@@ -59,7 +59,14 @@ jobs:
           mv android-ndk-r22b/.* $NDK22B_HOME/ 2>/dev/null || true
           rm -rf android-ndk-r22b ndk.zip
           echo "NDK22B_HOME=$NDK22B_HOME" >> $GITHUB_ENV
- 
+
+      - name: Use git mirror for gmp
+        working-directory: ./paridroid_source
+        run: |
+          sed -i 's|hg clone https://gmplib.org/repo/gmp $(GMP_SRC)|git clone https://github.com/gmp-mirror/gmp.git $(GMP_SRC)|' Makefile
+          echo "Updated Makefile:"
+          grep -A1 "gmp.git" Makefile || true
+
       - name: Build native libraries with make
         working-directory: ./paridroid_source
         env:
