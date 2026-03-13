@@ -106,7 +106,7 @@ jobs:
       - name: Setup gradle
         uses: gradle/actions/setup-gradle@main
         with:
-          gradle-version: '7.4'
+          gradle-version: '7.6.6'
           dependency-graph: generate-and-submit
           build-scan-publish: true
           build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
