@@ -31,8 +31,8 @@ jobs:
       - name: Checkout gmp lib source repo
         uses: actions/checkout@main
         with:
-          # repository: gmp-mirror/gmp
-          repository: gmp-mirror/gmp-6.3
+          repository: gmp-mirror/gmp
+          # repository: gmp-mirror/gmp-6.3
           ref: master
           path: srclib/gmp
           fetch-depth: 0
