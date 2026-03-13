@@ -118,8 +118,13 @@ jobs:
           echo "" >> gradle.properties
           echo 'org.gradle.caching=true' >> gradle.properties
           echo 'org.gradle.parallel=true' >> gradle.properties
+          # 修复老项目：jcenter 替换 + 补上 google
           sed -i 's/jcenter()/mavenCentral()/g' build.gradle
           sed -i 's/jcenter()/mavenCentral()/g' */build.gradle
+          sed -i '/mavenCentral()/i google()' build.gradle
+          sed -i '/mavenCentral()/i google()' */build.gradle
+          # 用全局 gradle 重新生成 wrapper，补全缺失的 gradle-wrapper.jar
+          gradle wrapper --gradle-version 8.7
           chmod +x ./gradlew
           ./gradlew assembleRelease -Pandroid.abis=arm64-v8a -I init.gradle
  
