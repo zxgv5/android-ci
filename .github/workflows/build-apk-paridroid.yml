@@ -66,14 +66,12 @@ jobs:
         run: |
           GMP_SRC_DIR="${{ github.workspace }}/srclib/gmp"
           if [ ! -d "$GMP_SRC_DIR" ]; then
-            echo "Cloning GMP mirror and checking out required commit..."
+            echo "Cloning GMP mirror and checking out tag gmp-6.2.1..."
             mkdir -p "$(dirname "$GMP_SRC_DIR")"
             git clone https://github.com/gmp-mirror/gmp.git "$GMP_SRC_DIR"
             cd "$GMP_SRC_DIR"
-            # GMP_VERSION 格式为 "18415:bc0ec1699e58"，提取冒号后的部分作为 commit hash
-            GMP_COMMIT=$(echo "18415:bc0ec1699e58" | cut -d: -f2)
-            git checkout "$GMP_COMMIT"
-            # 运行 bootstrap（如果存在），与原始行为一致
+            git checkout gmp-6.2.1
+            # 如果需要 bootstrap（通常 tarball 不需要，但镜像可能需要）
             if [ -f .bootstrap ]; then ./.bootstrap; fi
           else
             echo "GMP source already exists, skipping."
