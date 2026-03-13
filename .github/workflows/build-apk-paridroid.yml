@@ -66,11 +66,11 @@ jobs:
         run: |
           GMP_SRC_DIR="${{ github.workspace }}/srclib/gmp"
           if [ ! -d "$GMP_SRC_DIR" ]; then
-            echo "Cloning GMP mirror and checking out tag gmp-6.1.0..."
+            echo "Cloning GMP mirror and checking out tag gmp-6.x.x"
             mkdir -p "$(dirname "$GMP_SRC_DIR")"
             git clone https://github.com/gmp-mirror/gmp.git "$GMP_SRC_DIR"
             cd "$GMP_SRC_DIR"
-            git checkout gmp-6.1.0
+            # git checkout gmp-6.x.x
             # 如果需要 bootstrap（通常 tarball 不需要，但镜像可能需要）
             if [ -f .bootstrap ]; then ./.bootstrap; fi
           else
