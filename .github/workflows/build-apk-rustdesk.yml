@@ -67,7 +67,7 @@ jobs:
           fi
 
       - name: Flutter build release apk
-        working-directory: ./rustdesk_source
+        working-directory: ./rustdesk_source/flutter
         run: |
           flutter build apk --release --flavor normal --target-platform=android-arm64 --split-per-abi
 
