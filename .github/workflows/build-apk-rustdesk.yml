@@ -56,7 +56,7 @@ jobs:
           cache: true
 
       - name: Decode and write keys
-        working-directory: ./rustdesk_source
+        working-directory: ./rustdesk_source/flutter
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.p12
@@ -86,7 +86,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./rustdesk_source/android/app/keystore.p12 ./rustdesk_source/android/key.properties"
+          P12_KEYSTORE_PATH: "./rustdesk_source/flutter/android/app/keystore.p12 ./rustdesk_source/android/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/rustdesk-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-rustdesk"
