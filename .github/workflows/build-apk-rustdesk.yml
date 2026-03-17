@@ -18,7 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04                  # 使用与官方 CI 相同的镜像
+    runs-on: ubuntu-latest
     permissions: write-all
 
     steps:
@@ -100,7 +100,8 @@ jobs:
           targets: aarch64-linux-android
           components: rustfmt
 
-      - uses: Swatinem/rust-cache@main
+      - name: Rust cache
+      - uses: Swatinem/rust-cache@master
         with:
           prefix-key: rustdesk-lib-cache
           key: aarch64-linux-android
