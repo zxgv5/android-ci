@@ -5,11 +5,11 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '17'                     # 兼容 Gradle 7.6
+  JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  RUST_VERSION: '1.75'                   # 与官方 CI 保持一致
+  RUST_VERSION: '1.75'
   CARGO_NDK_VERSION: '3.1.2'
   NDK_VERSION: 'r28c'
   ANDROID_FLUTTER_VERSION: '3.24.5'
@@ -54,7 +54,7 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
 
       - name: Setup flutter
-        uses: subosito/flutter-action@master
+        uses: subosito/flutter-action@main
         id: flutter-action
         with:
           channel: stable
