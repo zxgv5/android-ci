@@ -18,7 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: write-all
 
     steps:
@@ -94,17 +94,29 @@ jobs:
         shell: bash
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@master        # 保持原样
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android
           components: rustfmt
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@master
+        uses: Swatinem/rust-cache@main              # 保持原样
         with:
           prefix-key: rustdesk-lib-cache
           key: aarch64-linux-android
+
+      # 新增：安装 flutter_rust_bridge_codegen 并生成桥接代码
+      - name: Install flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
+
+      - name: Generate bridge files
+        working-directory: ./rustdesk_source
+        run: |
+          flutter_rust_bridge_codegen \
+            --rust-input ./src/flutter.rs \
+            --dart-output ./flutter/lib/generated_bridge.dart \
+            --c-output ./flutter/macos/Runner/bridge_generated.h
 
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
