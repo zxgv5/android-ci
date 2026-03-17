@@ -106,7 +106,11 @@ jobs:
           prefix-key: rustdesk-lib-cache
           key: aarch64-linux-android
 
-      # ===== 新增步骤：安装 flutter_rust_bridge_codegen 并生成桥接代码 =====
+      # ===== 新增步骤：准备依赖并生成桥接代码 =====
+      - name: Fetch Rust dependencies
+        working-directory: ./rustdesk_source
+        run: cargo fetch
+
       - name: Install flutter_rust_bridge_codegen
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --locked
 
@@ -116,7 +120,8 @@ jobs:
           flutter_rust_bridge_codegen \
             --rust-input ./src/flutter.rs \
             --dart-output ./flutter/lib/generated_bridge.dart \
-            --c-output ./flutter/macos/Runner/bridge_generated.h
+            --c-output ./flutter/macos/Runner/bridge_generated.h \
+            --all-features
       # ===== 新增步骤结束 =====
 
       - name: Decode and write keys
