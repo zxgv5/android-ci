@@ -54,7 +54,7 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
 
       - name: Setup flutter
-        uses: subosito/flutter-action@main
+        uses: subosito/flutter-action@master
         id: flutter-action
         with:
           channel: stable
