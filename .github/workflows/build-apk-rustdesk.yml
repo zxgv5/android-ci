@@ -94,7 +94,7 @@ jobs:
         shell: bash
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@main
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android
