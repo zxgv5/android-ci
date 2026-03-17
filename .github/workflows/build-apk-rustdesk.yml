@@ -106,7 +106,7 @@ jobs:
           prefix-key: rustdesk-lib-cache
           key: aarch64-linux-android
 
-      # ===== 新增步骤：准备依赖并生成桥接代码 =====
+      # 新增：准备依赖并生成 flutter_rust_bridge 桥接代码
       - name: Fetch Rust dependencies
         working-directory: ./rustdesk_source
         run: cargo fetch
@@ -121,8 +121,7 @@ jobs:
             --rust-input ./src/flutter.rs \
             --dart-output ./flutter/lib/generated_bridge.dart \
             --c-output ./flutter/macos/Runner/bridge_generated.h \
-            --all-features
-      # ===== 新增步骤结束 =====
+            -- --all-features
 
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
