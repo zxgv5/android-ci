@@ -12,7 +12,7 @@ env:
   RUST_VERSION: '1.94'
   CARGO_NDK_VERSION: '3.1.2'
   NDK_VERSION: 'r28c'
-  ANDROID_FLUTTER_VERSION: '3.38.10'
+  ANDROID_FLUTTER_VERSION: '3.35.7'
   # VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -93,17 +93,13 @@ jobs:
           ./flutter/build_android_deps.sh arm64-v8a
         shell: bash
 
-      - name: Patch gradle files for flutter version compatibility
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          # 升级 Gradle 版本到 8.10.2
-          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
-          # 升级 Android Gradle Plugin 到 8.3.2
-          sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.3.2/' ./android/build.gradle
-          # 升级 Kotlin Gradle Plugin 到 1.9.24（如果存在）
-          sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' ./android/build.gradle
-          # 确保 settings.gradle 中的内容兼容（可选）
-          echo "Gradle files patched for compatibility"
+      # - name: Patch gradle files for flutter version compatibility
+      #   working-directory: ./rustdesk_source/flutter
+      #   run: |
+      #     sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
+      #     sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.3.2/' ./android/build.gradle
+      #     sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' ./android/build.gradle
+      #     echo "Gradle files patched for compatibility"
  
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
