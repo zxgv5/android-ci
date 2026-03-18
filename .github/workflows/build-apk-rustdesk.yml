@@ -5,14 +5,14 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '17'
+  JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   RUST_VERSION: '1.75'
   CARGO_NDK_VERSION: '3.1.2'
   NDK_VERSION: 'r28c'
-  ANDROID_FLUTTER_VERSION: '3.24.5'
+  ANDROID_FLUTTER_VERSION: '3.41.4'
   VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -73,18 +73,18 @@ jobs:
             libxdo-dev libxfixes-dev llvm-dev nasm ninja-build \
             pkg-config tree wget
 
-      - name: Setup NDK
+      - name: Setup ndk
         uses: nttld/setup-ndk@main
         id: setup-ndk
         with:
           ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
 
-      - name: Setup vcpkg with Github Actions binary cache
+      - name: Setup vcpkg with github actions binary cache
         uses: lukka/run-vcpkg@main
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          # vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
       - name: Install vcpkg dependencies
@@ -93,7 +93,7 @@ jobs:
           ./flutter/build_android_deps.sh arm64-v8a
         shell: bash
 
-      - name: Install Rust toolchain
+      - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
@@ -106,8 +106,7 @@ jobs:
           prefix-key: rustdesk-lib-cache
           key: aarch64-linux-android
 
-      # ===== 桥接生成步骤 =====
-      - name: Fetch Rust dependencies
+      - name: Fetch rust dependencies
         working-directory: ./rustdesk_source
         run: cargo fetch
 
@@ -117,7 +116,7 @@ jobs:
       - name: Install flutter_rust_bridge_codegen
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
 
-      - name: Prepare Flutter dependencies for bridge
+      - name: Prepare flutter dependencies for bridge
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
@@ -133,12 +132,11 @@ jobs:
           mkdir -p ./flutter/ios/Runner
           cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h || true
 
-      - name: Restore pubspec.yaml to original
+      - name: Update extended text version
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 13.0.0/extended_text: 14.0.0/g' pubspec.yaml
           flutter pub get
-      # ===== 桥接生成结束 =====
 
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
