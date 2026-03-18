@@ -1,19 +1,19 @@
 name: build-apk-bilipai
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,12 +33,12 @@ jobs:
           path: bilipai_source
           fetch-depth: 0
           submodules: false
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -48,15 +48,19 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
-
+ 
       - name: Decode keystore and create init script
         working-directory: ./bilipai_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
           cat > init.gradle << 'EOF'
+          println "========== 初始化脚本开始 =========="
+          println "Gradle 版本: ${gradle.gradleVersion}"
+          println "项目属性: ${gradle.startParameter.projectProperties}"
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
+                      println "配置模块: ${project.name}"
                       if (!project.android.signingConfigs.hasProperty('release')) {
                           project.android.signingConfigs.create('release')
                       }
@@ -71,16 +75,19 @@ jobs:
                       releaseConfig.enableV3Signing = true
                       project.android.buildTypes.release.signingConfig = releaseConfig
                       if (project.hasProperty('targetAbi')) {
-                          def abiList = project.property('targetAbi').toString().split(',')
-                          println "🔧 动态设置 abiFilters 为: ${abiList}"
-                          project.android.defaultConfig.ndk.abiFilters = []
-                          abiList.each { abi ->
-                              project.android.defaultConfig.ndk.abiFilters.add(abi.trim())
+                          def abiList = project.property('targetAbi').toString().split(',').collect { it.trim() }
+                          println "🔧 检测到 targetAbi=${abiList}，正在应用..."
+                          project.android.defaultConfig.ndk {
+                              abiFilters = abiList
                           }
+                          println "✅ 当前 abiFilters: ${project.android.defaultConfig.ndk.abiFilters}"
+                      } else {
+                          println "ℹ️ 未指定 targetAbi，使用模块默认配置"
                       }
                   }
               }
           }
+          println "========== 初始化脚本结束 =========="
           EOF
  
       - name: Build signed apk with init script
