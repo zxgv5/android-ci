@@ -1,0 +1,126 @@
+name: build-apk-apkupdater
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: rumboalla/apkupdater
+          ref: 3.x
+          path: apkupdater_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+
+      - name: Decode keystore and create init script
+        working-directory: ./apkupdater_source
+        run: |
+          mkdir -p app
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          cat > init.gradle << 'EOF'
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.plugins.hasPlugin('com.android.application')) {
+                      def releaseConfig = project.android.signingConfigs.findByName('release')
+                      if (releaseConfig == null) {
+                          releaseConfig = project.android.signingConfigs.create('release')
+                      }
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
+                  }
+              }
+          }
+          EOF
+ 
+      # - name: Configure gradle timeout and retry settings
+      #   working-directory: ./apkupdater_source
+      #   run: |
+      #     cat >> gradle.properties << 'EOF'
+      #     org.gradle.internal.http.connectionTimeout=60000
+      #     org.gradle.internal.http.socketTimeout=60000
+      #     maven.wagon.http.retryHandler.count=5
+      #     maven.wagon.http.retryHandler.requestSent=true
+      #     org.gradle.workers.max=4
+      #     EOF
+
+      # - name: Modify dependencies in app/build.gradle.kts
+      #   working-directory: ./apkupdater_source
+      #   run: |
+      #     sed -i 's/implementation("com.github.topjohnwu.libsu:core:5.2.1")/implementation("com.github.topjohnwu.libsu:core:{latest version}")/' app/build.gradle.kts
+      #     sed -i 's/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs-gson:0.4.3")/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs-gson:{latest version}")/' app/build.gradle.kts
+      #     sed -i 's/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs:0.4.3")/implementation("com.github.rumboalla.KryptoPrefs:kryptoprefs:{latest version}")/' app/build.gradle.kts
+      #     echo "Modified app/build.gradle.kts content:"
+      #     cat app/build.gradle.kts
+
+      - name: Build signed apk with init script
+        working-directory: ./apkupdater_source
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon -I init.gradle
+ 
+      - name: List generated apk files
+        working-directory: ./apkupdater_source
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
+ 
+      - name: Rename and move
+        working-directory: ./apkupdater_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "app/build/outputs/apk/release/"*"release.apk" "${{ github.workspace }}/dist/apkupdater-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./apkupdater_source/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/apkupdater-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-apkupdater"
