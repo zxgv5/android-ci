@@ -82,8 +82,8 @@ jobs:
         run: |
           echo "原始 abiFilters 配置："
           grep -A 2 -B 2 "abiFilters" app/build.gradle.kts || true
-          # 使用正则匹配原行并替换为正确语法
-          sed -i 's/abiFilters\s*+=\s*listOf("arm64-v8a",\s*"armeabi-v7a")/abiFilters = mutableSetOf("arm64-v8a")/' app/build.gradle.kts
+          # 替换为仅添加 arm64-v8a，保留 += 操作符以避免 val reassign 错误
+          sed -i 's/abiFilters += listOf("arm64-v8a", "armeabi-v7a")/abiFilters += listOf("arm64-v8a")/' app/build.gradle.kts
           echo "修改后的 abiFilters 配置："
           grep -A 2 -B 2 "abiFilters" app/build.gradle.kts || true
 
