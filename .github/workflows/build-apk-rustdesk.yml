@@ -1,9 +1,9 @@
 name: build-apk-rustdesk
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
@@ -15,12 +15,12 @@ env:
   ANDROID_FLUTTER_VERSION: '3.41.4'
   # VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions: write-all
- 
+
     steps:
       - name: Clean runner environment
         run: |
@@ -37,12 +37,12 @@ jobs:
           path: rustdesk_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -52,7 +52,7 @@ jobs:
         with:
           java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
- 
+
       - name: Setup flutter
         uses: subosito/flutter-action@main
         id: flutter-action
@@ -60,7 +60,7 @@ jobs:
           channel: stable
           flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
           cache: true
- 
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -79,29 +79,29 @@ jobs:
         with:
           ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
- 
+
       - name: Setup vcpkg with github actions binary cache
         uses: lukka/run-vcpkg@main
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
           # vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
- 
+
       - name: Install vcpkg dependencies
         working-directory: ./rustdesk_source
         run: |
           ./flutter/build_android_deps.sh arm64-v8a
         shell: bash
- 
+
       - name: Patch gradle files for flutter version compatibility
         working-directory: ./rustdesk_source/flutter
         run: |
           # 升级 Gradle 版本到 8.10.2
-          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' gradle/wrapper/gradle-wrapper.properties
+          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
           # 升级 Android Gradle Plugin 到 8.3.2
-          sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.3.2/' android/build.gradle
+          sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.3.2/' ./android/build.gradle
           # 升级 Kotlin Gradle Plugin 到 1.9.24（如果存在）
-          sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' android/build.gradle
+          sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' ./android/build.gradle
           # 确保 settings.gradle 中的内容兼容（可选）
           echo "Gradle files patched for compatibility"
  
@@ -111,23 +111,23 @@ jobs:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android
           components: rustfmt
- 
+
       - name: Rust cache
         uses: Swatinem/rust-cache@master
         with:
           prefix-key: rustdesk-lib-cache
           key: aarch64-linux-android
- 
+
       - name: Fetch rust dependencies
         working-directory: ./rustdesk_source
         run: cargo fetch
- 
+
       - name: Install cargo-expand
         run: cargo install cargo-expand --version 1.0.95 --locked
- 
+
       - name: Install flutter_rust_bridge_codegen
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
- 
+
       - name: Prepare flutter dependencies for bridge
         working-directory: ./rustdesk_source/flutter
         run: |
