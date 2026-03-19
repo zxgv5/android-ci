@@ -27,7 +27,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
- 
+
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -45,12 +45,15 @@ jobs:
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
-      - name: Update sdk version
+
+      # 🔧 增强的 compileSdk 更新步骤
+      - name: Update compileSdk to 36
         working-directory: ./rustdesk_source/flutter
         run: |
-          sed -i -e 's/compileSdk[ =]* 34/compileSdk = 36/g' android/app/build.gradle
- 
+          sed -i -E 's/compileSdk(Version)?[[:space:]]*[=]?[[:space:]]*34/compileSdk = 36/g' android/app/build.gradle
+          echo "Updated compileSdk:"
+          grep -C2 "compileSdk" android/app/build.gradle || true
+
       - name: Setup java
         uses: actions/setup-java@main
         with:
@@ -76,7 +79,7 @@ jobs:
             libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxdo-dev libxfixes-dev llvm-dev nasm ninja-build \
             pkg-config tree wget
- 
+
       - name: Setup ndk
         uses: nttld/setup-ndk@main
         id: setup-ndk
@@ -96,7 +99,7 @@ jobs:
           ./flutter/build_android_deps.sh arm64-v8a
         shell: bash
 
-      # （可选）如果需要，可取消注释以下步骤以升级 Gradle 版本
+      # (可选) 如需升级 Gradle，可取消注释以下步骤
       # - name: Patch gradle files for flutter version compatibility
       #   working-directory: ./rustdesk_source/flutter
       #   run: |
@@ -133,7 +136,7 @@ jobs:
         run: |
           sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
           flutter pub get
- 
+
       - name: Generate bridge files
         working-directory: ./rustdesk_source
         run: |
@@ -143,7 +146,7 @@ jobs:
             --c-output ./flutter/macos/Runner/bridge_generated.h
           mkdir -p ./flutter/ios/Runner
           cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h || true
- 
+
       - name: Update flutter plugins version
         working-directory: ./rustdesk_source/flutter
         run: |
@@ -159,36 +162,34 @@ jobs:
           flutter clean
           flutter pub get
 
-      # 🔧 新增：修复 uni_links 插件缺失的 import
-      - name: Patch uni_links plugin for compatibility
+      # 🔧 增强的 uni_links 补丁步骤
+      - name: Patch uni_links plugin (enhanced)
         working-directory: ./rustdesk_source/flutter
         run: |
-          # 定位 uni_links 插件在 PUB_CACHE 中的路径（git 依赖）
-          UNI_LINKS_DIR=$(find /home/runner/.pub-cache/git -type d -path "*/uni_links-*/uni_links/android" 2>/dev/null | head -n 1)
-          if [ -n "$UNI_LINKS_DIR" ]; then
-            echo "Found uni_links plugin at: $UNI_LINKS_DIR"
-            JAVA_FILE="$UNI_LINKS_DIR/src/main/java/name/avioli/unilinks/UniLinksPlugin.java"
-            if [ -f "$JAVA_FILE" ]; then
-              # 检查是否已包含所需 import
-              if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
-                # 在 package 声明后插入 import
-                sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
-                echo "✅ Added missing import to UniLinksPlugin.java"
-              else
-                echo "ℹ️ Import already present, no change needed"
-              fi
+          set -x
+          JAVA_FILE=$(find /home/runner/.pub-cache/git -path "*/uni_links-*/uni_links/android/src/main/java/name/avioli/unilinks/UniLinksPlugin.java" 2>/dev/null | head -n 1)
+          if [ -n "$JAVA_FILE" ] && [ -f "$JAVA_FILE" ]; then
+            echo "✅ Found UniLinksPlugin.java at: $JAVA_FILE"
+            if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
+              sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
+              echo "✅ Added missing import."
+              grep -B2 -A2 "PluginRegistry" "$JAVA_FILE" || true
             else
-              echo "⚠️ Java file not found at expected location"
+              echo "ℹ️ Import already present, no change needed."
             fi
           else
-            echo "⚠️ uni_links plugin directory not found, skipping patch"
+            echo "❌ UniLinksPlugin.java not found!"
+            echo "=== Contents of /home/runner/.pub-cache/git ==="
+            ls -la /home/runner/.pub-cache/git/ || true
+            echo "=== First few directories ==="
+            find /home/runner/.pub-cache/git -maxdepth 2 -type d | head -20 || true
           fi
- 
+
       - name: Update flutter dependencies
         working-directory: ./rustdesk_source/flutter
         run: |
           flutter pub upgrade
- 
+
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
         run: |
@@ -199,7 +200,7 @@ jobs:
             echo keyAlias='${{ secrets.KEY_ALIAS }}' >> android/key.properties
             echo keyPassword='${{ secrets.KEY_ALIAS_PASSWORD }}' >> android/key.properties
           fi
- 
+
       - name: Build rustdesk native library
         working-directory: ./rustdesk_source
         env:
@@ -212,24 +213,24 @@ jobs:
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
           cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
- 
+
       - name: Flutter build release apk
         working-directory: ./rustdesk_source/flutter
         run: |
           flutter build apk --release --target-platform=android-arm64 --split-per-abi
- 
+
       - name: List generated apk files
         working-directory: ./rustdesk_source/flutter
         run: |
           echo "Listing all apk files generated:"
           find ./build/app/outputs -type f -name "*.apk" | sort
- 
+
       - name: Rename and move
         working-directory: ./rustdesk_source/flutter
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/rustdesk-${{ env.BUILD_DATE }}.apk"
- 
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
