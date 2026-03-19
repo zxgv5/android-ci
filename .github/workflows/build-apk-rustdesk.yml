@@ -47,6 +47,11 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
+      - name: Update sdk version
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          sed -i -e 's/compileSdk[ =]* 34/compileSdk = 36/g' android/app/build.gradle
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
@@ -140,12 +145,7 @@ jobs:
           mkdir -p ./flutter/ios/Runner
           cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h || true
  
-      - name: Update sdk version
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          sed -i -e 's/compileSdk[ =]* 34/compileSdk = 36/g' android/app/build.gradle
-
-      - name: Update extended text version
+      - name: Update flutter plugins version
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 13.0.0/extended_text: 14.0.0/g' pubspec.yaml
@@ -155,8 +155,8 @@ jobs:
           sed -i -e 's/sqflite: 2.2.0/sqflite: ^2.4.2/g' pubspec.yaml
           sed -i '/uni_links:/,/ref:.*$/d' pubspec.yaml
           sed -i '/uni_links_desktop:/d' pubspec.yaml
-          flutter pub add "uni_links:{git: {url: 'https://github.com/nohli/uni_links.git', ref: 'fix/v2_embedding', path: 'uni_links'}}"
-          flutter pub add uni_links_desktop:^0.1.6
+          flutter pub add "uni_links:{git: {url: 'https://github.com/rustdesk-org/uni_links.git', ref: 'fork_update_sdk', path: 'uni_links'}}"
+          flutter pub add "uni_links_desktop:{git: {url: 'https://github.com/rustdesk-org/uni_links_desktop.git', ref: 'main', path: 'uni_links_desktop'}}"
           flutter clean
           flutter pub get
  
