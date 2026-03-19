@@ -156,7 +156,7 @@ jobs:
           sed -i '/uni_links:/,/ref:.*$/d' pubspec.yaml
           sed -i '/uni_links_desktop:/d' pubspec.yaml
           flutter pub add "uni_links:{git: {url: 'https://github.com/rustdesk-org/uni_links.git', ref: 'fork_update_sdk', path: 'uni_links'}}"
-          flutter pub add "uni_links_desktop:{git: {url: 'https://github.com/rustdesk-org/uni_links_desktop.git', ref: 'main', path: 'uni_links_desktop'}}"
+          flutter pub add "uni_links_desktop:{git: {url: 'https://github.com/rustdesk-org/uni_links_desktop.git', ref: 'main'}}"
           flutter clean
           flutter pub get
  
