@@ -100,7 +100,7 @@ jobs:
       #     sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.3.2/' ./android/build.gradle
       #     sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' ./android/build.gradle
       #     echo "Gradle files patched for compatibility"
- 
+
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -144,7 +144,14 @@ jobs:
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 13.0.0/extended_text: 14.0.0/g' pubspec.yaml
+          sed -i -e 's/external_path: \^1.0.3/external_path: ^2.2.0/g' pubspec.yaml
+          sed -i -e 's/flutter_plugin_android_lifecycle: 2.0.17/flutter_plugin_android_lifecycle: ^2.0.33/g' pubspec.yaml
           flutter pub get
+ 
+      - name: Update flutter dependencies
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          flutter pub upgrade
  
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
@@ -170,13 +177,6 @@ jobs:
           cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
  
-      - name: Update flutter dependencies
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          # 先强制升级external_path版本
-          flutter pub upgrade external_path
-          flutter pub upgrade
-
       - name: Flutter build release apk
         working-directory: ./rustdesk_source/flutter
         run: |
