@@ -173,6 +173,8 @@ jobs:
       - name: Update flutter dependencies
         working-directory: ./rustdesk_source/flutter
         run: |
+          # 先强制升级external_path版本
+          flutter pub upgrade external_path
           flutter pub upgrade
 
       - name: Flutter build release apk
