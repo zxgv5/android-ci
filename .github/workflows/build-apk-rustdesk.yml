@@ -140,6 +140,11 @@ jobs:
           mkdir -p ./flutter/ios/Runner
           cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h || true
  
+      - name: Update sdk version
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          sed -i 's/compileSdk[ =]*34/compileSdk = 36/g' ./android/app/build.gradle
+ 
       - name: Update extended text version
         working-directory: ./rustdesk_source/flutter
         run: |
@@ -147,6 +152,9 @@ jobs:
           sed -i -e 's/external_path: \^1.0.3/external_path: ^2.2.0/g' pubspec.yaml
           sed -i -e 's/flutter_plugin_android_lifecycle: 2.0.17/flutter_plugin_android_lifecycle: ^2.0.33/g' pubspec.yaml
           sed -i -e 's/file_picker: \^5.1.0/file_picker: ^10.3.10/g' pubspec.yaml
+          sed -i -e 's/sqflite: 2.2.0/sqflite: ^2.4.2/g' pubspec.yaml
+          
+          sed -i 's/compileSdk[ =]*34/compileSdk = 36/g' ./android/app/build.gradle
           flutter pub get
  
       - name: Update flutter dependencies
