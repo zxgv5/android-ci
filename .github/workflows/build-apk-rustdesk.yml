@@ -13,7 +13,6 @@ env:
   CARGO_NDK_VERSION: '3.1.2'
   NDK_VERSION: 'r28c'
   ANDROID_FLUTTER_VERSION: '3.32.8'
-  # VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -89,7 +88,6 @@ jobs:
         uses: lukka/run-vcpkg@main
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
-          # vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
 
       - name: Install vcpkg dependencies
@@ -98,6 +96,7 @@ jobs:
           ./flutter/build_android_deps.sh arm64-v8a
         shell: bash
 
+      # （可选）如果需要，可取消注释以下步骤以升级 Gradle 版本
       # - name: Patch gradle files for flutter version compatibility
       #   working-directory: ./rustdesk_source/flutter
       #   run: |
@@ -159,6 +158,31 @@ jobs:
           flutter pub add "uni_links_desktop:{git: {url: 'https://github.com/rustdesk-org/uni_links_desktop.git', ref: 'main'}}"
           flutter clean
           flutter pub get
+
+      # 🔧 新增：修复 uni_links 插件缺失的 import
+      - name: Patch uni_links plugin for compatibility
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          # 定位 uni_links 插件在 PUB_CACHE 中的路径（git 依赖）
+          UNI_LINKS_DIR=$(find /home/runner/.pub-cache/git -type d -path "*/uni_links-*/uni_links/android" 2>/dev/null | head -n 1)
+          if [ -n "$UNI_LINKS_DIR" ]; then
+            echo "Found uni_links plugin at: $UNI_LINKS_DIR"
+            JAVA_FILE="$UNI_LINKS_DIR/src/main/java/name/avioli/unilinks/UniLinksPlugin.java"
+            if [ -f "$JAVA_FILE" ]; then
+              # 检查是否已包含所需 import
+              if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
+                # 在 package 声明后插入 import
+                sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
+                echo "✅ Added missing import to UniLinksPlugin.java"
+              else
+                echo "ℹ️ Import already present, no change needed"
+              fi
+            else
+              echo "⚠️ Java file not found at expected location"
+            fi
+          else
+            echo "⚠️ uni_links plugin directory not found, skipping patch"
+          fi
  
       - name: Update flutter dependencies
         working-directory: ./rustdesk_source/flutter
