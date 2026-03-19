@@ -155,10 +155,8 @@ jobs:
           sed -i -e 's/sqflite: 2.2.0/sqflite: ^2.4.2/g' pubspec.yaml
           sed -i '/uni_links:/,/ref:.*$/d' pubspec.yaml
           sed -i '/uni_links_desktop:/d' pubspec.yaml
-          # 用Flutter官方命令添加已修复的版本，自动写到正确位置，无格式错误
-          flutter pub add uni_links 'https://github.com/avioli/uni_links.git' --path=uni_links
+          flutter pub add "uni_links:{git: {url: 'https://github.com/nohli/uni_links.git', ref: 'fix/v2_embedding', path: 'uni_links'}}"
           flutter pub add uni_links_desktop:^0.1.6
-          
           flutter clean
           flutter pub get
  
