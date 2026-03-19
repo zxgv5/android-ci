@@ -154,7 +154,7 @@ jobs:
           sed -i -e 's/file_picker: \^5.1.0/file_picker: ^10.3.10/g' pubspec.yaml
           sed -i -e 's/sqflite: 2.2.0/sqflite: ^2.4.2/g' pubspec.yaml
           sed -i '/uni_links:/,/ref: f416118d843a7e9ed117c7bb7bdc2deda5a9e86f/d' pubspec.yaml
-          echo "  uni_links: ^0.5.0" >> pubspec.yaml
+          flutter pub add uni_links:^0.5.0
           flutter pub get
  
       - name: Update flutter dependencies
