@@ -66,10 +66,19 @@ jobs:
       - name: Patch gradle files for flutter version compatibility
         working-directory: ./rustdesk_source/flutter
         run: |
-          # 原有的 Gradle/AGP/Kotlin 升级命令
+          # Gradle/AGP/Kotlin 升级
           sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
           sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.10.2/' ./android/build.gradle
           sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' ./android/build.gradle
+          # 统一 Java 编译目标为 1.8
+          cat >> android/build.gradle << 'EOF'
+          allprojects {
+              tasks.withType(JavaCompile).configureEach {
+                  sourceCompatibility = JavaVersion.VERSION_1_8
+                  targetCompatibility = JavaVersion.VERSION_1_8
+              }
+          }
+          EOF
           # 统一 Kotlin JVM 目标为 1.8
           cat >> android/build.gradle << 'EOF'
           subprojects {
@@ -80,7 +89,7 @@ jobs:
               }
           }
           EOF
-          echo "✅ Kotlin JVM target set to 1.8"
+          echo "✅ Java and Kotlin targets unified to 1.8"
 
       - name: Setup java
         uses: actions/setup-java@main
