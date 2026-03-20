@@ -2,7 +2,12 @@ name: build-apk-bv-leonwu85
 
 on:
   workflow_dispatch:
-  workflow_call:
+    inputs:
+      branch_name:
+        description: '分支'
+        required: true
+        default: 'feature-customisation-0001'
+        type: string
 
 env:
   JDK_VERSION: '22'
@@ -28,7 +33,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: leonwu85/bv
-          ref: feature-customisation-0001
+          ref: '${{ inputs.branch_name }}'
           path: bv_source
           fetch-depth: 0
           submodules: recursive
