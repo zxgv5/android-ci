@@ -58,10 +58,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      # - name: Customize scripts
-      #   run: |
-      #     chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
-      #     "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
+      - name: Customize scripts
+        run: |
+          chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
+          "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
 
       - name: Decode keystore
         working-directory: ./bv_source
