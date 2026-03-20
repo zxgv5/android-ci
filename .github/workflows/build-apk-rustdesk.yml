@@ -46,13 +46,13 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      # 🔧 增强的 compileSdk 更新步骤
+      # 🔧 强化 compileSdk 更新（兼容多种写法，并输出确认）
       - name: Update compileSdk to 36
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -E 's/compileSdk(Version)?[[:space:]]*[=]?[[:space:]]*34/compileSdk = 36/g' android/app/build.gradle
-          echo "Updated compileSdk:"
-          grep -C2 "compileSdk" android/app/build.gradle || true
+          echo "✅ Updated compileSdk:"
+          grep -C2 "compileSdk" android/app/build.gradle || echo "⚠️  Could not verify, please check manually."
 
       - name: Setup java
         uses: actions/setup-java@main
@@ -162,33 +162,29 @@ jobs:
           flutter clean
           flutter pub get
 
-      # 🔧 增强的 uni_links 补丁步骤
-      - name: Patch uni_links plugin (enhanced)
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          set -x
-          JAVA_FILE=$(find /home/runner/.pub-cache/git -path "*/uni_links-*/uni_links/android/src/main/java/name/avioli/unilinks/UniLinksPlugin.java" 2>/dev/null | head -n 1)
-          if [ -n "$JAVA_FILE" ] && [ -f "$JAVA_FILE" ]; then
-            echo "✅ Found UniLinksPlugin.java at: $JAVA_FILE"
-            if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
-              sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
-              echo "✅ Added missing import."
-              grep -B2 -A2 "PluginRegistry" "$JAVA_FILE" || true
-            else
-              echo "ℹ️ Import already present, no change needed."
-            fi
-          else
-            echo "❌ UniLinksPlugin.java not found!"
-            echo "=== Contents of /home/runner/.pub-cache/git ==="
-            ls -la /home/runner/.pub-cache/git/ || true
-            echo "=== First few directories ==="
-            find /home/runner/.pub-cache/git -maxdepth 2 -type d | head -20 || true
-          fi
-
       - name: Update flutter dependencies
         working-directory: ./rustdesk_source/flutter
         run: |
           flutter pub upgrade
+
+      # 🔧 使用绝对路径修复 uni_links 插件（放在 upgrade 之后，build 之前）
+      - name: Patch uni_links plugin with absolute path
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          JAVA_FILE="/home/runner/.pub-cache/git/uni_links-f416118d843a7e9ed117c7bb7bdc2deda5a9e86f/uni_links/android/src/main/java/name/avioli/unilinks/UniLinksPlugin.java"
+          if [ -f "$JAVA_FILE" ]; then
+            echo "✅ Found file, patching..."
+            if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
+              sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
+              echo "✅ Import added."
+              grep -B2 -A2 "PluginRegistry" "$JAVA_FILE" || true
+            else
+              echo "ℹ️ Import already present."
+            fi
+          else
+            echo "❌ File not found at: $JAVA_FILE"
+            exit 1
+          fi
 
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
