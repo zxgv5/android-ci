@@ -47,7 +47,7 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      - name: Update compile sdk
+      - name: Update android sdk version
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -E 's/compileSdk(Version)?[[:space:]]*[=]?[[:space:]]*34/compileSdk = 36/g' android/app/build.gradle
@@ -56,8 +56,19 @@ jobs:
 
       - name: Install android sdk components
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}"
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          rm -rf /usr/local/lib/android/sdk/platforms/android-${{ env.ANDROID_COMPILE_SDK }}
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-${{ env.ANDROID_COMPILE_SDK }}" "build-tools;${{ env.ANDROID_BUILD_TOOLS }}"
+          echo "Installed platforms:"
+          ls -la /usr/local/lib/android/sdk/platforms/
+
+      - name: Patch gradle files for flutter version compatibility
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
+          sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.10.2/' ./android/build.gradle
+          sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' ./android/build.gradle
 
       - name: Setup java
         uses: actions/setup-java@main
