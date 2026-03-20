@@ -46,6 +46,13 @@ jobs:
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Update compile sdk
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          sed -i -E 's/compileSdk(Version)?[[:space:]]*[=]?[[:space:]]*34/compileSdk = 36/g' android/app/build.gradle
+          echo "✅ Updated compileSdk:"
+          grep -C2 "compileSdk" android/app/build.gradle || echo "⚠️  Could not verify, please check manually."
  
       - name: Setup java
         uses: actions/setup-java@main
@@ -116,7 +123,7 @@ jobs:
       - name: Install flutter_rust_bridge_codegen
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
  
-      - name: Prepare flutter dependencies for bridge
+      - name: Patch pubspec.yaml for bridge
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
@@ -132,7 +139,7 @@ jobs:
           mkdir -p ./flutter/ios/Runner
           cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h || true
  
-      - name: Update extended text version
+      - name: Restore pubspec.yaml
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 13.0.0/extended_text: 14.0.0/g' pubspec.yaml
