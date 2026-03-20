@@ -53,16 +53,16 @@ LEONWU85_BV_MAINSCREEN_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/a
 python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_MAINSCREEN_KT}"
 # - - - - - - - - - - - - - - - - - -更加灵活和后期易变的修改，用python处理实现 - - - - - - - - - - - - - - - - - -
 # 6、使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
-echo "处理*Screen.kt代码..."
-LEONWU85_BV_DYNAMICSSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${LEONWU85_BV_DYNAMICSSCREEN_KT}"
-LEONWU85_BV_POPULARSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/PopularScreen.kt"
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_popularscreen_kt.py" "${LEONWU85_BV_POPULARSCREEN_KT}"
-LEONWU85_BV_RECOMMENDSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/RecommendScreen.kt"
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_recommendscreen_kt.py" "${LEONWU85_BV_RECOMMENDSCREEN_KT}"
-LEONWU85_BV_HISTORYSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/user/HistoryScreen.kt"
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_historyscreen_kt.py" "${LEONWU85_BV_HISTORYSCREEN_KT}"
-echo "*Screen.kt代码处理完成..."
+# echo "处理*Screen.kt代码..."
+# LEONWU85_BV_DYNAMICSSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${LEONWU85_BV_DYNAMICSSCREEN_KT}"
+# LEONWU85_BV_POPULARSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/PopularScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_popularscreen_kt.py" "${LEONWU85_BV_POPULARSCREEN_KT}"
+# LEONWU85_BV_RECOMMENDSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/RecommendScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_recommendscreen_kt.py" "${LEONWU85_BV_RECOMMENDSCREEN_KT}"
+# LEONWU85_BV_HISTORYSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/user/HistoryScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_historyscreen_kt.py" "${LEONWU85_BV_HISTORYSCREEN_KT}"
+# echo "*Screen.kt代码处理完成..."
 # - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
 # 7、使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
 echo "注释全部日志代码..."
