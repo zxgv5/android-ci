@@ -1,25 +1,26 @@
 name: build-apk-rustdesk
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  RUST_VERSION: '1.94'
+  RUST_VERSION: '1.75'
   CARGO_NDK_VERSION: '3.1.2'
   NDK_VERSION: 'r28c'
-  ANDROID_FLUTTER_VERSION: '3.32.8'
+  ANDROID_FLUTTER_VERSION: '3.24.5'
+  # VCPKG_COMMIT_ID: '120deac3062162151622ca4860575a33844ba10b'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions: write-all
-
+ 
     steps:
       - name: Clean runner environment
         run: |
@@ -27,7 +28,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -36,30 +37,22 @@ jobs:
           path: rustdesk_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
-      # 强化 compileSdk 更新（兼容多种写法，并输出确认）
-      - name: Update compileSdk to 36
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          sed -i -E 's/compileSdk(Version)?[[:space:]]*[=]?[[:space:]]*34/compileSdk = 36/g' android/app/build.gradle
-          echo "✅ Updated compileSdk:"
-          grep -C2 "compileSdk" android/app/build.gradle || echo "⚠️  Could not verify, please check manually."
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: '${{ env.JDK_VERSION }}'
           distribution: '${{ env.JDK_DISTRIBUTION }}'
-
+ 
       - name: Setup flutter
         uses: subosito/flutter-action@main
         id: flutter-action
@@ -67,7 +60,7 @@ jobs:
           channel: stable
           flutter-version: ${{ env.ANDROID_FLUTTER_VERSION }}
           cache: true
-
+ 
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -79,64 +72,56 @@ jobs:
             libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libxdo-dev libxfixes-dev llvm-dev nasm ninja-build \
             pkg-config tree wget
-
+ 
       - name: Setup ndk
         uses: nttld/setup-ndk@main
         id: setup-ndk
         with:
           ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
-
+ 
       - name: Setup vcpkg with github actions binary cache
         uses: lukka/run-vcpkg@main
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
+          # vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
           doNotCache: false
-
+ 
       - name: Install vcpkg dependencies
         working-directory: ./rustdesk_source
         run: |
           ./flutter/build_android_deps.sh arm64-v8a
         shell: bash
-
-      # (可选) 如需升级 Gradle，可取消注释以下步骤
-      # - name: Patch gradle files for flutter version compatibility
-      #   working-directory: ./rustdesk_source/flutter
-      #   run: |
-      #     sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
-      #     sed -i 's/com.android.tools.build:gradle:[0-9.]\+/com.android.tools.build:gradle:8.3.2/' ./android/build.gradle
-      #     sed -i 's/org.jetbrains.kotlin:kotlin-gradle-plugin:[0-9.]\+/org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24/' ./android/build.gradle
-      #     echo "Gradle files patched for compatibility"
-
+ 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-linux-android
           components: rustfmt
-
+ 
       - name: Rust cache
         uses: Swatinem/rust-cache@master
         with:
           prefix-key: rustdesk-lib-cache
           key: aarch64-linux-android
-
+ 
       - name: Fetch rust dependencies
         working-directory: ./rustdesk_source
         run: cargo fetch
-
+ 
       - name: Install cargo-expand
         run: cargo install cargo-expand --version 1.0.95 --locked
-
+ 
       - name: Install flutter_rust_bridge_codegen
         run: cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
-
+ 
       - name: Prepare flutter dependencies for bridge
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 14.0.0/extended_text: 13.0.0/g' pubspec.yaml
           flutter pub get
-
+ 
       - name: Generate bridge files
         working-directory: ./rustdesk_source
         run: |
@@ -146,53 +131,13 @@ jobs:
             --c-output ./flutter/macos/Runner/bridge_generated.h
           mkdir -p ./flutter/ios/Runner
           cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h || true
-
-      - name: Update flutter plugins version
+ 
+      - name: Update extended text version
         working-directory: ./rustdesk_source/flutter
         run: |
           sed -i -e 's/extended_text: 13.0.0/extended_text: 14.0.0/g' pubspec.yaml
-          sed -i -e 's/external_path: \^1.0.3/external_path: ^2.2.0/g' pubspec.yaml
-          sed -i -e 's/flutter_plugin_android_lifecycle: 2.0.17/flutter_plugin_android_lifecycle: ^2.0.33/g' pubspec.yaml
-          sed -i -e 's/file_picker: \^5.1.0/file_picker: ^10.3.10/g' pubspec.yaml
-          sed -i -e 's/sqflite: 2.2.0/sqflite: ^2.4.2/g' pubspec.yaml
-          sed -i '/uni_links:/,/ref:.*$/d' pubspec.yaml
-          sed -i '/uni_links_desktop:/d' pubspec.yaml
-          flutter pub add "uni_links:{git: {url: 'https://github.com/rustdesk-org/uni_links.git', ref: 'fork_update_sdk', path: 'uni_links'}}"
-          flutter pub add "uni_links_desktop:{git: {url: 'https://github.com/rustdesk-org/uni_links_desktop.git', ref: 'main'}}"
-          flutter clean
           flutter pub get
-
-      - name: Update flutter dependencies
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          flutter pub upgrade
-
-      # 🔧 最终补丁步骤：使用绝对路径，严格验证，输出修改内容
-      - name: Patch uni_links plugin with absolute path (final)
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          JAVA_FILE="/home/runner/.pub-cache/git/uni_links-f416118d843a7e9ed117c7bb7bdc2deda5a9e86f/uni_links/android/src/main/java/name/avioli/unilinks/UniLinksPlugin.java"
-          echo "=== Checking file existence ==="
-          if [ ! -f "$JAVA_FILE" ]; then
-            echo "❌ ERROR: File not found at $JAVA_FILE"
-            echo "Contents of /home/runner/.pub-cache/git:"
-            ls -la /home/runner/.pub-cache/git/
-            exit 1
-          fi
-          echo "✅ File found."
-          echo "=== Before patch (lines around package) ==="
-          grep -B5 -A5 "^package " "$JAVA_FILE" || head -20 "$JAVA_FILE"
-          echo "=== Patching ==="
-          if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
-            sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
-            echo "✅ Import added."
-          else
-            echo "ℹ️ Import already present."
-          fi
-          echo "=== After patch (lines around import) ==="
-          grep -B5 -A5 "PluginRegistry" "$JAVA_FILE" || tail -20 "$JAVA_FILE"
-          echo "=== Patch step completed ==="
-
+ 
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
         run: |
@@ -203,7 +148,7 @@ jobs:
             echo keyAlias='${{ secrets.KEY_ALIAS }}' >> android/key.properties
             echo keyPassword='${{ secrets.KEY_ALIAS_PASSWORD }}' >> android/key.properties
           fi
-
+ 
       - name: Build rustdesk native library
         working-directory: ./rustdesk_source
         env:
@@ -216,24 +161,24 @@ jobs:
           mkdir -p ./flutter/android/app/src/main/jniLibs/arm64-v8a
           cp ./target/aarch64-linux-android/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/
-
+ 
       - name: Flutter build release apk
         working-directory: ./rustdesk_source/flutter
         run: |
           flutter build apk --release --target-platform=android-arm64 --split-per-abi
-
+ 
       - name: List generated apk files
         working-directory: ./rustdesk_source/flutter
         run: |
           echo "Listing all apk files generated:"
           find ./build/app/outputs -type f -name "*.apk" | sort
-
+ 
       - name: Rename and move
         working-directory: ./rustdesk_source/flutter
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "${{ github.workspace }}/dist/rustdesk-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
