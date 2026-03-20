@@ -46,7 +46,7 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      # 🔧 强化 compileSdk 更新（兼容多种写法，并输出确认）
+      # 强化 compileSdk 更新（兼容多种写法，并输出确认）
       - name: Update compileSdk to 36
         working-directory: ./rustdesk_source/flutter
         run: |
@@ -167,24 +167,31 @@ jobs:
         run: |
           flutter pub upgrade
 
-      # 🔧 使用绝对路径修复 uni_links 插件（放在 upgrade 之后，build 之前）
-      - name: Patch uni_links plugin with absolute path
+      # 🔧 最终补丁步骤：使用绝对路径，严格验证，输出修改内容
+      - name: Patch uni_links plugin with absolute path (final)
         working-directory: ./rustdesk_source/flutter
         run: |
           JAVA_FILE="/home/runner/.pub-cache/git/uni_links-f416118d843a7e9ed117c7bb7bdc2deda5a9e86f/uni_links/android/src/main/java/name/avioli/unilinks/UniLinksPlugin.java"
-          if [ -f "$JAVA_FILE" ]; then
-            echo "✅ Found file, patching..."
-            if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
-              sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
-              echo "✅ Import added."
-              grep -B2 -A2 "PluginRegistry" "$JAVA_FILE" || true
-            else
-              echo "ℹ️ Import already present."
-            fi
-          else
-            echo "❌ File not found at: $JAVA_FILE"
+          echo "=== Checking file existence ==="
+          if [ ! -f "$JAVA_FILE" ]; then
+            echo "❌ ERROR: File not found at $JAVA_FILE"
+            echo "Contents of /home/runner/.pub-cache/git:"
+            ls -la /home/runner/.pub-cache/git/
             exit 1
           fi
+          echo "✅ File found."
+          echo "=== Before patch (lines around package) ==="
+          grep -B5 -A5 "^package " "$JAVA_FILE" || head -20 "$JAVA_FILE"
+          echo "=== Patching ==="
+          if ! grep -q "import io.flutter.plugin.common.PluginRegistry;" "$JAVA_FILE"; then
+            sed -i '/^package /a import io.flutter.plugin.common.PluginRegistry;' "$JAVA_FILE"
+            echo "✅ Import added."
+          else
+            echo "ℹ️ Import already present."
+          fi
+          echo "=== After patch (lines around import) ==="
+          grep -B5 -A5 "PluginRegistry" "$JAVA_FILE" || tail -20 "$JAVA_FILE"
+          echo "=== Patch step completed ==="
 
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
