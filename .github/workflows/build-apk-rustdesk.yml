@@ -82,28 +82,6 @@ jobs:
               }
           }
           EOF
-          # 3. 统一所有模块的 Java 和 Kotlin 编译目标为 17（使用 afterEvaluate 确保在模块评估后生效）
-          cat >> android/build.gradle << 'EOF'
-          allprojects {
-              afterEvaluate { project ->
-                  // 为 Android 模块设置编译目标
-                  if (project.hasProperty('android')) {
-                      android {
-                          compileOptions {
-                              sourceCompatibility JavaVersion.VERSION_17
-                              targetCompatibility JavaVersion.VERSION_17
-                          }
-                      }
-                  }
-                  // 为所有 Kotlin 编译任务设置 JVM 目标
-                  tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                      kotlinOptions {
-                          jvmTarget = "17"
-                      }
-                  }
-              }
-          }
-          EOF
           # 打印修改后的 build.gradle 内容以便调试
           echo "=== Modified android/build.gradle content ==="
           cat android/build.gradle
