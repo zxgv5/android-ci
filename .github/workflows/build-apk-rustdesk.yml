@@ -67,7 +67,7 @@ jobs:
         working-directory: ./rustdesk_source/flutter
         run: |
           # 1. 升级 Gradle 版本
-          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.2.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
+          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.2.1-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
           # 2. 添加 buildscript 块（AGP 和 Kotlin 版本）
           cat >> android/build.gradle << 'EOF'
           buildscript {
@@ -77,7 +77,7 @@ jobs:
                   mavenCentral()
               }
               dependencies {
-                  classpath 'com.android.tools.build:gradle:8.2.2'
+                  classpath 'com.android.tools.build:gradle:8.2.1'
                   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
               }
           }
