@@ -63,30 +63,6 @@ jobs:
           echo "Installed platforms:"
           ls -la /usr/local/lib/android/sdk/platforms/
 
-      - name: Patch gradle files for flutter version compatibility
-        working-directory: ./rustdesk_source/flutter
-        run: |
-          # 1. 升级 Gradle 版本
-          sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.2.1-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
-          # 2. 添加 buildscript 块（AGP 和 Kotlin 版本）
-          cat >> android/build.gradle << 'EOF'
-          buildscript {
-              ext.kotlin_version = '1.9.24'
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.2.1'
-                  classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-              }
-          }
-          EOF
-          # 打印修改后的 build.gradle 内容以便调试
-          echo "=== Modified android/build.gradle content ==="
-          cat android/build.gradle
-          echo "=============================================="
-
       - name: Setup java
         uses: actions/setup-java@main
         with:
