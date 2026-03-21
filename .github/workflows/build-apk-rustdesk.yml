@@ -158,7 +158,7 @@ jobs:
         working-directory: ./rustdesk_source/flutter
         run: |
           flutter --version
-          flutter pub upgrade --major-versions
+          flutter pub upgrade
  
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
