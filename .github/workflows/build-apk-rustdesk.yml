@@ -7,8 +7,8 @@ on:
 env:
   JDK_VERSION: '17'
   JDK_DISTRIBUTION: 'temurin'
-  ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_COMPILE_SDK: '35'
+  ANDROID_BUILD_TOOLS: '35.0.0'
   RUST_VERSION: '1.75'
   CARGO_NDK_VERSION: '3.1.2'
   NDK_VERSION: 'r28c'
@@ -50,7 +50,7 @@ jobs:
       - name: Update android sdk version
         working-directory: ./rustdesk_source/flutter
         run: |
-          sed -i -E 's/compileSdk(Version)?[[:space:]]*[=]?[[:space:]]*34/compileSdk = 36/g' android/app/build.gradle
+          sed -i -E 's/compileSdk(Version)?[[:space:]]*[=]?[[:space:]]*34/compileSdk = 35/g' android/app/build.gradle
           echo "✅ Updated compileSdk:"
           grep -C2 "compileSdk" android/app/build.gradle || echo "⚠️  Could not verify, please check manually."
 
