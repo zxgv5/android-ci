@@ -7,7 +7,11 @@ on:
 env:
   # android compile sdk 版本为34
   # 不要升级，白费力气，等源仓库更新
-  JDK_VERSION: '17'
+  # env中的版本为260322试验后得到的最高版本
+  # 特别小心flutter和java的升级，本项目基本搞不定
+  # gradle和AGP的升级，也不要乱动
+  # 等源仓库调整
+  JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   RUST_VERSION: '1.94.0'
   CARGO_NDK_VERSION: '4.1.2'
