@@ -68,7 +68,7 @@ jobs:
         run: |
           # 1. 升级 Gradle 版本
           sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
-          # 2. 添加 buildscript 块
+          # 2. 添加 buildscript 块（AGP 和 Kotlin 版本）
           cat >> android/build.gradle << 'EOF'
           buildscript {
               ext.kotlin_version = '1.9.24'
@@ -82,23 +82,23 @@ jobs:
               }
           }
           EOF
-          # 3. 统一 Java 和 Kotlin 编译目标为 17，使用 projectsLoaded 避免评估时机错误
+          # 3. 统一所有模块的 Java 和 Kotlin 编译目标为 17（使用 afterEvaluate 确保在模块评估后生效）
           cat >> android/build.gradle << 'EOF'
-          gradle.projectsLoaded {
-              rootProject.allprojects { project ->
-                  project.afterEvaluate {
-                      if (project.hasProperty('android')) {
-                          android {
-                              compileOptions {
-                                  sourceCompatibility JavaVersion.VERSION_17
-                                  targetCompatibility JavaVersion.VERSION_17
-                              }
+          allprojects {
+              afterEvaluate { project ->
+                  // 为 Android 模块设置编译目标
+                  if (project.hasProperty('android')) {
+                      android {
+                          compileOptions {
+                              sourceCompatibility JavaVersion.VERSION_17
+                              targetCompatibility JavaVersion.VERSION_17
                           }
                       }
-                      tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                          kotlinOptions {
-                              jvmTarget = "17"
-                          }
+                  }
+                  // 为所有 Kotlin 编译任务设置 JVM 目标
+                  tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                      kotlinOptions {
+                          jvmTarget = "17"
                       }
                   }
               }
