@@ -68,7 +68,7 @@ jobs:
         run: |
           # 1. 升级 Gradle 版本
           sed -i 's|distributionUrl=.*|distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip|' ./android/gradle/wrapper/gradle-wrapper.properties
-          # 2. 在根 build.gradle 中添加 buildscript 块（AGP 和 Kotlin 版本声明）
+          # 2. 添加 buildscript 块
           cat >> android/build.gradle << 'EOF'
           buildscript {
               ext.kotlin_version = '1.9.24'
@@ -84,19 +84,17 @@ jobs:
           EOF
           # 3. 统一 Java 和 Kotlin 编译目标为 17
           cat >> android/build.gradle << 'EOF'
-          allprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileOptions {
-                              sourceCompatibility JavaVersion.VERSION_17
-                              targetCompatibility JavaVersion.VERSION_17
-                          }
+          subprojects {
+              // 为所有 Android 项目设置 Java 编译目标
+              if (project.plugins.hasPlugin('com.android.application') || project.plugins.hasPlugin('com.android.library')) {
+                  android {
+                      compileOptions {
+                          sourceCompatibility JavaVersion.VERSION_17
+                          targetCompatibility JavaVersion.VERSION_17
                       }
                   }
               }
-          }
-          subprojects {
+              // 为所有 Kotlin 编译任务设置 JVM 目标
               tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
                   kotlinOptions {
                       jvmTarget = "17"
@@ -104,6 +102,10 @@ jobs:
               }
           }
           EOF
+          # 调试：打印 build.gradle
+          echo "=== Modified android/build.gradle content ==="
+          cat android/build.gradle
+          echo "=============================================="
           echo "✅ Gradle upgraded to 8.10.2, AGP to 8.10.0, Kotlin to 1.9.24, Java/Kotlin targets unified to 17"
 
       - name: Setup java
