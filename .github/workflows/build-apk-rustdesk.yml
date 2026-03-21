@@ -154,6 +154,12 @@ jobs:
           sed -i -e 's/extended_text: 13.0.0/extended_text: 14.0.0/g' pubspec.yaml
           flutter pub get
  
+      - name: Upgrade flutter dependencies
+        working-directory: ./rustdesk_source/flutter
+        run: |
+          flutter --version
+          flutter pub upgrade --major-versions
+ 
       - name: Decode and write keys
         working-directory: ./rustdesk_source/flutter
         run: |
