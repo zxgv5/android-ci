@@ -1,16 +1,16 @@
 name: build-apk-xed-editor
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,7 +23,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -32,26 +32,28 @@ jobs:
           path: xed_editor_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
-
+ 
       - name: Configure gradle for gradle9+
         run: |
           # 1. 关闭快照+网络强化，移除仓库相关
           # 删除resolutionStrategy.force，改到build.gradle.kts中配置（更加兼容Gradle9+）
+          # 先换行，防止文件末尾无空行的情况
+          echo "" >> ./xed_editor_source/gradle.properties
           cat >> ./xed_editor_source/gradle.properties << EOF
           # 彻底关闭快照仓，不再请求s01.oss.sonatype.org
           repositories.snapshots.enabled=false
@@ -70,7 +72,7 @@ jobs:
              }
           }
           EOF
-
+ 
       # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
       - name: Decode and create secrets
         run: |
@@ -79,19 +81,19 @@ jobs:
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" > /tmp/signing.properties
           echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> /tmp/signing.properties
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> /tmp/signing.properties
-
+ 
       - name: Build release apk files
         working-directory: ./xed_editor_source
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -Pandroid.ndk.abiFilters=arm64-v8a
-
+ 
       - name: Rename and move
         working-directory: ./xed_editor_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/*.apk "${{ github.workspace }}/dist/xed-editor-${{env.BUILD_DATE}}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
