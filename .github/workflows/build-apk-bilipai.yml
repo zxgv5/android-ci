@@ -8,7 +8,6 @@ on:
         required: true
         default: 'main'
         type: string
- 
 
 env:
   JDK_VERSION: '21'
