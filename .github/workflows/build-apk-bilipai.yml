@@ -2,7 +2,13 @@ name: build-apk-bilipai
 
 on:
   workflow_dispatch:
-  workflow_call:
+    inputs:
+      branch_name:
+        description: '分支'
+        required: true
+        default: 'main'
+        type: string
+ 
 
 env:
   JDK_VERSION: '21'
@@ -29,7 +35,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: jay3-yy/BiliPai
-          ref: main
+          ref: '${{ inputs.branch_name }}'
           path: bilipai_source
           fetch-depth: 0
           submodules: false
