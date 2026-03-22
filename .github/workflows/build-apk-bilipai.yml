@@ -37,7 +37,7 @@ jobs:
           ref: '${{ inputs.branch_name }}'
           path: bilipai_source
           fetch-depth: 0
-          submodules: false
+          # submodules: false
 
       - name: Checkout ci source repo
         uses: actions/checkout@main
