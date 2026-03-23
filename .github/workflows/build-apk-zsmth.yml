@@ -53,7 +53,10 @@ jobs:
         working-directory: ./zsmth_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
-          cat > init.gradle << EOF
+          cat > init.gradle << 'EOF'
+          // 设置 minSdkVersion 为 18 以支持 ECDSA 签名（修复 ECDSA signatures only supported for minSdkVersion 18 and higher 错误）
+          rootProject.ext.minSdkVersion = 18
+
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
@@ -94,7 +97,6 @@ jobs:
         working-directory: ./zsmth_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          # 使用通配符匹配实际生成的 APK 文件名（zSMTH-release-v*.apk）
           mv ./app/build/outputs/apk/release/*.apk "${{ github.workspace }}/dist/zsmth-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
