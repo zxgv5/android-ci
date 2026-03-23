@@ -54,9 +54,6 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
           cat > init.gradle << 'EOF'
-          // 设置 minSdkVersion 为 18 以支持 ECDSA 签名（修复 ECDSA signatures only supported for minSdkVersion 18 and higher 错误）
-          rootProject.ext.minSdkVersion = 18
-
           allprojects {
               afterEvaluate { project ->
                   if (project.plugins.hasPlugin('com.android.application')) {
@@ -77,6 +74,12 @@ jobs:
               }
           }
           EOF
+
+      - name: Patch build.gradle to increase min sdk version
+        working-directory: ./zsmth_source
+        run: |
+          sed -i 's/minSdkVersion = 17/minSdkVersion = 23/g' build.gradle
+          grep -n "minSdkVersion" build.gradle || true
 
       - name: Build signed apk with init script
         working-directory: ./zsmth_source
