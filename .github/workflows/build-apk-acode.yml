@@ -89,11 +89,10 @@ jobs:
           echo "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" | base64 -d > utils/config.js
  
       # 关闭启动时的加载文字
-      - name: Remove all loading messages
+      - name: Patch main.js for remove loading messages
         working-directory: ./acode_source
         run: |
-          # 注释所有 acode.setLoadingMessage(...) 调用，保留缩进
-          sed -i 's/^\(\s*\)\(acode\.setLoadingMessage(.*\)/\1\/\/ \2/' src/main.js
+          sed -i 's/^\(\s*\)\(document\.body\.setAttribute("data-version", info);\)/\1\/\/ \2/' src/main.js
  
       - name: Install bun
         uses: oven-sh/setup-bun@main
