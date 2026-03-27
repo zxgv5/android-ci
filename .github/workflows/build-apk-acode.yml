@@ -88,6 +88,39 @@ jobs:
           fi
           echo "${{ secrets.ACODE_BUILD_CONFIGJS_BASE64 }}" | base64 -d > utils/config.js
  
+      # 关闭启动时的splash screen
+      - name: Comment out splash screen in main.scss
+        working-directory: ./acode_source
+        run: |
+          awk '
+            BEGIN { in_block = 0; brace_count = 0; block = ""; }
+            /&:not\(\.loading\)\.title-loading\s*\{/ {
+              in_block = 1;
+              brace_count = 1;
+              block = $0;
+              next;
+            }
+            in_block {
+              block = block "\n" $0;
+              # 统计花括号数量，处理嵌套
+              for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1);
+                if (c == "{") brace_count++;
+                else if (c == "}") brace_count--;
+              }
+              if (brace_count == 0) {
+                print "/*" block "*/";   # 注释整个块
+                in_block = 0;
+                block = "";
+                next;
+              }
+              next;
+            }
+            { print; }
+          ' src/main.scss > tmp && mv tmp src/main.scss
+          echo "src/main,scss:"
+          cat src/main.scss
+ 
       - name: Install bun
         uses: oven-sh/setup-bun@main
         with:
@@ -101,7 +134,7 @@ jobs:
           npm run setup
           node utils/storage_manager.mjs y
           npm run build paid apk
-
+ 
       - name: Create init script
         working-directory: ./acode_source/platforms/android
         env:
