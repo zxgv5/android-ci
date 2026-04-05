@@ -1,1 +1,1 @@
-# CI test repository, do not star, do not fork.
+# ci test repository, do not star, do not fork.
