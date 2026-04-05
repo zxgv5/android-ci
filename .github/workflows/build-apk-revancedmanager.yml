@@ -81,6 +81,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEY_ALIAS_PASSWORD }}
+          ORG_GRADLE_PROJECT_githubPackagesUsername: ${{ github.actor }}
+          ORG_GRADLE_PROJECT_githubPackagesPassword: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -I init.gradle
