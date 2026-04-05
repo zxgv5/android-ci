@@ -49,31 +49,10 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Decode keystore and create init script
+      - name: Decode keystore
         working-directory: ./revancedmanager_source
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.jks
-          cat > init.gradle << EOF
-          allprojects {
-              afterEvaluate { project ->
-                  if (project.plugins.hasPlugin('com.android.application')) {
-                      if (!project.android.signingConfigs.hasProperty('release')) {
-                          project.android.signingConfigs.create('release')
-                      }
-                      def releaseConfig = project.android.signingConfigs.getByName('release')
-                      releaseConfig.storeFile = project.rootProject.file('app/keystore.jks')
-                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
-                      releaseConfig.keyAlias = System.getenv('KEYSTORE_ENTRY_ALIAS')
-                      releaseConfig.keyPassword = System.getenv('KEYSTORE_ENTRY_PASSWORD')
-                      releaseConfig.storeType = 'PKCS12'
-                      releaseConfig.enableV1Signing = true
-                      releaseConfig.enableV2Signing = true
-                      releaseConfig.enableV3Signing = true
-                      project.android.buildTypes.release.signingConfig = releaseConfig
-                  }
-              }
-          }
-          EOF
 
       - name: Build signed apk with init script
         working-directory: ./revancedmanager_source
@@ -85,7 +64,7 @@ jobs:
           ORG_GRADLE_PROJECT_githubPackagesPassword: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon -I init.gradle
+          ./gradlew assembleRelease --no-daemon
 
       - name: List generated apk files
         working-directory: ./revancedmanager_source
@@ -97,12 +76,7 @@ jobs:
         working-directory: ./revancedmanager_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          APK_PATH=$(find app/build/outputs -type f -name "*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            echo "No apk found!"
-            exit 1
-          fi
-          mv "$APK_PATH" "${{ github.workspace }}/dist/revancedmanager-${{ env.BUILD_DATE }}.apk"
+          mv "app/build/outputs/apk/release/revanced-manager"*".apk" "${{ github.workspace }}/dist/revancedmanager-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
