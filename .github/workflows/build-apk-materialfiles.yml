@@ -46,10 +46,10 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Customize scripts
-        run: |
-          chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-materialfiles.sh
-          $GITHUB_WORKSPACE/ci_source/scripts/customize-materialfiles.sh
+      # - name: Customize scripts
+      #   run: |
+      #     chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-materialfiles.sh
+      #     $GITHUB_WORKSPACE/ci_source/scripts/customize-materialfiles.sh
  
       - name: Decode keystore and create signing.properties
         working-directory: ./materialfiles_source
