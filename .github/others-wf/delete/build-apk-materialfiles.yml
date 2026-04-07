@@ -8,7 +8,7 @@ env:
   JDK_VERSION: '22'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_BUILD_TOOLS: '37.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
 jobs:
@@ -46,11 +46,6 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Customize scripts
-        run: |
-          chmod +x $GITHUB_WORKSPACE/ci_source/scripts/customize-materialfiles.sh
-          $GITHUB_WORKSPACE/ci_source/scripts/customize-materialfiles.sh
- 
       - name: Decode keystore and create signing.properties
         working-directory: ./materialfiles_source
         run: |
