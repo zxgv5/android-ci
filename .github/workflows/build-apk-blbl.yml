@@ -1,5 +1,5 @@
 name: build-apk-blbl
-
+ 
 on:
   workflow_dispatch:
     inputs:
@@ -7,17 +7,17 @@ on:
         description: "Version name (e.g. 0.1.18)"
         default: '0.1.21'
         required: true
-
+ 
 env:
   JDK_VERSION: '24'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,7 +28,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -37,34 +37,42 @@ jobs:
           path: blbl_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
-
+ 
       - name: Decode keystore
         working-directory: ./blbl_source
         run: |
           mkdir -p ./keystore
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./keystore/release.keystore
-
+ 
       # 作者已revert致此问题的提交，故注释步骤
       # - name: Patch source files
       #   working-directory: ./blbl_source
       #   run: |
       #     sed -i 's/recyclerView\.smoothScrollBy(0, dy)/recyclerView.scrollBy(0, dy)/g' app/src/main/java/blbl/cat3399/core/ui/DpadGridController.kt
-
+ 
+      # 调大进度条缩略图不同档位对应的窗口尺寸
+      - name: Modify videoshot preview size
+        working-directory: ./blbl_source
+        run: |
+          VIDEOSHOT_DIMENS_FILE="app/src/main/res/values/dimens.xml"
+          sed -i 's/name="player_videoshot_preview_short_edge_medium">[0-9]*dp</name="player_videoshot_preview_short_edge_medium">160dp</' "$VIDEOSHOT_DIMENS_FILE"
+          sed -i 's/name="player_videoshot_preview_short_edge_large">[0-9]*dp</name="player_videoshot_preview_short_edge_large">240dp</' "$VIDEOSHOT_DIMENS_FILE"
+ 
       - name: Build release apk
         working-directory: ./blbl_source
         env:
@@ -74,13 +82,13 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease -PversionName="${{ inputs.version_name }}" -PversionCode="${{ github.run_number }}"
-
+ 
       - name: Rename and move
         working-directory: ./blbl_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv ./app/build/outputs/apk/release/app-release.apk "${{ github.workspace }}/dist/blbl-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
