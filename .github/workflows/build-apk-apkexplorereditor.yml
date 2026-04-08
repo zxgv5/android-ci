@@ -94,7 +94,7 @@ jobs:
         working-directory: ./apkexplorereditor_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/full/release/app-full-release.apk" "${{ github.workspace }}/dist/apk-explorere-ditor-${{ env.BUILD_DATE }}.apk"
+          mv "./app/build/outputs/apk/full/release/app-full-release.apk" "${{ github.workspace }}/dist/apk-explorer-editor-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
