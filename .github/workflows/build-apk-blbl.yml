@@ -70,8 +70,9 @@ jobs:
         working-directory: ./blbl_source
         run: |
           VIDEOSHOT_DIMENS_FILE="app/src/main/res/values/dimens.xml"
-          sed -i 's/name="player_videoshot_preview_short_edge_medium">[0-9]*dp</name="player_videoshot_preview_short_edge_medium">130dp</' "$VIDEOSHOT_DIMENS_FILE"
-          sed -i 's/name="player_videoshot_preview_short_edge_large">[0-9]*dp</name="player_videoshot_preview_short_edge_large">180dp</' "$VIDEOSHOT_DIMENS_FILE"
+          sed -i 's/name="player_videoshot_preview_short_edge_small">[0-9]*dp</name="player_videoshot_preview_short_edge_small">90dp</' "$VIDEOSHOT_DIMENS_FILE"
+          sed -i 's/name="player_videoshot_preview_short_edge_medium">[0-9]*dp</name="player_videoshot_preview_short_edge_medium">153dp</' "$VIDEOSHOT_DIMENS_FILE"
+          sed -i 's/name="player_videoshot_preview_short_edge_large">[0-9]*dp</name="player_videoshot_preview_short_edge_large">216dp</' "$VIDEOSHOT_DIMENS_FILE"
  
       - name: Build release apk
         working-directory: ./blbl_source
