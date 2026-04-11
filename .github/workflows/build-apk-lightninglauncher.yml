@@ -107,6 +107,7 @@ jobs:
       - name: Clean project to regenerate R
         working-directory: ./lightninglauncher_source/Launcher
         run: |
+          chmod +x ./gradlew
           ./gradlew clean
 
       - name: Build signed apk with init script
