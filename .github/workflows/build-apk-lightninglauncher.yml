@@ -95,6 +95,15 @@ jobs:
           </vector>' > $name.xml
           done
 
+      # 去除设置页面顶部花里胡哨的内容
+      - name: Patch flipper code
+        working-directory: ./lightninglauncher_source/Launcher/App/src/main
+        run: |
+          # 1. 为 dialog_settings.xml 中的 flipper include 添加 id
+          sed -i 's|<include layout="@layout/flipper"|<include android:id="@+id/flipper" layout="@layout/flipper"|' res/layout/dialog_settings.xml
+          # 2. 在 SettingsDialog.java 的 show() 方法中隐藏 flipper
+          sed -i '/AlertDialog dialog = super\.show();/a \        dialog.findViewById(R.id.flipper).setVisibility(View.GONE);' java/com/threethan/launcher/activity/dialog/SettingsDialog.java
+
       - name: Build signed apk with init script
         working-directory: ./lightninglauncher_source/Launcher
         env:
