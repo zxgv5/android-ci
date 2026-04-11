@@ -99,11 +99,9 @@ jobs:
       - name: Patch flipper code
         working-directory: ./lightninglauncher_source/Launcher/App/src/main
         run: |
-          # 1. 处理跨行 include 标签：在 <include 之后插入 android:id
-          sed -i '/<include/,/\/>/ {
-            /<include/ s/<include /<include android:id="@+id\/flipper" /
-          }' res/layout/dialog_settings.xml
-          # 2. 强制验证（失败则退出）
+          # 1. 在 <include 行后插入 android:id 属性（缩进与下一行 layout 一致）
+          sed -i '/<include/ a \            android:id="@+id/flipper"' res/layout/dialog_settings.xml
+          # 2. 验证布局修改
           if ! grep -q 'android:id="@+id/flipper"' res/layout/dialog_settings.xml; then
             echo "❌ Failed to patch dialog_settings.xml. Relevant lines:"
             grep -n -B2 -A2 'flipper' res/layout/dialog_settings.xml || true
