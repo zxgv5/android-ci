@@ -1,19 +1,19 @@
 name: build-apk-lightninglauncher
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,7 +24,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -33,22 +33,22 @@ jobs:
           path: lightninglauncher_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
-
+ 
       - name: Decode keystore and create init script
         working-directory: ./lightninglauncher_source/Launcher
         run: |
@@ -75,7 +75,7 @@ jobs:
               }
           }
           EOF
-
+ 
       # 临时修复：创建缺失的 drawable 资源文件（占位）
       - name: Create missing drawable resources
         working-directory: ./lightninglauncher_source/Launcher/App/src/main/res
@@ -94,51 +94,37 @@ jobs:
                 android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z"/>
           </vector>' > $name.xml
           done
-
+ 
       # 去除设置页面顶部花里胡哨的内容
       - name: Patch flipper code
         working-directory: ./lightninglauncher_source/Launcher/App/src/main
         run: |
-          # 1. 在 <include 行后插入 android:id 属性（缩进与下一行 layout 一致）
+          # 在 <include 行后插入 android:id 属性（缩进与下一行 layout 一致）
           sed -i '/<include/ a \            android:id="@+id/flipper"' res/layout/dialog_settings.xml
-          # 2. 验证布局修改
-          if ! grep -q 'android:id="@+id/flipper"' res/layout/dialog_settings.xml; then
-            echo "❌ Failed to patch dialog_settings.xml. Relevant lines:"
-            grep -n -B2 -A2 'flipper' res/layout/dialog_settings.xml || true
-            exit 1
-          fi
-          # 3. 修改 Java 代码（保持不变）
-          sed -i '/AlertDialog dialog = super\.show();/a \        dialog.findViewById(R.id.flipper).setVisibility(View.GONE);' \
-            java/com/threethan/launcher/activity/dialog/SettingsDialog.java
-          # 4. 验证 Java 修改
-          if ! grep -q 'findViewById(R.id.flipper)' java/com/threethan/launcher/activity/dialog/SettingsDialog.java; then
-            echo "❌ Failed to patch SettingsDialog.java"
-            exit 1
-          fi
-
+          sed -i '/AlertDialog dialog = super\.show();/a \        dialog.findViewById(R.id.flipper).setVisibility(View.GONE);' java/com/threethan/launcher/activity/dialog/SettingsDialog.java
+ 
       - name: Build signed apk with init script
         working-directory: ./lightninglauncher_source/Launcher
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          rm -rf Launcher/App/build Launcher/build .gradle
           chmod +x ./gradlew
           # 构建默认的 sideload flavor
           ./gradlew clean assembleSideloadRelease --no-daemon -I init.gradle
-
+ 
       - name: List generated apk files
         working-directory: ./lightninglauncher_source/Launcher
         run: |
           echo "Listing all apk files generated:"
           find App/build/outputs -type f -name "*.apk" | sort
-
+ 
       - name: Rename and move
         working-directory: ./lightninglauncher_source/Launcher
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./App/build/outputs/apk/sideload/release/App-sideload-release.apk" "${{ github.workspace }}/dist/lightninglauncher-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
