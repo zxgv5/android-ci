@@ -96,13 +96,24 @@ jobs:
           done
 
       # 去除设置页面顶部花里胡哨的内容
-      - name: Patch flipper code
+      - name: Patch flipper code and verify
         working-directory: ./lightninglauncher_source/Launcher/App/src/main
         run: |
-          # 1. 为 dialog_settings.xml 中的 flipper include 添加 id
-          sed -i 's|<include layout="@layout/flipper"|<include android:id="@+id/flipper" layout="@layout/flipper"|' res/layout/dialog_settings.xml
-          # 2. 在 SettingsDialog.java 的 show() 方法中隐藏 flipper
+          # 1. 修改布局文件（使用更宽松的正则，允许任意空白）
+          sed -i -E 's|<include[[:space:]]+layout="@layout/flipper"|<include android:id="@+id/flipper" layout="@layout/flipper"|' res/layout/dialog_settings.xml
+          # 强制验证修改是否成功
+          if ! grep -q 'android:id="@+id/flipper"' res/layout/dialog_settings.xml; then
+            echo "❌ Failed to patch dialog_settings.xml. Content:"
+            grep -n 'flipper' res/layout/dialog_settings.xml || echo "flipper not found"
+            exit 1
+          fi
+          # 2. 修改 Java 文件
           sed -i '/AlertDialog dialog = super\.show();/a \        dialog.findViewById(R.id.flipper).setVisibility(View.GONE);' java/com/threethan/launcher/activity/dialog/SettingsDialog.java
+          # 验证修改
+          if ! grep -q 'findViewById(R.id.flipper)' java/com/threethan/launcher/activity/dialog/SettingsDialog.java; then
+            echo "❌ Failed to patch SettingsDialog.java"
+            exit 1
+          fi
 
       - name: Build signed apk with init script
         working-directory: ./lightninglauncher_source/Launcher
@@ -110,6 +121,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
+          rm -rf Launcher/App/build Launcher/build .gradle
           chmod +x ./gradlew
           # 构建默认的 sideload flavor
           ./gradlew clean assembleSideloadRelease --no-daemon -I init.gradle
