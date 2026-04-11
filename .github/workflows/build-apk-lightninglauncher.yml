@@ -96,20 +96,23 @@ jobs:
           done
 
       # 去除设置页面顶部花里胡哨的内容
-      - name: Patch flipper code and verify
+      - name: Patch flipper code
         working-directory: ./lightninglauncher_source/Launcher/App/src/main
         run: |
-          # 1. 修改布局文件（使用更宽松的正则，允许任意空白）
-          sed -i -E 's|<include[[:space:]]+layout="@layout/flipper"|<include android:id="@+id/flipper" layout="@layout/flipper"|' res/layout/dialog_settings.xml
-          # 强制验证修改是否成功
+          # 1. 处理跨行 include 标签：在 <include 之后插入 android:id
+          sed -i '/<include/,/\/>/ {
+            /<include/ s/<include /<include android:id="@+id\/flipper" /
+          }' res/layout/dialog_settings.xml
+          # 2. 强制验证（失败则退出）
           if ! grep -q 'android:id="@+id/flipper"' res/layout/dialog_settings.xml; then
-            echo "❌ Failed to patch dialog_settings.xml. Content:"
-            grep -n 'flipper' res/layout/dialog_settings.xml || echo "flipper not found"
+            echo "❌ Failed to patch dialog_settings.xml. Relevant lines:"
+            grep -n -B2 -A2 'flipper' res/layout/dialog_settings.xml || true
             exit 1
           fi
-          # 2. 修改 Java 文件
-          sed -i '/AlertDialog dialog = super\.show();/a \        dialog.findViewById(R.id.flipper).setVisibility(View.GONE);' java/com/threethan/launcher/activity/dialog/SettingsDialog.java
-          # 验证修改
+          # 3. 修改 Java 代码（保持不变）
+          sed -i '/AlertDialog dialog = super\.show();/a \        dialog.findViewById(R.id.flipper).setVisibility(View.GONE);' \
+            java/com/threethan/launcher/activity/dialog/SettingsDialog.java
+          # 4. 验证 Java 修改
           if ! grep -q 'findViewById(R.id.flipper)' java/com/threethan/launcher/activity/dialog/SettingsDialog.java; then
             echo "❌ Failed to patch SettingsDialog.java"
             exit 1
