@@ -105,8 +105,9 @@ jobs:
           sed -i '/AlertDialog dialog = super\.show();/a \        dialog.findViewById(R.id.flipper).setVisibility(View.GONE);' java/com/threethan/launcher/activity/dialog/SettingsDialog.java
 
       - name: Clean project to regenerate R
-        working-directory: ./lightninglauncher_source
-        run: ./gradlew clean
+        working-directory: ./lightninglauncher_source/Launcher
+        run: |
+          ./gradlew clean
 
       - name: Build signed apk with init script
         working-directory: ./lightninglauncher_source/Launcher
