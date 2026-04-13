@@ -111,7 +111,7 @@ jobs:
         run: |
           chmod +x ./gradlew
           # 构建默认的 sideload flavor
-          ./gradlew clean assembleSideloadRelease --no-daemon -I init.gradle
+          ./gradlew assembleSideloadRelease --no-daemon -I init.gradle
  
       - name: List generated apk files
         working-directory: ./lightninglauncher_source/Launcher
