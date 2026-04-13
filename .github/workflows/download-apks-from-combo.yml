@@ -1,0 +1,78 @@
+name: download-apks-from-combo
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_names:
+        description: "包名"
+        required: true
+        default: "dev.vodik7.atvtools"
+        type: string
+      architecture:
+        description: "架构"
+        required: false
+        default: "arm64-v8a"
+        type: string
+      source:
+        description: "源（仅APKCombo）"
+        required: true
+        default: "apkcombo"
+        type: choice
+        options:
+          - apkcombo
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: '20'
+
+      - name: Install apkcombo downloader
+        run: npm install -g @nirewen/apkcombo-downloader
+
+      - name: Create directory and download apks
+        run: |
+          set -euo pipefail
+          OUT_DIR="./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}"
+          mkdir -p "$OUT_DIR"
+          IFS=';' read -ra PACKAGES <<< "${{ inputs.package_names }}"
+          DEFAULT_ARCH="${{ inputs.architecture }}"
+          for PACKAGE in "${PACKAGES[@]}"; do
+            PACKAGE_TRIMMED=$(echo "$PACKAGE" | xargs)
+            if [ -z "$PACKAGE_TRIMMED" ]; then
+              continue
+            fi
+            echo "处理包名: $PACKAGE_TRIMMED"
+            # --- 自动推导 org 和 repo 的逻辑 ---
+            # 假设 org 是包名的最后一部分，repo 是完整的包名（此规则并非100%准确，可能需要根据实际情况调整）
+            ORG=$(echo "$PACKAGE_TRIMMED" | awk -F '.' '{print $NF}')
+            REPO="$PACKAGE_TRIMMED"
+            echo "推导出的 org: $ORG, repo: $REPO"
+            # ---------------------------------
+            echo "开始下载: $ORG / $REPO , 架构: $DEFAULT_ARCH"
+            apkcd download --org "$ORG" --repo "$REPO" --arch "$DEFAULT_ARCH" --outDir "$OUT_DIR"
+          done
+          echo "下载完成，文件清单："
+          ls -lh "$OUT_DIR"
+
+      - name: Encrypt apks and create release
+        uses: ./ci_source/.github/actions/aes256pac_release/
+        with:
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          ARTIFACT_DIRECTORY_PATH: "./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-${{ inputs.source }}"
