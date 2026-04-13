@@ -54,7 +54,8 @@ jobs:
             if [ -n "$pkg_trimmed" ]; then
               echo "开始下载应用：$pkg_trimmed，架构：$ARCH"
               # 下载最新版
-              apkeep -a "$pkg_trimmed" -d apk-pure -o \'"arch=$ARCH"\' "./apks-pure-${{ env.BUILD_DATE }}/"
+              apkeep -a "$pkg_trimmed" -d apk-pure "./apks-pure-${{ env.BUILD_DATE }}"
+              # apkeep -a "$pkg_trimmed" -d apk-pure -o \'"arch=$ARCH"\' "./apks-pure-${{ env.BUILD_DATE }}/"
               # apkeep -a "$pkg_trimmed" -d apk-pure --options "arch=$ARCH" "./apks-pure-${{ env.BUILD_DATE }}/"
             fi
           done
