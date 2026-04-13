@@ -16,11 +16,9 @@ on:
       source:
         description: "下载源"
         required: true
-        default: "apk-combo"
+        default: "apk-pure"
         type: choice
         options:
-          - apk-mirror
-          - apk-combo
           - apk-pure
  
 env:
