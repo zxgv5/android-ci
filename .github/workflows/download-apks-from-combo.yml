@@ -4,22 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       package_names:
-        description: "包名（多个用分号分隔）"
+        description: "包名"
         required: true
         default: "dev.vodik7.atvtools"
         type: string
       architecture:
-        description: "架构（arm64-v8a, armeabi-v7a, universal 等）"
+        description: "架构"
         required: false
         default: "arm64-v8a"
         type: string
-      source:
-        description: "源（仅APKCombo）"
-        required: true
-        default: "apkcombo"
-        type: choice
-        options:
-          - apkcombo
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,30 +35,50 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install apkcombo-downloader
+        run: |
+          npm install @nirewen/apkcombo-downloader
+
       - name: Create directory and download apks
         run: |
           set -euo pipefail
-          OUT_DIR="./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}"
+          OUT_DIR="./apks-combo-${{ env.BUILD_DATE }}"
           mkdir -p "$OUT_DIR"
           IFS=';' read -ra PACKAGES <<< "${{ inputs.package_names }}"
           DEFAULT_ARCH="${{ inputs.architecture }}"
-          for PACKAGE in "${PACKAGES[@]}"; do
-            PACKAGE_TRIMMED=$(echo "$PACKAGE" | xargs)
-            if [ -z "$PACKAGE_TRIMMED" ]; then
-              continue
-            fi
-            echo "处理包名: $PACKAGE_TRIMMED"
-            # 自动推导 org 和 repo
-            ORG=$(echo "$PACKAGE_TRIMMED" | awk -F '.' '{print $NF}')
-            REPO="$PACKAGE_TRIMMED"
-            echo "推导出的 org: $ORG, repo: $REPO"
-            echo "开始下载: $ORG / $REPO , 架构: $DEFAULT_ARCH"
-            npx -y @nirewen/apkcombo-downloader download \
-              --org "$ORG" \
-              --repo "$REPO" \
-              --arch "$DEFAULT_ARCH" \
-              --outDir "$OUT_DIR"
-          done
+          # 创建下载脚本（使用 API 而非 CLI）
+          cat > download.js << 'EOF'
+          const { APKComboDownloader } = require('@nirewen/apkcombo-downloader');
+          const path = require('path');
+          async function main() {
+            const packages = process.env.PACKAGES.split(';').map(p => p.trim()).filter(p => p);
+            const arch = process.env.DEFAULT_ARCH;
+            const outDir = process.env.OUT_DIR;
+            const downloader = new APKComboDownloader({ outDir });
+            for (const pkg of packages) {
+              // 推导 org 和 repo（规则：org 为包名最后一段，repo 为完整包名）
+              const parts = pkg.split('.');
+              const org = parts[parts.length - 1];
+              const repo = pkg;
+              console.log(`下载: ${pkg} (org=${org}, repo=${repo}, arch=${arch})`);
+              try {
+                await downloader.download({ org, repo }, { arch });
+                console.log(`✅ 成功: ${pkg}`);
+              } catch (err) {
+                console.error(`❌ 失败: ${pkg}`, err.message);
+                process.exit(1);
+              }
+            }
+          }
+          main().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          EOF
+          export PACKAGES="${{ inputs.package_names }}"
+          export DEFAULT_ARCH="$DEFAULT_ARCH"
+          export OUT_DIR="$OUT_DIR"
+          node download.js
           echo "下载完成，文件清单："
           ls -lh "$OUT_DIR"
 
@@ -73,5 +86,5 @@ jobs:
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          ARTIFACT_DIRECTORY_PATH: "./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-${{ inputs.source }}"
+          ARTIFACT_DIRECTORY_PATH: "./apks-combo-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-combo"
