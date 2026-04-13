@@ -1,22 +1,31 @@
-name: download-apks-from-pure
-
+name: download-apks-from-mirror
+ 
 on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: "包名"
+        description: "包名（多个用分号分隔）"
         required: true
         default: "com.cxinventor.file.explorer;org.freedownloadmanager.fdm;com.rhmsoft.edit;com.rhmsoft.code;mark.via.gp;com.flyersoft.moonreader;com.azure.authenticator;com.mxtech.videoplayer.ad"
         type: string
       architecture:
-        description: "架构(universal等)"
+        description: "架构（arm64-v8a, armeabi-v7a, universal 等）"
         required: false
         default: "arm64-v8a"
         type: string
-
+      source:
+        description: "下载源"
+        required: true
+        default: "apk-combo"
+        type: choice
+        options:
+          - apk-mirror
+          - apk-combo
+          - apk-pure
+ 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 jobs:
   download:
     runs-on: ubuntu-latest
@@ -25,46 +34,42 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Initialization work environment
         run: |
           set -euo pipefail
           sudo apt update && sudo apt install -y wget curl build-essential
-
+ 
       - name: Install latest apkeep
         run: |
           set -euo pipefail
           cargo install apkeep
           apkeep --version
-
+ 
       - name: Create directory and download apks
         run: |
           set -euo pipefail
-          mkdir -p "./apks-pure-${{ env.BUILD_DATE }}"
-          # 分割包名
+          mkdir -p "./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}"
           IFS=';' read -ra packages <<< "${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
+          SOURCE="${{ inputs.source }}"
           for pkg in "${packages[@]}"; do
-            # 去除前后空白
             pkg_trimmed=$(echo "$pkg" | xargs)
             if [ -n "$pkg_trimmed" ]; then
-              echo "开始下载应用：$pkg_trimmed，架构：$ARCH"
-              # 下载最新版
-              apkeep -a "$pkg_trimmed" -d apk-pure "./apks-pure-${{ env.BUILD_DATE }}"
-              # apkeep -a "$pkg_trimmed" -d apk-pure -o \'"arch=$ARCH"\' "./apks-pure-${{ env.BUILD_DATE }}/"
-              # apkeep -a "$pkg_trimmed" -d apk-pure --options "arch=$ARCH" "./apks-pure-${{ env.BUILD_DATE }}/"
+              echo "开始下载应用：$pkg_trimmed，架构：$ARCH，源：$SOURCE"
+              apkeep -a "$pkg_trimmed" -d "$SOURCE" --options "arch=$ARCH" "./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}/"
             fi
           done
           echo "下载完成，文件清单："
-          ls -lh "./apks-pure-${{ env.BUILD_DATE }}/"
-
+          ls -lh "./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}/"
+ 
       - name: Encrypt apks and create release
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          ARTIFACT_DIRECTORY_PATH: "./apks-pure-${{ env.BUILD_DATE }}"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-pure"
+          ARTIFACT_DIRECTORY_PATH: "./apks-${{ inputs.source }}-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-${{ inputs.source }}"
