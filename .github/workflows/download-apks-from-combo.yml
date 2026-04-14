@@ -35,16 +35,57 @@ jobs:
         with:
           bun-version: 1.1.21
 
+      - name: Setup Node.js (for Puppeteer)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Puppeteer
+        run: npm install puppeteer
+
+      - name: Get cf_clearance cookie via Puppeteer
+        run: |
+          cat > get-cookie.js << 'EOF'
+          const puppeteer = require('puppeteer');
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless: 'new',
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+            console.log('访问 APKMirror 主页获取 Cookie...');
+            await page.goto('https://www.apkmirror.com/', { waitUntil: 'networkidle2', timeout: 60000 });
+
+            const cookies = await page.cookies();
+            const cfClearance = cookies.find(c => c.name === 'cf_clearance');
+            if (!cfClearance) {
+              throw new Error('未找到 cf_clearance cookie，Cloudflare 验证失败');
+            }
+            console.log(`获取到 cf_clearance=${cfClearance.value}`);
+
+            const fs = require('fs');
+            fs.writeFileSync('cookie-env.txt', `CF_CLEARANCE=${cfClearance.value}`);
+            await browser.close();
+          })();
+          EOF
+          node get-cookie.js
+          cat cookie-env.txt >> $GITHUB_ENV
+
       - name: Clone apkmirror-downloader
         run: git clone https://github.com/tanishqmanuja/apkmirror-downloader.git
 
-      - name: Patch fetch with full browser headers
+      - name: Patch fetch with browser headers + cf_clearance
         run: |
           cd apkmirror-downloader
 
           cat > patch.js << 'PATCH'
           const fs = require('fs');
           const path = require('path');
+
+          const cfClearance = process.env.CF_CLEARANCE || '';
 
           const fetchOptions = `{ 
             headers: {
@@ -61,7 +102,7 @@ jobs:
               'Sec-Fetch-Site': 'none',
               'Sec-Fetch-User': '?1',
               'Upgrade-Insecure-Requests': '1',
-              'Cookie': 'CONSENT=YES+; _ga=GA1.2.1234567890.1234567890'
+              'Cookie': 'cf_clearance=${cfClearance}; CONSENT=YES+'
             },
             credentials: 'include',
             referrerPolicy: 'strict-origin-when-cross-origin',
@@ -75,7 +116,7 @@ jobs:
             `fetch(repoPageUrl, ${fetchOptions})`
           );
           fs.writeFileSync(versionsPath, versionsContent);
-          console.log('✅ Patched versions.ts');
+          console.log('✅ Patched versions.ts with cf_clearance');
 
           const downloadsPath = path.join('src', 'lib', 'scrapers', 'downloads.ts');
           let downloadsContent = fs.readFileSync(downloadsPath, 'utf8');
@@ -88,7 +129,7 @@ jobs:
             `fetch(url, ${fetchOptions})`
           );
           fs.writeFileSync(downloadsPath, downloadsContent);
-          console.log('✅ Patched downloads.ts');
+          console.log('✅ Patched downloads.ts with cf_clearance');
           PATCH
 
           bun patch.js
