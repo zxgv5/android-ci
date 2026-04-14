@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: "包名（多个用分号分隔）"
+        description: "包名"
         required: true
-        default: "com.cxinventor.file.explorer;org.freedownloadmanager.fdm;com.rhmsoft.edit;com.rhmsoft.code;mark.via.gp;com.flyersoft.moonreader;com.azure.authenticator;com.mxtech.videoplayer.ad"
+        default: "com.cxinventor.file.explorer;dev.vodik7.atvtools"
         type: string
       architecture:
-        description: "架构（arm64-v8a, armeabi-v7a, universal 等）"
+        description: "架构"
         required: false
         default: "arm64-v8a"
         type: string
@@ -31,7 +31,7 @@ jobs:
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@main
         with:
           node-version: '20'
 
