@@ -38,15 +38,22 @@ jobs:
       # ======================================================================
       # 使用 apkcombo-downloader 源码进行下载
       # 仓库地址: https://github.com/nirewen/apkcombo-downloader
-      # 该项目 fork 自 apkmirror-downloader，API 完全兼容，但目标站点为 APKCombo。
-      # 由于 apkcombo-downloader 未发布到 npm 且入口配置不完整，
-      # 此处采用直接克隆源码并本地引用的方式，确保模块正确加载。
+      # 入口文件为 src/index.js
       # ======================================================================
       - name: Clone apkcombo-downloader source
         run: |
           git clone https://github.com/nirewen/apkcombo-downloader.git
           cd apkcombo-downloader
-          npm install   # 安装依赖（包含上游 apkmirror-downloader 的核心模块）
+          npm install   # 安装依赖
+
+      - name: Verify module structure (optional debug)
+        run: |
+          echo "=== apkcombo-downloader 目录结构 ==="
+          ls -la apkcombo-downloader/
+          echo "=== package.json 主要内容 ==="
+          cat apkcombo-downloader/package.json | grep -E '"main"|"exports"|"bin"' || echo "未找到 main/exports/bin 字段"
+          echo "=== 检查 src/index.js 是否存在 ==="
+          ls -l apkcombo-downloader/src/index.js || echo "src/index.js 不存在"
 
       - name: Download APKs using apkcombo-downloader
         run: |
@@ -56,16 +63,13 @@ jobs:
           ARCH="${{ inputs.architecture }}"
           PACKAGES_STR="${{ inputs.package_name }}"
 
-          # 创建 Node.js 下载脚本，直接引用克隆的源码目录
           cat > download.js << 'EOF'
           const path = require('path');
-          
-          // 通过相对路径加载本地克隆的 apkcombo-downloader 模块
-          const { APKComboDownloader } = require('./apkcombo-downloader');
+
+          // 直接 require src/index.js 入口文件
+          const { APKComboDownloader } = require('./apkcombo-downloader/src/index.js');
 
           async function downloadPackage(pkg, arch, outDir) {
-            // 包名转换为 APKCombo 所需的 org/repo 格式
-            // 规则：最后一段为 repo，之前部分以 '-' 连接作为 org
             const parts = pkg.split('.');
             const repo = parts.pop();
             const org = parts.join('-');
