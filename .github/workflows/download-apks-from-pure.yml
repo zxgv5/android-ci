@@ -1,22 +1,22 @@
-name: download-apks-from-mirror
-
+name: download-apks-from-pure
+ 
 on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: "包名（多个用分号分隔）"
+        description: "包名"
         required: true
         default: "com.cxinventor.file.explorer;org.freedownloadmanager.fdm;com.rhmsoft.edit;com.rhmsoft.code;mark.via.gp;com.flyersoft.moonreader;com.azure.authenticator;com.mxtech.videoplayer.ad"
         type: string
       architecture:
-        description: "架构（arm64-v8a, armeabi-v7a, universal 等）"
+        description: "架构(universal等)"
         required: false
         default: "arm64-v8a"
         type: string
-
+ 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 jobs:
   download:
     runs-on: ubuntu-latest
@@ -25,87 +25,44 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install apkmirror-downloader
-        run: npm install -g apkmirror-downloader
-
+ 
+      - name: Initialization work environment
+        run: |
+          set -euo pipefail
+          sudo apt update && sudo apt install -y wget curl build-essential
+ 
+      - name: Install latest apkeep
+        run: |
+          set -euo pipefail
+          cargo install apkeep
+          apkeep --version
+ 
       - name: Create directory and download apks
         run: |
           set -euo pipefail
-          OUT_DIR="./apks-apkmirror-${{ env.BUILD_DATE }}"
-          mkdir -p "$OUT_DIR"
-          IFS=';' read -ra PACKAGES <<< "${{ inputs.package_name }}"
+          mkdir -p "./apks-pure-${{ env.BUILD_DATE }}"
+          # 分割包名
+          IFS=';' read -ra packages <<< "${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
-
-          # 创建 Node.js 下载脚本
-          cat > download.js << 'EOF'
-          const { APKMirrorDownloader } = require('apkmirror-downloader');
-          const fs = require('fs');
-          const path = require('path');
-
-          async function downloadPackage(pkg, arch, outDir) {
-            // 将包名转换为 APKMirror 的 org 和 repo
-            // 规则：包名最后一段作为 repo，前面部分将点替换为连字符作为 org
-            // 例如：dev.vodik7.atvtools -> org="dev-vodik7", repo="atvtools"
-            const parts = pkg.split('.');
-            const repo = parts.pop();
-            const org = parts.join('-');
-            console.log(`[${pkg}] 推导 org=${org}, repo=${repo}, arch=${arch}`);
-
-            const downloader = new APKMirrorDownloader({ outDir });
-            try {
-              await downloader.download({ org, repo }, { arch });
-              console.log(`[${pkg}] ✅ 下载成功`);
-              return true;
-            } catch (err) {
-              console.error(`[${pkg}] ❌ 下载失败: ${err.message}`);
-              return false;
-            }
-          }
-
-          async function main() {
-            const packagesArg = process.argv[2];
-            const arch = process.argv[3];
-            const outDir = process.argv[4];
-            if (!packagesArg || !arch || !outDir) {
-              console.error('用法: node download.js "pkg1;pkg2" arch outDir');
-              process.exit(1);
-            }
-            const packages = packagesArg.split(';').map(p => p.trim()).filter(p => p);
-            let allSuccess = true;
-            for (const pkg of packages) {
-              const success = await downloadPackage(pkg, arch, outDir);
-              if (!success) allSuccess = false;
-            }
-            if (!allSuccess) {
-              console.error('部分应用下载失败，请检查日志');
-              process.exit(1);
-            }
-          }
-
-          main().catch(err => {
-            console.error(err);
-            process.exit(1);
-          });
-          EOF
-
-          node download.js "${{ inputs.package_name }}" "$ARCH" "$OUT_DIR"
-
+          for pkg in "${packages[@]}"; do
+            # 去除前后空白
+            pkg_trimmed=$(echo "$pkg" | xargs)
+            if [ -n "$pkg_trimmed" ]; then
+              echo "开始下载应用：$pkg_trimmed，架构：$ARCH"
+              # 下载最新版
+              apkeep -a "$pkg_trimmed" -d apk-pure --options "arch=$ARCH" "./apks-pure-${{ env.BUILD_DATE }}/"
+            fi
+          done
           echo "下载完成，文件清单："
-          ls -lh "$OUT_DIR"
-
+          ls -lh "./apks-pure-${{ env.BUILD_DATE }}/"
+ 
       - name: Encrypt apks and create release
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          ARTIFACT_DIRECTORY_PATH: "./apks-apkmirror-${{ env.BUILD_DATE }}"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkmirror"
+          ARTIFACT_DIRECTORY_PATH: "./apks-pure-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-pure"
