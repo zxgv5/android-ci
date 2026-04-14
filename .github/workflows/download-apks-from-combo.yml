@@ -36,43 +36,35 @@ jobs:
           node-version: '20'
 
       # ======================================================================
-      # 使用 apkcombo-downloader 实现 APK 下载
-      # 仓库地址: https://github.com/nirewen/apkcombo-downloader
-      # 该项目 fork 自 https://github.com/tanishqmanuja/apkmirror-downloader
-      # 其功能依赖于上游项目的核心模块
+      # 使用 apkmirror-downloader 下载 APK（兼容 apkcombo-downloader）
+      # 说明：apkcombo-downloader (https://github.com/nirewen/apkcombo-downloader)
+      # fork 自 apkmirror-downloader，并修改下载源为 APKCombo。
+      # 由于前者未发布到 npm 且模块入口不完善，此处直接使用上游已发布的
+      # apkmirror-downloader 包，其 API 与 apkcombo-downloader 完全一致。
+      # 如需切换到 APKCombo 源，可考虑后续修改下载器的请求基地址。
       # ======================================================================
-      - name: Install apkcombo-downloader locally
-        run: |
-          npm init -y
-          npm install github:nirewen/apkcombo-downloader
+      - name: Install apkmirror-downloader
+        run: npm install -g apkmirror-downloader
 
-      - name: Download APKs using local module
+      - name: Create directory and download apks
         run: |
           set -euo pipefail
-          OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
+          OUT_DIR="./apks-apkmirror-${{ env.BUILD_DATE }}"
           mkdir -p "$OUT_DIR"
+          IFS=';' read -ra PACKAGES <<< "${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
-          PACKAGES_STR="${{ inputs.package_name }}"
 
-          # 创建 Node.js 下载脚本，直接引用本地 node_modules 中的模块
+          # 创建 Node.js 下载脚本
           cat > download.js << 'EOF'
-          const path = require('path');
-          const fs = require('fs');
-
-          // 从本地 node_modules 加载模块
-          const downloaderModulePath = path.join(process.cwd(), 'node_modules', 'apkcombo-downloader');
-          const { APKComboDownloader } = require(downloaderModulePath);
+          const { APKMirrorDownloader } = require('apkmirror-downloader');
 
           async function downloadPackage(pkg, arch, outDir) {
-            // 包名转换为 APKCombo 所需的 org 和 repo 格式
-            // 规则：最后一段为 repo，之前部分将点替换为连字符作为 org
-            // 例: dev.vodik7.atvtools -> org="dev-vodik7", repo="atvtools"
             const parts = pkg.split('.');
             const repo = parts.pop();
             const org = parts.join('-');
             console.log(`[${pkg}] 推导 org=${org}, repo=${repo}, arch=${arch}`);
 
-            const downloader = new APKComboDownloader({ outDir });
+            const downloader = new APKMirrorDownloader({ outDir });
             try {
               await downloader.download({ org, repo }, { arch });
               console.log(`[${pkg}] ✅ 下载成功`);
@@ -109,7 +101,7 @@ jobs:
           });
           EOF
 
-          node download.js "$PACKAGES_STR" "$ARCH" "$OUT_DIR"
+          node download.js "${{ inputs.package_name }}" "$ARCH" "$OUT_DIR"
 
           echo "下载完成，文件清单："
           ls -lh "$OUT_DIR"
@@ -118,5 +110,5 @@ jobs:
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          ARTIFACT_DIRECTORY_PATH: "./apks-apkcombo-${{ env.BUILD_DATE }}"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkcombo"
+          ARTIFACT_DIRECTORY_PATH: "./apks-apkmirror-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkmirror"
