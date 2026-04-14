@@ -35,141 +35,49 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: |
-          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth axios
+      - name: Install apkmirror-downloader
+        run: npm install apkmirror-downloader
 
-      - name: Download APKs via Puppeteer (Stealth)
+      - name: Download APKs (with global fetch override)
         run: |
           set -euo pipefail
-          OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
+          OUT_DIR="./apks-apkmirror-${{ env.BUILD_DATE }}"
           mkdir -p "$OUT_DIR"
-          PACKAGES_STR="${{ inputs.package_name }}"
+          IFS=';' read -ra PACKAGES <<< "${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
 
           cat > download.js << 'EOF'
-          const puppeteer = require('puppeteer-extra');
-          const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-          const axios = require('axios');
-          const fs = require('fs');
-          const path = require('path');
-          const { promisify } = require('util');
-          const stream = require('stream');
-          const finished = promisify(stream.finished);
+          const { APKMirrorDownloader } = require('apkmirror-downloader');
 
-          puppeteer.use(StealthPlugin());
+          // 保存原生 fetch
+          const originalFetch = global.fetch;
 
-          const BASE_URL = 'https://apkcombo.com';
-
-          const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-          async function downloadFile(url, destPath) {
-            const writer = fs.createWriteStream(destPath);
-            const response = await axios({
-              method: 'get',
-              url: url,
-              responseType: 'stream',
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Referer': BASE_URL
-              }
-            });
-            response.data.pipe(writer);
-            await finished(writer);
-          }
+          // 覆盖全局 fetch，注入反爬请求头
+          global.fetch = async (url, options = {}) => {
+            const headers = {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Cookie': 'CONSENT=YES+',
+              ...(options.headers || {})
+            };
+            return originalFetch(url, { ...options, headers });
+          };
 
           async function downloadPackage(pkg, arch, outDir) {
-            console.log(`[${pkg}] 启动浏览器...`);
-            const browser = await puppeteer.launch({
-              headless: 'new',
-              args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-blink-features=AutomationControlled'
-              ]
-            });
-            const page = await browser.newPage();
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-            await page.setExtraHTTPHeaders({
-              'Accept-Language': 'en-US,en;q=0.9'
-            });
-            await page.setViewport({ width: 1280, height: 800 });
+            const parts = pkg.split('.');
+            const repo = parts.pop();
+            const org = parts.join('-');
+            console.log(`[${pkg}] 推导 org=${org}, repo=${repo}, arch=${arch}`);
 
+            const downloader = new APKMirrorDownloader({ outDir });
             try {
-              const appUrl = `${BASE_URL}/${pkg}`;
-              console.log(`[${pkg}] 访问: ${appUrl}`);
-              await page.goto(appUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-
-              // 等待页面加载
-              await sleep(2000);
-
-              // 查找下载按钮（通过文本）
-              const downloadButton = await page.evaluateHandle(() => {
-                const elements = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
-                for (const el of elements) {
-                  const text = (el.textContent || '').trim().toLowerCase();
-                  if (text.includes('download apk') && !text.includes('bundle') && !text.includes('xapk')) {
-                    return el;
-                  }
-                }
-                return null;
-              });
-
-              if (!downloadButton || !(await downloadButton.asElement())) {
-                throw new Error('找不到下载按钮（文本匹配失败）');
-              }
-
-              const btn = downloadButton.asElement();
-              await btn.click();
-              console.log(`[${pkg}] 已点击下载按钮`);
-
-              // 等待导航
-              await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {
-                console.log(`[${pkg}] 未发生导航，可能已在新标签页打开`);
-              });
-
-              // 获取所有页面，切换到最新的一个
-              const pages = await browser.pages();
-              const targetPage = pages.length > 1 ? pages[pages.length - 1] : page;
-              if (targetPage !== page) {
-                await targetPage.bringToFront();
-                await targetPage.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
-              }
-
-              // 提取 APK 链接
-              const apkLink = await targetPage.evaluate((targetArch) => {
-                // 优先找 .apk 链接且文本包含架构
-                const links = Array.from(document.querySelectorAll('a[href$=".apk"]'));
-                for (const link of links) {
-                  const text = (link.textContent || '').toLowerCase();
-                  if (text.includes(targetArch.toLowerCase())) {
-                    return link.href;
-                  }
-                }
-                // 回退：任意 .apk 链接
-                return links.length > 0 ? links[0].href : null;
-              }, arch);
-
-              if (!apkLink) {
-                // 保存调试截图
-                const screenshotPath = path.join(outDir, `${pkg}_debug.png`);
-                await targetPage.screenshot({ path: screenshotPath, fullPage: true });
-                console.log(`[${pkg}] 调试截图已保存: ${screenshotPath}`);
-                throw new Error('未找到 APK 下载链接');
-              }
-
-              console.log(`[${pkg}] APK URL: ${apkLink}`);
-
-              const fileName = `${pkg}_${arch}_${Date.now()}.apk`;
-              const filePath = path.join(outDir, fileName);
-              await downloadFile(apkLink, filePath);
-              console.log(`[${pkg}] ✅ 下载成功: ${fileName}`);
+              await downloader.download({ org, repo }, { arch });
+              console.log(`[${pkg}] ✅ 下载成功`);
               return true;
             } catch (err) {
-              console.error(`[${pkg}] ❌ 失败: ${err.message}`);
+              console.error(`[${pkg}] ❌ 下载失败: ${err.message}`);
               return false;
-            } finally {
-              await browser.close();
             }
           }
 
@@ -199,7 +107,7 @@ jobs:
           });
           EOF
 
-          node download.js "$PACKAGES_STR" "$ARCH" "$OUT_DIR"
+          node download.js "${{ inputs.package_name }}" "$ARCH" "$OUT_DIR"
           echo "下载完成，文件清单："
           ls -lh "$OUT_DIR"
 
@@ -207,5 +115,5 @@ jobs:
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          ARTIFACT_DIRECTORY_PATH: "./apks-apkcombo-${{ env.BUILD_DATE }}"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkcombo"
+          ARTIFACT_DIRECTORY_PATH: "./apks-apkmirror-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkmirror"
