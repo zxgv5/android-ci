@@ -38,6 +38,29 @@ jobs:
       - name: Clone apkcombo-downloader
         run: git clone https://github.com/nirewen/apkcombo-downloader.git
 
+      - name: Patch to bypass version filtering
+        run: |
+          cd apkcombo-downloader
+
+          cat > patch.js << 'PATCH'
+          const fs = require('fs');
+          const path = require('path');
+
+          const indexPath = path.join('src', 'lib', 'index.ts');
+          let indexContent = fs.readFileSync(indexPath, 'utf8');
+
+          // 替换版本选择逻辑，强制使用第一个版本
+          indexContent = indexContent.replace(
+            /const selectedVersion = match\(o\.version \?\? "stable"\)[\s\S]*?\.otherwise\(\(\) => versions\.find\(isStableVersion\)\);/,
+            `const selectedVersion = versions[0]; // Patched: always use first version`
+          );
+
+          fs.writeFileSync(indexPath, indexContent);
+          console.log('✅ Patched index.ts to use first version');
+          PATCH
+
+          bun patch.js
+
       - name: Install dependencies
         run: |
           cd apkcombo-downloader
@@ -55,7 +78,6 @@ jobs:
 
           for pkg in "${PACKAGES[@]}"; do
             echo "📦 下载: $pkg → arch=$ARCH"
-            # 直接使用完整包名作为 org/repo 参数（apkcombo 的 API 兼容此格式）
             bun run src/cli.ts download "$pkg" "" \
               --arch "$ARCH" \
               --outdir "../$OUT_DIR" \
