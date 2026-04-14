@@ -40,12 +40,14 @@ jobs:
       # 仓库地址: https://github.com/nirewen/apkcombo-downloader
       # 该项目 fork 自 https://github.com/tanishqmanuja/apkmirror-downloader
       # 其 CLI 功能依赖于上游项目的核心模块
-      # 注意：此包未发布到 npm，需直接从 GitHub 安装
+      # 注意：此包未发布到 npm，故采用本地安装并使用其 CLI 命令
       # ======================================================================
-      - name: Install apkcombo-downloader from GitHub
-        run: npm install -g github:nirewen/apkcombo-downloader
+      - name: Install apkcombo-downloader locally
+        run: |
+          npm init -y
+          npm install github:nirewen/apkcombo-downloader
 
-      - name: Create directory and download apks
+      - name: Download APKs using apkcombo-downloader CLI
         run: |
           set -euo pipefail
           OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
@@ -53,63 +55,23 @@ jobs:
           IFS=';' read -ra PACKAGES <<< "${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
 
-          # 创建 Node.js 下载脚本
-          # 使用 apkcombo-downloader (fork 自 apkmirror-downloader)
-          cat > download.js << 'EOF'
-          const { APKComboDownloader } = require('apkcombo-downloader');
-          const fs = require('fs');
-          const path = require('path');
+          for pkg in "${PACKAGES[@]}"; do
+            # 转换为 apkcombo-downloader 所需的 org/repo 格式
+            # 规则：最后一段为 repo，之前部分以 '-' 连接作为 org
+            # 例: dev.vodik7.atvtools -> org="dev-vodik7", repo="atvtools"
+            org=$(echo "$pkg" | awk -F. '{OFS="-"; $NF=""; sub(/-$/,""); print}')
+            repo=$(echo "$pkg" | awk -F. '{print $NF}')
+            echo "正在下载: $pkg (org=$org, repo=$repo, arch=$ARCH)"
+            # 使用 npx 调用本地安装的 CLI 工具
+            npx apkcombo-downloader \
+              --org "$org" \
+              --repo "$repo" \
+              --arch "$ARCH" \
+              --out "$OUT_DIR" \
+              || echo "::warning::下载失败: $pkg"
+          done
 
-          async function downloadPackage(pkg, arch, outDir) {
-            // 包名转换为 APKCombo 所需的 org 和 repo 格式
-            // 规则与 apkmirror-downloader 一致：
-            // 最后一段作为 repo，前面部分将点替换为连字符作为 org
-            // 例: dev.vodik7.atvtools -> org="dev-vodik7", repo="atvtools"
-            const parts = pkg.split('.');
-            const repo = parts.pop();
-            const org = parts.join('-');
-            console.log(`[${pkg}] 推导 org=${org}, repo=${repo}, arch=${arch}`);
-
-            const downloader = new APKComboDownloader({ outDir });
-            try {
-              await downloader.download({ org, repo }, { arch });
-              console.log(`[${pkg}] ✅ 下载成功`);
-              return true;
-            } catch (err) {
-              console.error(`[${pkg}] ❌ 下载失败: ${err.message}`);
-              return false;
-            }
-          }
-
-          async function main() {
-            const packagesArg = process.argv[2];
-            const arch = process.argv[3];
-            const outDir = process.argv[4];
-            if (!packagesArg || !arch || !outDir) {
-              console.error('用法: node download.js "pkg1;pkg2" arch outDir');
-              process.exit(1);
-            }
-            const packages = packagesArg.split(';').map(p => p.trim()).filter(p => p);
-            let allSuccess = true;
-            for (const pkg of packages) {
-              const success = await downloadPackage(pkg, arch, outDir);
-              if (!success) allSuccess = false;
-            }
-            if (!allSuccess) {
-              console.error('部分应用下载失败，请检查日志');
-              process.exit(1);
-            }
-          }
-
-          main().catch(err => {
-            console.error(err);
-            process.exit(1);
-          });
-          EOF
-
-          node download.js "${{ inputs.package_name }}" "$ARCH" "$OUT_DIR"
-
-          echo "下载完成，文件清单："
+          echo "下载完成，输出目录内容："
           ls -lh "$OUT_DIR"
 
       - name: Encrypt apks and create release
