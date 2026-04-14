@@ -36,15 +36,14 @@ jobs:
           node-version: '20'
 
       # ======================================================================
-      # 使用 apkmirror-downloader 下载 APK（兼容 apkcombo-downloader）
+      # 使用 apkmirror-downloader 下载 APK
       # 说明：apkcombo-downloader (https://github.com/nirewen/apkcombo-downloader)
-      # fork 自 apkmirror-downloader，并修改下载源为 APKCombo。
-      # 由于前者未发布到 npm 且模块入口不完善，此处直接使用上游已发布的
-      # apkmirror-downloader 包，其 API 与 apkcombo-downloader 完全一致。
-      # 如需切换到 APKCombo 源，可考虑后续修改下载器的请求基地址。
+      # fork 自 apkmirror-downloader，API 完全兼容。
+      # 由于 apkcombo-downloader 未发布到 npm 且模块入口不完善，
+      # 此处直接使用上游已发布的 apkmirror-downloader 包。
       # ======================================================================
-      - name: Install apkmirror-downloader
-        run: npm install -g apkmirror-downloader
+      - name: Install apkmirror-downloader locally
+        run: npm install apkmirror-downloader   # 去掉 -g，本地安装
 
       - name: Create directory and download apks
         run: |
