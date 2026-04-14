@@ -35,35 +35,73 @@ jobs:
         with:
           bun-version: 1.1.21
 
-      - name: Clone apkmirror-downloader and patch fetch headers
+      - name: Clone apkmirror-downloader
+        run: git clone https://github.com/tanishqmanuja/apkmirror-downloader.git
+
+      - name: Patch fetch with full browser headers (Node.js script)
         run: |
-          git clone https://github.com/tanishqmanuja/apkmirror-downloader.git
           cd apkmirror-downloader
 
-          HEADERS="headers: { \
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', \
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8', \
-            'Accept-Language': 'en-US,en;q=0.9', \
-            'Cookie': 'CONSENT=YES+' \
-          }"
+          cat > patch.js << 'PATCH'
+          const fs = require('fs');
+          const path = require('path');
 
-          # 补丁 versions.ts 中的 fetch
-          sed -i "/export function getVersions/,/^}/ s|fetch(repoPageUrl)|fetch(repoPageUrl, { $HEADERS })|" src/lib/scrapers/versions.ts
+          // 完整的浏览器请求选项（压缩为单行以便替换）
+          const fetchOptions = `{ 
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+              'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+              'Sec-Ch-Ua-Mobile': '?0',
+              'Sec-Ch-Ua-Platform': '"Windows"',
+              'Sec-Fetch-Dest': 'document',
+              'Sec-Fetch-Mode': 'navigate',
+              'Sec-Fetch-Site': 'none',
+              'Sec-Fetch-User': '?1',
+              'Upgrade-Insecure-Requests': '1',
+              'Cookie': 'CONSENT=YES+; _ga=GA1.2.1234567890.1234567890'
+            },
+            credentials: 'include',
+            referrerPolicy: 'strict-origin-when-cross-origin',
+            mode: 'cors'
+          }`.replace(/\n\s*/g, ' ');
 
-          # 补丁 downloads.ts 中的两处 fetch
-          sed -i "/export function getFinalDownloadUrl/,/^}/ {
-            s|fetch(downloadPageUrl)|fetch(downloadPageUrl, { $HEADERS })|g
-            s|fetch(url)|fetch(url, { $HEADERS })|g
-          }" src/lib/scrapers/downloads.ts
+          // 修补 versions.ts 中的 fetch(repoPageUrl)
+          const versionsPath = path.join('src', 'lib', 'scrapers', 'versions.ts');
+          let versionsContent = fs.readFileSync(versionsPath, 'utf8');
+          versionsContent = versionsContent.replace(
+            /fetch\(repoPageUrl\)/g,
+            `fetch(repoPageUrl, ${fetchOptions})`
+          );
+          fs.writeFileSync(versionsPath, versionsContent);
+          console.log('✅ Patched versions.ts');
 
-          echo "=== 补丁应用完成 ==="
+          // 修补 downloads.ts 中的两处 fetch
+          const downloadsPath = path.join('src', 'lib', 'scrapers', 'downloads.ts');
+          let downloadsContent = fs.readFileSync(downloadsPath, 'utf8');
+          downloadsContent = downloadsContent.replace(
+            /fetch\(downloadPageUrl\)/g,
+            `fetch(downloadPageUrl, ${fetchOptions})`
+          );
+          downloadsContent = downloadsContent.replace(
+            /fetch\(url\)/g,
+            `fetch(url, ${fetchOptions})`
+          );
+          fs.writeFileSync(downloadsPath, downloadsContent);
+          console.log('✅ Patched downloads.ts');
+          PATCH
+
+          node patch.js
 
       - name: Install dependencies (skip build scripts)
         run: |
           cd apkmirror-downloader
           bun install --ignore-scripts
 
-      - name: Download APKs directly from TypeScript source
+      - name: Download APKs using patched CLI
         run: |
           set -euo pipefail
           OUT_DIR="./apks-apkmirror-${{ env.BUILD_DATE }}"
