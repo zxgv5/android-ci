@@ -35,36 +35,130 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Clone apkcombo-downloader and install
-        run: |
-          git clone https://github.com/nirewen/apkcombo-downloader.git
-          cd apkcombo-downloader
-          npm install
-          npm link   # 将 CLI 命令链接到全局
+      - name: Install dependencies
+        run: npm install puppeteer axios
 
-      - name: Download APKs using CLI
+      - name: Download APKs via Puppeteer
         run: |
           set -euo pipefail
           OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
           mkdir -p "$OUT_DIR"
-          IFS=';' read -ra PACKAGES <<< "${{ inputs.package_name }}"
+          PACKAGES_STR="${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
 
-          for pkg in "${PACKAGES[@]}"; do
-            # 包名转换为 org/repo
-            org=$(echo "$pkg" | awk -F. '{OFS="-"; $NF=""; sub(/-$/,""); print}')
-            repo=$(echo "$pkg" | awk -F. '{print $NF}')
-            echo "下载: $pkg -> org=$org repo=$repo arch=$ARCH"
-            # 使用 CLI 命令（它内部已包含 axios 配置）
-            apkcombo-downloader download \
-              --org "$org" \
-              --repo "$repo" \
-              --arch "$ARCH" \
-              --out "$OUT_DIR" \
-              || echo "::warning::$pkg 下载失败，继续下一个"
-          done
+          cat > download.js << 'EOF'
+          const puppeteer = require('puppeteer');
+          const axios = require('axios');
+          const fs = require('fs');
+          const path = require('path');
+          const { promisify } = require('util');
+          const stream = require('stream');
+          const finished = promisify(stream.finished);
 
-          echo "下载完成，输出目录内容："
+          const BASE_URL = 'https://apkcombo.com';
+
+          async function downloadFile(url, destPath) {
+            const writer = fs.createWriteStream(destPath);
+            const response = await axios({
+              method: 'get',
+              url: url,
+              responseType: 'stream',
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': BASE_URL
+              }
+            });
+            response.data.pipe(writer);
+            await finished(writer);
+          }
+
+          async function downloadPackage(pkg, arch, outDir) {
+            console.log(`[${pkg}] 启动浏览器...`);
+            const browser = await puppeteer.launch({
+              headless: 'new',
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            await page.setExtraHTTPHeaders({
+              'Accept-Language': 'en-US,en;q=0.9'
+            });
+
+            try {
+              const appUrl = `${BASE_URL}/${pkg}`;
+              console.log(`[${pkg}] 访问: ${appUrl}`);
+              await page.goto(appUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+              // 点击下载按钮（通常包含 "Download APK" 文本）
+              const downloadButton = await page.waitForSelector('a[href*="/download/"], button', { timeout: 10000 });
+              if (!downloadButton) {
+                throw new Error('找不到下载按钮');
+              }
+              await downloadButton.click();
+
+              // 等待下载页面加载
+              await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+
+              // 提取匹配架构的 APK 链接
+              const apkLink = await page.evaluate((targetArch) => {
+                const links = Array.from(document.querySelectorAll('a[href$=".apk"]'));
+                for (const link of links) {
+                  const text = link.textContent.toLowerCase();
+                  if (text.includes(targetArch.toLowerCase())) {
+                    return link.href;
+                  }
+                }
+                // 回退到第一个 .apk 链接
+                return links.length > 0 ? links[0].href : null;
+              }, arch);
+
+              if (!apkLink) {
+                throw new Error('未找到 APK 下载链接');
+              }
+
+              console.log(`[${pkg}] APK URL: ${apkLink}`);
+
+              const fileName = `${pkg}_${arch}_${Date.now()}.apk`;
+              const filePath = path.join(outDir, fileName);
+              await downloadFile(apkLink, filePath);
+              console.log(`[${pkg}] ✅ 下载成功: ${fileName}`);
+              return true;
+            } catch (err) {
+              console.error(`[${pkg}] ❌ 失败: ${err.message}`);
+              return false;
+            } finally {
+              await browser.close();
+            }
+          }
+
+          async function main() {
+            const packagesArg = process.argv[2];
+            const arch = process.argv[3];
+            const outDir = process.argv[4];
+            if (!packagesArg || !arch || !outDir) {
+              console.error('用法: node download.js "pkg1;pkg2" arch outDir');
+              process.exit(1);
+            }
+            const packages = packagesArg.split(';').map(p => p.trim()).filter(p => p);
+            let allSuccess = true;
+            for (const pkg of packages) {
+              const success = await downloadPackage(pkg, arch, outDir);
+              if (!success) allSuccess = false;
+            }
+            if (!allSuccess) {
+              console.error('部分应用下载失败，请检查日志');
+              process.exit(1);
+            }
+          }
+
+          main().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          EOF
+
+          node download.js "$PACKAGES_STR" "$ARCH" "$OUT_DIR"
+          echo "下载完成，文件清单："
           ls -lh "$OUT_DIR"
 
       - name: Encrypt apks and create release
