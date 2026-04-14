@@ -38,19 +38,37 @@ jobs:
       - name: Clone apkcombo-downloader
         run: git clone https://github.com/nirewen/apkcombo-downloader.git
 
-      - name: Patch index.ts to force using first version
+      - name: Patch index.ts to use correct APKCombo URL and skip version filtering
         run: |
           cd apkcombo-downloader
-          echo "=== 原始版本选择代码片段 ==="
-          sed -n '70,85p' src/lib/index.ts
-          
-          # 使用 sed 替换整个版本选择块
-          # 查找从 "const selectedVersion = match" 开始到 "otherwise(() => versions.find(isStableVersion));" 结束的段落
-          # 并将其替换为 "const selectedVersion = versions[0];"
-          sed -i '/const selectedVersion = match/,/otherwise(() => versions.find(isStableVersion));/c\const selectedVersion = versions[0]; // Patched: always use first version' src/lib/index.ts
-          
-          echo "=== 修改后代码片段 ==="
-          sed -n '70,85p' src/lib/index.ts
+
+          cat > patch.js << 'PATCH'
+          const fs = require('fs');
+          const path = require('path');
+
+          const indexPath = path.join('src', 'lib', 'index.ts');
+          let content = fs.readFileSync(indexPath, 'utf8');
+
+          // 替换 makeRepoUrl 调用，直接构造 APKCombo 的包名 URL
+          content = content.replace(
+            /const repoUrl = makeRepoUrl\(app\);/,
+            `const repoUrl = \`https://apkcombo.com/\${app.org}\`; // Patched: use direct APKCombo URL`
+          );
+
+          // 强制使用第一个版本，忽略 stable/beta/alpha 过滤
+          content = content.replace(
+            /const selectedVersion = match\(o\.version\)[\s\S]*?\.otherwise\(\(\) => versions\.find\(isStableVersion\)\);/,
+            `const selectedVersion = versions[0]; // Patched: always use first version`
+          );
+
+          fs.writeFileSync(indexPath, content);
+          console.log('✅ Patched index.ts');
+          PATCH
+
+          bun patch.js
+
+          echo "=== 补丁后的关键代码 ==="
+          sed -n '65,80p' src/lib/index.ts
 
       - name: Install dependencies
         run: |
@@ -69,6 +87,7 @@ jobs:
 
           for pkg in "${PACKAGES[@]}"; do
             echo "📦 下载: $pkg → arch=$ARCH"
+            # org 参数传入完整包名，repo 留空
             bun run src/cli.ts download "$pkg" "" \
               --arch "$ARCH" \
               --outdir "../$OUT_DIR" \
