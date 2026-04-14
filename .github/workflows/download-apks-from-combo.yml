@@ -35,39 +35,46 @@ jobs:
         with:
           node-version: '20'
 
-      # ======================================================================
-      # 使用 apkcombo-downloader 源码进行下载
-      # 仓库地址: https://github.com/nirewen/apkcombo-downloader
-      # 入口文件为 src/index.js
-      # ======================================================================
+      # ----------------------------------------------------------------------
+      # 克隆 apkcombo-downloader 源码并安装依赖
+      # ----------------------------------------------------------------------
       - name: Clone apkcombo-downloader source
         run: |
           git clone https://github.com/nirewen/apkcombo-downloader.git
           cd apkcombo-downloader
-          npm install   # 安装依赖
+          npm install
 
-      - name: Verify module structure (optional debug)
+      # ----------------------------------------------------------------------
+      # 调试：打印目录结构及 package.json 关键信息
+      # ----------------------------------------------------------------------
+      - name: Inspect apkcombo-downloader structure
         run: |
-          echo "=== apkcombo-downloader 目录结构 ==="
+          echo "=== 工作目录 ==="
+          pwd
+          echo "=== apkcombo-downloader 目录列表 ==="
           ls -la apkcombo-downloader/
-          echo "=== package.json 主要内容 ==="
-          cat apkcombo-downloader/package.json | grep -E '"main"|"exports"|"bin"' || echo "未找到 main/exports/bin 字段"
-          echo "=== 检查 src/index.js 是否存在 ==="
-          ls -l apkcombo-downloader/src/index.js || echo "src/index.js 不存在"
+          echo "=== src 目录内容 ==="
+          ls -la apkcombo-downloader/src/ || echo "src 目录不存在"
+          echo "=== package.json 中的入口字段 ==="
+          cat apkcombo-downloader/package.json | grep -E '"main"|"exports"|"bin"' || echo "未定义 main/exports/bin"
 
-      - name: Download APKs using apkcombo-downloader
+      # ----------------------------------------------------------------------
+      # 创建下载脚本（根据实际入口动态 require）
+      # ----------------------------------------------------------------------
+      - name: Create download script
         run: |
-          set -euo pipefail
-          OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
-          mkdir -p "$OUT_DIR"
-          ARCH="${{ inputs.architecture }}"
-          PACKAGES_STR="${{ inputs.package_name }}"
-
           cat > download.js << 'EOF'
+          const fs = require('fs');
           const path = require('path');
 
-          // 直接 require src/index.js 入口文件
-          const { APKComboDownloader } = require('./apkcombo-downloader/src/index.js');
+          // 读取 package.json 确定入口文件
+          const pkgJsonPath = path.join(__dirname, 'apkcombo-downloader', 'package.json');
+          const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+          const mainFile = pkgJson.main || 'index.js';
+          const entryPath = path.join(__dirname, 'apkcombo-downloader', mainFile);
+          console.log(`使用入口文件: ${entryPath}`);
+
+          const { APKComboDownloader } = require(entryPath);
 
           async function downloadPackage(pkg, arch, outDir) {
             const parts = pkg.split('.');
@@ -112,8 +119,12 @@ jobs:
           });
           EOF
 
-          node download.js "$PACKAGES_STR" "$ARCH" "$OUT_DIR"
-
+      - name: Download APKs using apkcombo-downloader
+        run: |
+          set -euo pipefail
+          OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
+          mkdir -p "$OUT_DIR"
+          node download.js "${{ inputs.package_name }}" "${{ inputs.architecture }}" "$OUT_DIR"
           echo "下载完成，文件清单："
           ls -lh "$OUT_DIR"
 
