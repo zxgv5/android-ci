@@ -38,7 +38,7 @@ jobs:
       - name: Clone apkmirror-downloader
         run: git clone https://github.com/tanishqmanuja/apkmirror-downloader.git
 
-      - name: Patch fetch with full browser headers (Node.js script)
+      - name: Patch fetch with full browser headers
         run: |
           cd apkmirror-downloader
 
@@ -46,7 +46,6 @@ jobs:
           const fs = require('fs');
           const path = require('path');
 
-          // 完整的浏览器请求选项（压缩为单行以便替换）
           const fetchOptions = `{ 
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -69,7 +68,6 @@ jobs:
             mode: 'cors'
           }`.replace(/\n\s*/g, ' ');
 
-          // 修补 versions.ts 中的 fetch(repoPageUrl)
           const versionsPath = path.join('src', 'lib', 'scrapers', 'versions.ts');
           let versionsContent = fs.readFileSync(versionsPath, 'utf8');
           versionsContent = versionsContent.replace(
@@ -79,7 +77,6 @@ jobs:
           fs.writeFileSync(versionsPath, versionsContent);
           console.log('✅ Patched versions.ts');
 
-          // 修补 downloads.ts 中的两处 fetch
           const downloadsPath = path.join('src', 'lib', 'scrapers', 'downloads.ts');
           let downloadsContent = fs.readFileSync(downloadsPath, 'utf8');
           downloadsContent = downloadsContent.replace(
@@ -94,14 +91,14 @@ jobs:
           console.log('✅ Patched downloads.ts');
           PATCH
 
-          node patch.js
+          bun patch.js
 
-      - name: Install dependencies (skip build scripts)
+      - name: Install dependencies
         run: |
           cd apkmirror-downloader
           bun install --ignore-scripts
 
-      - name: Download APKs using patched CLI
+      - name: Download APKs
         run: |
           set -euo pipefail
           OUT_DIR="./apks-apkmirror-${{ env.BUILD_DATE }}"
