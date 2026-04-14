@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: "包名"
+        description: "包名（多个用分号分隔）"
         required: true
         default: "com.cxinventor.file.explorer;dev.vodik7.atvtools"
         type: string
       architecture:
-        description: "架构"
+        description: "架构（arm64-v8a, armeabi-v7a, universal 等）"
         required: false
         default: "arm64-v8a"
         type: string
@@ -40,9 +40,10 @@ jobs:
       # 仓库地址: https://github.com/nirewen/apkcombo-downloader
       # 该项目 fork 自 https://github.com/tanishqmanuja/apkmirror-downloader
       # 其 CLI 功能依赖于上游项目的核心模块
+      # 注意：此包未发布到 npm，需直接从 GitHub 安装
       # ======================================================================
-      - name: Install apkcombo-downloader
-        run: npm install -g apkcombo-downloader
+      - name: Install apkcombo-downloader from GitHub
+        run: npm install -g github:nirewen/apkcombo-downloader
 
       - name: Create directory and download apks
         run: |
