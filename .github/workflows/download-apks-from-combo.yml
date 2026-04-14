@@ -36,9 +36,10 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install puppeteer axios
+        run: |
+          npm install puppeteer puppeteer-extra puppeteer-extra-plugin-stealth axios
 
-      - name: Download APKs via Puppeteer
+      - name: Download APKs via Puppeteer (Stealth)
         run: |
           set -euo pipefail
           OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
@@ -47,13 +48,16 @@ jobs:
           ARCH="${{ inputs.architecture }}"
 
           cat > download.js << 'EOF'
-          const puppeteer = require('puppeteer');
+          const puppeteer = require('puppeteer-extra');
+          const StealthPlugin = require('puppeteer-extra-plugin-stealth');
           const axios = require('axios');
           const fs = require('fs');
           const path = require('path');
           const { promisify } = require('util');
           const stream = require('stream');
           const finished = promisify(stream.finished);
+
+          puppeteer.use(StealthPlugin());
 
           const BASE_URL = 'https://apkcombo.com';
 
@@ -76,43 +80,93 @@ jobs:
             console.log(`[${pkg}] 启动浏览器...`);
             const browser = await puppeteer.launch({
               headless: 'new',
-              args: ['--no-sandbox', '--disable-setuid-sandbox']
+              args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-blink-features=AutomationControlled'
+              ]
             });
             const page = await browser.newPage();
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
             await page.setExtraHTTPHeaders({
               'Accept-Language': 'en-US,en;q=0.9'
             });
+            await page.setViewport({ width: 1280, height: 800 });
 
             try {
               const appUrl = `${BASE_URL}/${pkg}`;
               console.log(`[${pkg}] 访问: ${appUrl}`);
               await page.goto(appUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-              // 点击下载按钮（通常包含 "Download APK" 文本）
-              const downloadButton = await page.waitForSelector('a[href*="/download/"], button', { timeout: 10000 });
-              if (!downloadButton) {
-                throw new Error('找不到下载按钮');
+              // 等待页面稳定，并尝试多种选择器点击下载按钮
+              await page.waitForTimeout(2000);
+
+              // 优先通过文本内容查找包含 "Download APK" 的元素
+              const downloadButton = await page.evaluateHandle(() => {
+                const elements = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
+                for (const el of elements) {
+                  const text = (el.textContent || '').trim().toLowerCase();
+                  if (text.includes('download apk') || text.includes('download')) {
+                    // 排除一些不相关的按钮，例如 "Download APK Bundle"
+                    if (!text.includes('bundle') && !text.includes('xapk')) {
+                      return el;
+                    }
+                  }
+                }
+                return null;
+              });
+
+              if (!downloadButton || !(await downloadButton.asElement())) {
+                throw new Error('找不到下载按钮（文本匹配失败）');
               }
-              await downloadButton.click();
 
-              // 等待下载页面加载
-              await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+              const btn = downloadButton.asElement();
+              await btn.click();
+              console.log(`[${pkg}] 已点击下载按钮`);
 
-              // 提取匹配架构的 APK 链接
-              const apkLink = await page.evaluate((targetArch) => {
+              // 等待下载页面加载（可能打开新标签页或当前页跳转）
+              await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {
+                console.log(`[${pkg}] 未发生导航，可能已在新标签页打开，尝试获取新页面...`);
+              });
+
+              // 如果点击后打开了新标签页，切换到新页面
+              const pages = await browser.pages();
+              const newPage = pages.length > 1 ? pages[pages.length - 1] : page;
+              if (newPage !== page) {
+                await newPage.bringToFront();
+                await newPage.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+              }
+
+              // 提取 APK 下载链接
+              const apkLink = await newPage.evaluate((targetArch) => {
                 const links = Array.from(document.querySelectorAll('a[href$=".apk"]'));
                 for (const link of links) {
-                  const text = link.textContent.toLowerCase();
+                  const text = (link.textContent || '').toLowerCase();
                   if (text.includes(targetArch.toLowerCase())) {
                     return link.href;
                   }
                 }
-                // 回退到第一个 .apk 链接
+                // 回退：查找包含架构名的任何元素附近的链接
+                const bodyText = document.body.innerText;
+                if (bodyText.includes(targetArch)) {
+                  // 尝试从 onclick 或 data-url 属性中提取
+                  const allElems = document.querySelectorAll('[onclick], [data-url]');
+                  for (const elem of allElems) {
+                    const onclick = elem.getAttribute('onclick') || '';
+                    const dataUrl = elem.getAttribute('data-url') || '';
+                    const match = (onclick + dataUrl).match(/(https?:\/\/[^\s"']+\.apk[^\s"']*)/i);
+                    if (match) return match[1];
+                  }
+                }
+                // 最后尝试任意 .apk 链接
                 return links.length > 0 ? links[0].href : null;
               }, arch);
 
               if (!apkLink) {
+                // 保存截图和 HTML 以便调试
+                const screenshotPath = path.join(outDir, `${pkg}_debug.png`);
+                await newPage.screenshot({ path: screenshotPath, fullPage: true });
+                console.log(`[${pkg}] 调试截图已保存: ${screenshotPath}`);
                 throw new Error('未找到 APK 下载链接');
               }
 
