@@ -40,11 +40,6 @@ jobs:
           git clone https://github.com/tanishqmanuja/apkmirror-downloader.git
           cd apkmirror-downloader
 
-          # 备份原始文件
-          cp src/lib/scrapers/versions.ts src/lib/scrapers/versions.ts.bak
-          cp src/lib/scrapers/downloads.ts src/lib/scrapers/downloads.ts.bak
-
-          # 定义通用请求头（模拟真实 Chrome）
           HEADERS="headers: { \
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', \
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8', \
@@ -52,28 +47,23 @@ jobs:
             'Cookie': 'CONSENT=YES+' \
           }"
 
-          # 补丁1：versions.ts 中的 getVersions 函数
-          sed -i "/export function getVersions/,/^}/ {
-            s|fetch(repoPageUrl)|fetch(repoPageUrl, { $HEADERS })|
-          }" src/lib/scrapers/versions.ts
+          # 补丁 versions.ts 中的 fetch
+          sed -i "/export function getVersions/,/^}/ s|fetch(repoPageUrl)|fetch(repoPageUrl, { $HEADERS })|" src/lib/scrapers/versions.ts
 
-          # 补丁2：downloads.ts 中的 getFinalDownloadUrl 函数（有两处 fetch）
+          # 补丁 downloads.ts 中的两处 fetch
           sed -i "/export function getFinalDownloadUrl/,/^}/ {
             s|fetch(downloadPageUrl)|fetch(downloadPageUrl, { $HEADERS })|g
             s|fetch(url)|fetch(url, { $HEADERS })|g
           }" src/lib/scrapers/downloads.ts
 
-          echo "=== 已应用补丁，修改内容如下 ==="
-          diff -u src/lib/scrapers/versions.ts.bak src/lib/scrapers/versions.ts || true
-          diff -u src/lib/scrapers/downloads.ts.bak src/lib/scrapers/downloads.ts || true
+          echo "=== 补丁应用完成 ==="
 
-      - name: Install dependencies and build
+      - name: Install dependencies (skip build scripts)
         run: |
           cd apkmirror-downloader
-          bun install
-          bun run build
+          bun install --ignore-scripts
 
-      - name: Download APKs using patched apkmd CLI
+      - name: Download APKs directly from TypeScript source
         run: |
           set -euo pipefail
           OUT_DIR="./apks-apkmirror-${{ env.BUILD_DATE }}"
@@ -84,19 +74,18 @@ jobs:
           cd apkmirror-downloader
 
           for pkg in "${PACKAGES[@]}"; do
-            # 包名转换为 org/repo（apkmirror 规则）
             org=$(echo "$pkg" | awk -F. '{OFS="-"; $NF=""; sub(/-$/,""); print}')
             repo=$(echo "$pkg" | awk -F. '{print $NF}')
-            echo "下载: $pkg -> org=$org repo=$repo arch=$ARCH"
-            bun dist/cli.js download "$org" "$repo" \
+            echo "📦 下载: $pkg → org=$org repo=$repo arch=$ARCH"
+            bun run src/cli.ts download "$org" "$repo" \
               --arch "$ARCH" \
               --outdir "../$OUT_DIR" \
               --overwrite \
-              || echo "::warning::$pkg 下载失败，继续下一个"
+              || echo "::warning::❌ $pkg 下载失败，继续下一个"
           done
 
           cd ..
-          echo "下载完成，文件清单："
+          echo "✅ 下载完成，文件清单："
           ls -lh "$OUT_DIR"
 
       - name: Encrypt apks and create release
