@@ -35,125 +35,28 @@ jobs:
         with:
           bun-version: 1.1.21
 
-      - name: Setup Node.js (for Puppeteer)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Puppeteer
-        run: npm install puppeteer
-
-      - name: Get cf_clearance cookie via Puppeteer
-        run: |
-          cat > get-cookie.js << 'EOF'
-          const puppeteer = require('puppeteer');
-
-          (async () => {
-            const browser = await puppeteer.launch({
-              headless: 'new',
-              args: ['--no-sandbox', '--disable-setuid-sandbox']
-            });
-            const page = await browser.newPage();
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-            console.log('访问 APKMirror 主页获取 Cookie...');
-            await page.goto('https://www.apkmirror.com/', { waitUntil: 'networkidle2', timeout: 60000 });
-
-            const cookies = await page.cookies();
-            const cfClearance = cookies.find(c => c.name === 'cf_clearance');
-            if (!cfClearance) {
-              throw new Error('未找到 cf_clearance cookie，Cloudflare 验证失败');
-            }
-            console.log(`获取到 cf_clearance=${cfClearance.value}`);
-
-            const fs = require('fs');
-            fs.writeFileSync('cookie-env.txt', `CF_CLEARANCE=${cfClearance.value}`);
-            await browser.close();
-          })();
-          EOF
-          node get-cookie.js
-          cat cookie-env.txt >> $GITHUB_ENV
-
-      - name: Clone apkmirror-downloader
-        run: git clone https://github.com/tanishqmanuja/apkmirror-downloader.git
-
-      - name: Patch fetch with browser headers + cf_clearance
-        run: |
-          cd apkmirror-downloader
-
-          cat > patch.js << 'PATCH'
-          const fs = require('fs');
-          const path = require('path');
-
-          const cfClearance = process.env.CF_CLEARANCE || '';
-
-          const fetchOptions = `{ 
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-              'Accept-Language': 'en-US,en;q=0.9',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache',
-              'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-              'Sec-Ch-Ua-Mobile': '?0',
-              'Sec-Ch-Ua-Platform': '"Windows"',
-              'Sec-Fetch-Dest': 'document',
-              'Sec-Fetch-Mode': 'navigate',
-              'Sec-Fetch-Site': 'none',
-              'Sec-Fetch-User': '?1',
-              'Upgrade-Insecure-Requests': '1',
-              'Cookie': 'cf_clearance=${cfClearance}; CONSENT=YES+'
-            },
-            credentials: 'include',
-            referrerPolicy: 'strict-origin-when-cross-origin',
-            mode: 'cors'
-          }`.replace(/\n\s*/g, ' ');
-
-          const versionsPath = path.join('src', 'lib', 'scrapers', 'versions.ts');
-          let versionsContent = fs.readFileSync(versionsPath, 'utf8');
-          versionsContent = versionsContent.replace(
-            /fetch\(repoPageUrl\)/g,
-            `fetch(repoPageUrl, ${fetchOptions})`
-          );
-          fs.writeFileSync(versionsPath, versionsContent);
-          console.log('✅ Patched versions.ts with cf_clearance');
-
-          const downloadsPath = path.join('src', 'lib', 'scrapers', 'downloads.ts');
-          let downloadsContent = fs.readFileSync(downloadsPath, 'utf8');
-          downloadsContent = downloadsContent.replace(
-            /fetch\(downloadPageUrl\)/g,
-            `fetch(downloadPageUrl, ${fetchOptions})`
-          );
-          downloadsContent = downloadsContent.replace(
-            /fetch\(url\)/g,
-            `fetch(url, ${fetchOptions})`
-          );
-          fs.writeFileSync(downloadsPath, downloadsContent);
-          console.log('✅ Patched downloads.ts with cf_clearance');
-          PATCH
-
-          bun patch.js
+      - name: Clone apkcombo-downloader
+        run: git clone https://github.com/nirewen/apkcombo-downloader.git
 
       - name: Install dependencies
         run: |
-          cd apkmirror-downloader
+          cd apkcombo-downloader
           bun install --ignore-scripts
 
-      - name: Download APKs
+      - name: Download APKs via APKCombo
         run: |
           set -euo pipefail
-          OUT_DIR="./apks-apkmirror-${{ env.BUILD_DATE }}"
+          OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
           mkdir -p "$OUT_DIR"
           IFS=';' read -ra PACKAGES <<< "${{ inputs.package_name }}"
           ARCH="${{ inputs.architecture }}"
 
-          cd apkmirror-downloader
+          cd apkcombo-downloader
 
           for pkg in "${PACKAGES[@]}"; do
-            org=$(echo "$pkg" | awk -F. '{OFS="-"; $NF=""; sub(/-$/,""); print}')
-            repo=$(echo "$pkg" | awk -F. '{print $NF}')
-            echo "📦 下载: $pkg → org=$org repo=$repo arch=$ARCH"
-            bun run src/cli.ts download "$org" "$repo" \
+            echo "📦 下载: $pkg → arch=$ARCH"
+            # 直接使用完整包名作为 org/repo 参数（apkcombo 的 API 兼容此格式）
+            bun run src/cli.ts download "$pkg" "" \
               --arch "$ARCH" \
               --outdir "../$OUT_DIR" \
               --overwrite \
@@ -168,5 +71,5 @@ jobs:
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          ARTIFACT_DIRECTORY_PATH: "./apks-apkmirror-${{ env.BUILD_DATE }}"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkmirror"
+          ARTIFACT_DIRECTORY_PATH: "./apks-apkcombo-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkcombo"
