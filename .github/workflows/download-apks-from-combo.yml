@@ -38,44 +38,12 @@ jobs:
       - name: Clone apkcombo-downloader
         run: git clone https://github.com/nirewen/apkcombo-downloader.git
 
-      - name: Patch index.ts to use correct APKCombo URL and skip version filtering
-        run: |
-          cd apkcombo-downloader
-
-          cat > patch.js << 'PATCH'
-          const fs = require('fs');
-          const path = require('path');
-
-          const indexPath = path.join('src', 'lib', 'index.ts');
-          let content = fs.readFileSync(indexPath, 'utf8');
-
-          // 替换 makeRepoUrl 调用，直接构造 APKCombo 的包名 URL
-          content = content.replace(
-            /const repoUrl = makeRepoUrl\(app\);/,
-            `const repoUrl = \`https://apkcombo.com/\${app.org}\`; // Patched: use direct APKCombo URL`
-          );
-
-          // 强制使用第一个版本，忽略 stable/beta/alpha 过滤
-          content = content.replace(
-            /const selectedVersion = match\(o\.version\)[\s\S]*?\.otherwise\(\(\) => versions\.find\(isStableVersion\)\);/,
-            `const selectedVersion = versions[0]; // Patched: always use first version`
-          );
-
-          fs.writeFileSync(indexPath, content);
-          console.log('✅ Patched index.ts');
-          PATCH
-
-          bun patch.js
-
-          echo "=== 补丁后的关键代码 ==="
-          sed -n '65,80p' src/lib/index.ts
-
       - name: Install dependencies
         run: |
           cd apkcombo-downloader
           bun install --ignore-scripts
 
-      - name: Download APKs via APKCombo
+      - name: Download APKs using apkcombo-downloader CLI
         run: |
           set -euo pipefail
           OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
@@ -86,9 +54,11 @@ jobs:
           cd apkcombo-downloader
 
           for pkg in "${PACKAGES[@]}"; do
-            echo "📦 下载: $pkg → arch=$ARCH"
-            # org 参数传入完整包名，repo 留空
-            bun run src/cli.ts download "$pkg" "" \
+            # 包名转换为 org/repo（与 apkmirror 规则相同）
+            org=$(echo "$pkg" | awk -F. '{OFS="-"; $NF=""; sub(/-$/,""); print}')
+            repo=$(echo "$pkg" | awk -F. '{print $NF}')
+            echo "📦 下载: $pkg → org=$org repo=$repo arch=$ARCH"
+            bun run src/cli.ts download "$org" "$repo" \
               --arch "$ARCH" \
               --outdir "../$OUT_DIR" \
               --overwrite \
