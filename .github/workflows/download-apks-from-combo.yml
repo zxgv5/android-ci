@@ -61,6 +61,8 @@ jobs:
 
           const BASE_URL = 'https://apkcombo.com';
 
+          const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
           async function downloadFile(url, destPath) {
             const writer = fs.createWriteStream(destPath);
             const response = await axios({
@@ -98,19 +100,16 @@ jobs:
               console.log(`[${pkg}] 访问: ${appUrl}`);
               await page.goto(appUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-              // 等待页面稳定，并尝试多种选择器点击下载按钮
-              await page.waitForTimeout(2000);
+              // 等待页面加载
+              await sleep(2000);
 
-              // 优先通过文本内容查找包含 "Download APK" 的元素
+              // 查找下载按钮（通过文本）
               const downloadButton = await page.evaluateHandle(() => {
                 const elements = Array.from(document.querySelectorAll('a, button, div[role="button"]'));
                 for (const el of elements) {
                   const text = (el.textContent || '').trim().toLowerCase();
-                  if (text.includes('download apk') || text.includes('download')) {
-                    // 排除一些不相关的按钮，例如 "Download APK Bundle"
-                    if (!text.includes('bundle') && !text.includes('xapk')) {
-                      return el;
-                    }
+                  if (text.includes('download apk') && !text.includes('bundle') && !text.includes('xapk')) {
+                    return el;
                   }
                 }
                 return null;
@@ -124,21 +123,22 @@ jobs:
               await btn.click();
               console.log(`[${pkg}] 已点击下载按钮`);
 
-              // 等待下载页面加载（可能打开新标签页或当前页跳转）
+              // 等待导航
               await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {
-                console.log(`[${pkg}] 未发生导航，可能已在新标签页打开，尝试获取新页面...`);
+                console.log(`[${pkg}] 未发生导航，可能已在新标签页打开`);
               });
 
-              // 如果点击后打开了新标签页，切换到新页面
+              // 获取所有页面，切换到最新的一个
               const pages = await browser.pages();
-              const newPage = pages.length > 1 ? pages[pages.length - 1] : page;
-              if (newPage !== page) {
-                await newPage.bringToFront();
-                await newPage.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+              const targetPage = pages.length > 1 ? pages[pages.length - 1] : page;
+              if (targetPage !== page) {
+                await targetPage.bringToFront();
+                await targetPage.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
               }
 
-              // 提取 APK 下载链接
-              const apkLink = await newPage.evaluate((targetArch) => {
+              // 提取 APK 链接
+              const apkLink = await targetPage.evaluate((targetArch) => {
+                // 优先找 .apk 链接且文本包含架构
                 const links = Array.from(document.querySelectorAll('a[href$=".apk"]'));
                 for (const link of links) {
                   const text = (link.textContent || '').toLowerCase();
@@ -146,26 +146,14 @@ jobs:
                     return link.href;
                   }
                 }
-                // 回退：查找包含架构名的任何元素附近的链接
-                const bodyText = document.body.innerText;
-                if (bodyText.includes(targetArch)) {
-                  // 尝试从 onclick 或 data-url 属性中提取
-                  const allElems = document.querySelectorAll('[onclick], [data-url]');
-                  for (const elem of allElems) {
-                    const onclick = elem.getAttribute('onclick') || '';
-                    const dataUrl = elem.getAttribute('data-url') || '';
-                    const match = (onclick + dataUrl).match(/(https?:\/\/[^\s"']+\.apk[^\s"']*)/i);
-                    if (match) return match[1];
-                  }
-                }
-                // 最后尝试任意 .apk 链接
+                // 回退：任意 .apk 链接
                 return links.length > 0 ? links[0].href : null;
               }, arch);
 
               if (!apkLink) {
-                // 保存截图和 HTML 以便调试
+                // 保存调试截图
                 const screenshotPath = path.join(outDir, `${pkg}_debug.png`);
-                await newPage.screenshot({ path: screenshotPath, fullPage: true });
+                await targetPage.screenshot({ path: screenshotPath, fullPage: true });
                 console.log(`[${pkg}] 调试截图已保存: ${screenshotPath}`);
                 throw new Error('未找到 APK 下载链接');
               }
