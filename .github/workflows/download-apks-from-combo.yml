@@ -1,15 +1,15 @@
-name: download-apks-from-combo
+name: download-apks-from-mirror
 
 on:
   workflow_dispatch:
     inputs:
-      package_names:
-        description: "包名"
+      package_name:
+        description: "包名（多个用分号分隔）"
         required: true
-        default: "dev.vodik7.atvtools"
+        default: "com.cxinventor.file.explorer;org.freedownloadmanager.fdm;com.rhmsoft.edit;com.rhmsoft.code;mark.via.gp;com.flyersoft.moonreader;com.azure.authenticator;com.mxtech.videoplayer.ad"
         type: string
       architecture:
-        description: "架构"
+        description: "架构（arm64-v8a, armeabi-v7a, universal 等）"
         required: false
         default: "arm64-v8a"
         type: string
@@ -35,49 +35,68 @@ jobs:
         with:
           node-version: '20'
 
+      # ======================================================================
+      # 使用 apkcombo-downloader 实现 APK 下载
+      # 仓库地址: https://github.com/nirewen/apkcombo-downloader
+      # 该项目 fork 自 https://github.com/tanishqmanuja/apkmirror-downloader
+      # 其 CLI 功能依赖于上游项目的核心模块
+      # ======================================================================
       - name: Install apkcombo-downloader
-        run: |
-          npm install @nirewen/apkcombo-downloader
+        run: npm install -g apkcombo-downloader
 
       - name: Create directory and download apks
         run: |
           set -euo pipefail
-          OUT_DIR="./apks-combo-${{ env.BUILD_DATE }}"
+          OUT_DIR="./apks-apkcombo-${{ env.BUILD_DATE }}"
           mkdir -p "$OUT_DIR"
-          
-          # 将输入转为变量
-          PACKAGES_STR="${{ inputs.package_names }}"
-          DEFAULT_ARCH="${{ inputs.architecture }}"
+          IFS=';' read -ra PACKAGES <<< "${{ inputs.package_name }}"
+          ARCH="${{ inputs.architecture }}"
 
+          # 创建 Node.js 下载脚本
+          # 使用 apkcombo-downloader (fork 自 apkmirror-downloader)
           cat > download.js << 'EOF'
-          const { APKComboDownloader } = require('@nirewen/apkcombo-downloader');
+          const { APKComboDownloader } = require('apkcombo-downloader');
+          const fs = require('fs');
+          const path = require('path');
+
+          async function downloadPackage(pkg, arch, outDir) {
+            // 包名转换为 APKCombo 所需的 org 和 repo 格式
+            // 规则与 apkmirror-downloader 一致：
+            // 最后一段作为 repo，前面部分将点替换为连字符作为 org
+            // 例: dev.vodik7.atvtools -> org="dev-vodik7", repo="atvtools"
+            const parts = pkg.split('.');
+            const repo = parts.pop();
+            const org = parts.join('-');
+            console.log(`[${pkg}] 推导 org=${org}, repo=${repo}, arch=${arch}`);
+
+            const downloader = new APKComboDownloader({ outDir });
+            try {
+              await downloader.download({ org, repo }, { arch });
+              console.log(`[${pkg}] ✅ 下载成功`);
+              return true;
+            } catch (err) {
+              console.error(`[${pkg}] ❌ 下载失败: ${err.message}`);
+              return false;
+            }
+          }
 
           async function main() {
             const packagesArg = process.argv[2];
             const arch = process.argv[3];
             const outDir = process.argv[4];
-            
             if (!packagesArg || !arch || !outDir) {
-              console.error('用法: node download.js <包名列表(分号分隔)> <架构> <输出目录>');
+              console.error('用法: node download.js "pkg1;pkg2" arch outDir');
               process.exit(1);
             }
-
             const packages = packagesArg.split(';').map(p => p.trim()).filter(p => p);
-            const downloader = new APKComboDownloader({ outDir });
-
+            let allSuccess = true;
             for (const pkg of packages) {
-              // 推导 org（取包名最后一段）和 repo（完整包名）
-              const parts = pkg.split('.');
-              const org = parts[parts.length - 1];
-              const repo = pkg;
-              console.log(`下载: ${pkg} (org=${org}, repo=${repo}, arch=${arch})`);
-              try {
-                await downloader.download({ org, repo }, { arch });
-                console.log(`✅ 成功: ${pkg}`);
-              } catch (err) {
-                console.error(`❌ 失败: ${pkg}`, err.message);
-                process.exit(1);
-              }
+              const success = await downloadPackage(pkg, arch, outDir);
+              if (!success) allSuccess = false;
+            }
+            if (!allSuccess) {
+              console.error('部分应用下载失败，请检查日志');
+              process.exit(1);
             }
           }
 
@@ -87,7 +106,8 @@ jobs:
           });
           EOF
 
-          node download.js "$PACKAGES_STR" "$DEFAULT_ARCH" "$OUT_DIR"
+          node download.js "${{ inputs.package_name }}" "$ARCH" "$OUT_DIR"
+
           echo "下载完成，文件清单："
           ls -lh "$OUT_DIR"
 
@@ -95,5 +115,5 @@ jobs:
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          ARTIFACT_DIRECTORY_PATH: "./apks-combo-${{ env.BUILD_DATE }}"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-combo"
+          ARTIFACT_DIRECTORY_PATH: "./apks-apkcombo-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkcombo"
