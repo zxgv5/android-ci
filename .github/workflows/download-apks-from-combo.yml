@@ -38,28 +38,19 @@ jobs:
       - name: Clone apkcombo-downloader
         run: git clone https://github.com/nirewen/apkcombo-downloader.git
 
-      - name: Patch to bypass version filtering
+      - name: Patch index.ts to force using first version
         run: |
           cd apkcombo-downloader
-
-          cat > patch.js << 'PATCH'
-          const fs = require('fs');
-          const path = require('path');
-
-          const indexPath = path.join('src', 'lib', 'index.ts');
-          let indexContent = fs.readFileSync(indexPath, 'utf8');
-
-          // 替换版本选择逻辑，强制使用第一个版本
-          indexContent = indexContent.replace(
-            /const selectedVersion = match\(o\.version \?\? "stable"\)[\s\S]*?\.otherwise\(\(\) => versions\.find\(isStableVersion\)\);/,
-            `const selectedVersion = versions[0]; // Patched: always use first version`
-          );
-
-          fs.writeFileSync(indexPath, indexContent);
-          console.log('✅ Patched index.ts to use first version');
-          PATCH
-
-          bun patch.js
+          echo "=== 原始版本选择代码片段 ==="
+          sed -n '70,85p' src/lib/index.ts
+          
+          # 使用 sed 替换整个版本选择块
+          # 查找从 "const selectedVersion = match" 开始到 "otherwise(() => versions.find(isStableVersion));" 结束的段落
+          # 并将其替换为 "const selectedVersion = versions[0];"
+          sed -i '/const selectedVersion = match/,/otherwise(() => versions.find(isStableVersion));/c\const selectedVersion = versions[0]; // Patched: always use first version' src/lib/index.ts
+          
+          echo "=== 修改后代码片段 ==="
+          sed -n '70,85p' src/lib/index.ts
 
       - name: Install dependencies
         run: |
