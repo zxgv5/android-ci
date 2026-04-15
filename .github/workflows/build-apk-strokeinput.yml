@@ -75,6 +75,14 @@ jobs:
           }
           EOF
 
+      - name: Download and extract fonts files
+        working-directory: ./strokeinput_source
+        run: |
+          mkdir -p "${{ github.workspace }}/fonts"
+          curl -L -o "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" "https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/pre/JetBrainsMapleMono-NF-XX-NL-XX.zip"
+          unzip "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" -d "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX"
+          cp -f "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX/JetBrainsMapleMono.ttf" "./app/src/main/assets/StrokeInputFont.ttf"
+
       - name: Build signed apk with init script
         working-directory: ./strokeinput_source
         env:
