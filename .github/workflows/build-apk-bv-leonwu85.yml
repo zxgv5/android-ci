@@ -1,96 +1,96 @@
-name: build-apk-bv-leonwu85
-
-on:
-  workflow_dispatch:
-    inputs:
-      branch_name:
-        description: '分支'
-        required: true
-        default: 'feature-customisation-0001'
-        type: string
-
-env:
-  JDK_VERSION: '22'
-  ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-permissions:
-  contents: write
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clean runner environment
-        run: |
-          rm -rf ~/.gradle/caches/
-          rm -rf ~/.gradle/daemon/
-          rm -rf ~/.android/build-cache/
-          rm -rf .gradle
+#!/bin/bash
+# customize-bv-leonwu85.sh
+set -e  # 遇到错误立即退出，避免ci静默失败
+LEONWU85_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/bv_source"
+PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# - - - - - - - - - - - - - - - - - -简单且无模糊的修改用sed等实现 - - - - - - - - - - - - - - - - - -
+# 1、修改包名
+LEONWU85_BV_APPCONFIGURATION_KT="$LEONWU85_BV_SOURCE_ROOT/buildSrc/src/main/kotlin/AppConfiguration.kt"
+# sed -i \
+#   -e 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' \
+#   -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.leonwu85.bv"/' \
+#   "$LEONWU85_BV_APPCONFIGURATION_KT"
+sed -i \
+  -e 's/private const val defaultApplicationId = "dev.aaa1115910.bv2"/private const val defaultApplicationId = "dev.leonwu85.bv"/' \
+  "$LEONWU85_BV_APPCONFIGURATION_KT"
+# 2、生成空壳google-services.json以通过编译
+LEONWU85_BV_GOOGLESERVICES_JSON="$LEONWU85_BV_SOURCE_ROOT/app/google-services.json"
+cat > "$LEONWU85_BV_GOOGLESERVICES_JSON" << 'EOF'
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "dummy-project",
+    "firebase_url": "https://dummy-project.firebaseio.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "android_client_info": {
+          "package_name": "dev.leonwu85.bv"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "DUMMY_API_KEY"
+        }
+      ]
+    }
+  ]
+}
+EOF
+# 配合google-services.json禁用google服务
+sed -i 's/var\s\+googleServicesAvailable\s*=\s*true/var googleServicesAvailable = false/g' "$LEONWU85_BV_APPCONFIGURATION_KT"
+# 3、修改应用名
+LEONWU85_BV_DEBUG_STRINGS_XML="$LEONWU85_BV_SOURCE_ROOT/app/shared/src/debug/res/values/strings.xml"
+sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV Debug.*<\/string>/<string name="app_name">leonwu85 Debug<\/string>/' "$LEONWU85_BV_DEBUG_STRINGS_XML"
+LEONWU85_BV_MAIN_STRINGS_XML="$LEONWU85_BV_SOURCE_ROOT/app/shared/src/main/res/values/strings.xml"
+sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV.*<\/string>/<string name="app_name">leonwu85<\/string>/' "$LEONWU85_BV_MAIN_STRINGS_XML"
+LEONWU85_BV_R8TEST_STRINGS_XML="$LEONWU85_BV_SOURCE_ROOT/app/shared/src/r8Test/res/values/strings.xml"
+sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV R8 Test.*<\/string>/<string name="app_name">leonwu85 R8 Test<\/string>/' "$LEONWU85_BV_R8TEST_STRINGS_XML"
+# 4、倍速取值范围调整
+LEONWU85_BV_CONTROLLERVIDEOINFO_KT="$LEONWU85_BV_SOURCE_ROOT/player/tv/src/main/kotlin/dev/aaa1115910/bv/player/tv/controller/ControllerVideoInfo.kt"
+# sed -i -e 's/^\([[:space:]]*\)down = focusRequesters\[if (showNextVideoBtn) "nextVideo" else "speed"\] ?: FocusRequester()/\1down = focusRequesters["danmaku"] ?: FocusRequester()/' \
+sed -i -e 's/^\([[:space:]]*\)step: Float = 0\.25f,/\1step: Float = 0.2f,/' \
+       -e 's/^\([[:space:]]*\)min: Float = 0\.25f,/\1min: Float = 0.2f,/' \
+       -e 's/^\([[:space:]]*\)max: Float = 3f,/\1max: Float = 5f,/' "$LEONWU85_BV_CONTROLLERVIDEOINFO_KT"
+LEONWU85_BV_PLAYERSETTING_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/settings/content/PlayerSetting.kt"
+sed -i \
+  -e 's/minValue = 0.25,/minValue = 0.2,/' \
+  -e 's/maxValue = 2.5,/maxValue = 5.0,/' \
+  -e 's/step = 0.25,/step = 0.2,/' \
+  "$LEONWU85_BV_PLAYERSETTING_KT"
+LEONWU85_BV_PICTUREMENU_KT="${LEONWU85_BV_SOURCE_ROOT}/player/tv/src/main/kotlin/dev/aaa1115910/bv/player/tv/controller/playermenu/PictureMenu.kt"
+sed -i \
+  -e 's/step = 0.25f,/step = 0.2f,/' \
+  -e 's/range = 0.25f..3f,/range = 0.2f..5f,/' \
+  "$LEONWU85_BV_PICTUREMENU_KT"
  
-      - name: Checkout source repo
-        uses: actions/checkout@main
-        with:
-          repository: leonwu85/bv
-          ref: '${{ inputs.branch_name }}'
-          path: bv_source
-          fetch-depth: 0
-          submodules: recursive
-
-      - name: Checkout ci source repo
-        uses: actions/checkout@main
-        with:
-          path: ci_source
-
-      - name: Generate timestamp
-        run: |
-          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
-      - name: Setup java
-        uses: actions/setup-java@main
-        with:
-          java-version: "${{ env.JDK_VERSION }}"
-          distribution: "temurin"
-
-      - name: Setup python 3.12
-        uses: actions/setup-python@main
-        with:
-          python-version: '3.12'
-
-      - name: Customize scripts
-        run: |
-          chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
-          "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
-
-      - name: Decode keystore
-        working-directory: ./bv_source
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
-          cat << EOF > signing.properties
-          keystore.path=keystore.p12
-          keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
-          keystore.alias=${{ secrets.KEY_ALIAS }}
-          keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
-          EOF
- 
-      - name: Build release apk
-        working-directory: ./bv_source
-        run: |
-          chmod +x ./gradlew
-          # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
-          ./gradlew :app:assembleRelease 
-
-      - name: Rename and move apk
-        working-directory: ./bv_source
-        run: |
-          mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/default/release/BV"*"release_default_universal.apk" "${{ github.workspace }}/dist/leonwu85bv-${{ env.BUILD_DATE }}.apk"
-
-      - name: Erase keystore, encrypt package and create release
-        uses: ./ci_source/.github/actions/erase_aes256pac_release/
-        with:
-          P12_KEYSTORE_PATH: "./bv_source/keystore/release.keystore"
-          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/leonwu85bv-${{ env.BUILD_DATE }}.apk"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-leonwu85bv"
+# 5、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
+# LEONWU85_BV_DRAWERCONTENT_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+# sed -i \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.Search)/\1\/\/add(DrawerItem.Search)/' \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.UGC)/\1\/\/add(DrawerItem.UGC)/' \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.PGC)/\1\/\/add(DrawerItem.PGC)/' \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.Live)/\1\/\/add(DrawerItem.Live)/' \
+#   "$LEONWU85_BV_DRAWERCONTENT_KT"
+# 配套修改
+# LEONWU85_BV_MAINSCREEN_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_MAINSCREEN_KT}"
+# - - - - - - - - - - - - - - - - - -更加灵活和后期易变的修改，用python处理实现 - - - - - - - - - - - - - - - - - -
+# 6、使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
+# echo "处理*Screen.kt代码..."
+# LEONWU85_BV_DYNAMICSSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/DynamicsScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_dynamicsscreen_kt.py" "${LEONWU85_BV_DYNAMICSSCREEN_KT}"
+# LEONWU85_BV_POPULARSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/PopularScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_popularscreen_kt.py" "${LEONWU85_BV_POPULARSCREEN_KT}"
+# LEONWU85_BV_RECOMMENDSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/home/RecommendScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_recommendscreen_kt.py" "${LEONWU85_BV_RECOMMENDSCREEN_KT}"
+# LEONWU85_BV_HISTORYSCREEN_KT="${LEONWU85_BV_SOURCE_ROOT}/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/user/HistoryScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_historyscreen_kt.py" "${LEONWU85_BV_HISTORYSCREEN_KT}"
+# echo "*Screen.kt代码处理完成..."
+# - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
+# 7、使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
+echo "注释全部日志代码..."
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${LEONWU85_BV_SOURCE_ROOT}"
+echo "日志代码注释完成！"
