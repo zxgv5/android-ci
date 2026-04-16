@@ -72,6 +72,6 @@ sed -i \
 # echo "*Screen.kt代码处理完成..."
 # - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
 # 8、使用python在${FANTASY_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
-# echo "注释全部日志代码..."
-# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${FANTASY_BV_SOURCE_ROOT}"
-# echo "日志代码注释完成！"
+echo "注释全部日志代码..."
+python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${FANTASY_BV_SOURCE_ROOT}"
+echo "日志代码注释完成！"
