@@ -1,6 +1,5 @@
 #!/bin/bash
 # customize-bv-fantasy.sh
- 
 set -e  # 遇到错误立即退出，避免ci静默失败
 FANTASY_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/bv_source"
 PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,16 +39,16 @@ sed -i \
   -e 's/range = 0.25f..3f,/range = 0.2f..5f,/' \
   "$FANTASY_BV_PICTUREMENU_KT"
 # 5、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
-FANTASY_BV_DRAWERCONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
-sed -i \
-  -e 's/^\([[:space:]]*\)DrawerItem\.Search,/\1\/\/DrawerItem.Search,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.Home,/\1DrawerItem.Home/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.UGC,/\1\/\/DrawerItem.UGC,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.PGC,/\1\/\/DrawerItem.PGC,/' \
-  -e 's/^\([[:space:]]*\)DrawerItem\.Live/\1\/\/DrawerItem.Live/' \
-  "$FANTASY_BV_DRAWERCONTENT_KT"
-FANTASY_BV_MAINSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_MAINSCREEN_KT}"
+# FANTASY_BV_DRAWERCONTENT_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+# sed -i \
+#   -e 's/^\([[:space:]]*\)DrawerItem\.Search,/\1\/\/DrawerItem.Search,/' \
+#   -e 's/^\([[:space:]]*\)DrawerItem\.Home,/\1DrawerItem.Home/' \
+#   -e 's/^\([[:space:]]*\)DrawerItem\.UGC,/\1\/\/DrawerItem.UGC,/' \
+#   -e 's/^\([[:space:]]*\)DrawerItem\.PGC,/\1\/\/DrawerItem.PGC,/' \
+#   -e 's/^\([[:space:]]*\)DrawerItem\.Live/\1\/\/DrawerItem.Live/' \
+#   "$FANTASY_BV_DRAWERCONTENT_KT"
+# FANTASY_BV_MAINSCREEN_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${FANTASY_BV_MAINSCREEN_KT}"
 # 6、隐藏顶部“追番”和“稍后看”两个导航标签
 # 源仓库已增加可见设置项，此处的修改不再保留
 # FANTASY_BV_TOPNAV_KT="$FANTASY_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/component/TopNav.kt"
