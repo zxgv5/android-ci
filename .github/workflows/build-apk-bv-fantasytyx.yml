@@ -56,7 +56,7 @@ jobs:
       - name: Customize scripts
         run: |
           chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
-          # "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
+          "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
  
       - name: Decode keystore
         working-directory: ./bv_source
