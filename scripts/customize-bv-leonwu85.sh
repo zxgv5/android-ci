@@ -14,7 +14,7 @@ sed -i \
   -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.leonwu85.bv"/' \
   "$LEONWU85_BV_APPCONFIGURATION_KT"
 # 2、生成空壳google-services.json以通过编译
-LEONWU85_BV_GOOGLESERVICES_JSON ="$LEONWU85_BV_SOURCE_ROOT/app/google-services.json"
+LEONWU85_BV_GOOGLESERVICES_JSON="$LEONWU85_BV_SOURCE_ROOT/app/google-services.json"
 cat > "$LEONWU85_BV_GOOGLESERVICES_JSON" << 'EOF'
 {
   "project_info": {
