@@ -1,12 +1,10 @@
 #!/bin/bash
 # customize-bv-leonwu85.sh
- 
 set -e  # 遇到错误立即退出，避免ci静默失败
 LEONWU85_BV_SOURCE_ROOT="$GITHUB_WORKSPACE/bv_source"
 PYTHON_AND_SHELL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # - - - - - - - - - - - - - - - - - -简单且无模糊的修改用sed等实现 - - - - - - - - - - - - - - - - - -
-# 1、版本号规则调整，避免负数
-# 2、修改包名
+# 1、修改包名
 LEONWU85_BV_APPCONFIGURATION_KT="$LEONWU85_BV_SOURCE_ROOT/buildSrc/src/main/kotlin/AppConfiguration.kt"
 # sed -i \
 #   -e 's/"git rev-list --count HEAD".exec().toInt() - 5/"git rev-list --count HEAD".exec().toInt() + 1/' \
@@ -15,6 +13,34 @@ LEONWU85_BV_APPCONFIGURATION_KT="$LEONWU85_BV_SOURCE_ROOT/buildSrc/src/main/kotl
 sed -i \
   -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.leonwu85.bv"/' \
   "$LEONWU85_BV_APPCONFIGURATION_KT"
+# 2、生成空壳google-services.json以通过编译
+LEONWU85_BV_GOOGLESERVICES_JSON ="$LEONWU85_BV_SOURCE_ROOT/app/google-services.json"
+cat > "$LEONWU85_BV_GOOGLESERVICES_JSON" << 'EOF'
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "dummy-project",
+    "firebase_url": "https://dummy-project.firebaseio.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "android_client_info": {
+          "package_name": "dev.leonwu85.bv"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "DUMMY_API_KEY"
+        }
+      ]
+    }
+  ]
+}
+EOF
+# 配合google-services.json禁用google服务
+sed -i 's/var\s\+googleServicesAvailable\s*=\s*true/var googleServicesAvailable = false/g' "$LEONWU85_BV_APPCONFIGURATION_KT"
 # 3、修改应用名
 LEONWU85_BV_DEBUG_STRINGS_XML="$LEONWU85_BV_SOURCE_ROOT/app/shared/src/debug/res/values/strings.xml"
 sed -i 's/<string[[:space:]]*name="app_name"[[:space:]]*>.*BV Debug.*<\/string>/<string name="app_name">leonwu85 Debug<\/string>/' "$LEONWU85_BV_DEBUG_STRINGS_XML"
