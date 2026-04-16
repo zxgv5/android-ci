@@ -34,6 +34,20 @@ LOGGER_METHODS = ['info', 'fInfo', 'warn', 'fWarn', 'error',
 # 需要处理的普通函数调用（非lambda表达式）
 FUNCTION_CALLS_TO_REPLACE = ['addLogs']
 
+def is_function_declaration(lines, line_idx, col_idx, func_name):
+    """
+    判断当前匹配位置是否属于函数声明（前面有 fun 关键字）
+    例如：private suspend fun addLogs(text: String, ...)
+    """
+    line = lines[line_idx]
+    # 获取匹配位置之前的内容
+    before = line[:col_idx]
+    # 检查是否包含 'fun' 关键字，且后面跟着函数名
+    # 简单检查：单词边界 fun 出现在前面
+    if re.search(r'\bfun\s+\w*\s*$', before):
+        return True
+    return False
+
 def is_lambda_expression(lines, start_line_idx, start_col_idx):
     """
     判断logger调用是否是lambda表达式形式（logger.info { ... }）
@@ -189,12 +203,17 @@ def process_file(filepath):
             # 检查是否包含需要替换的普通函数调用（如 addLogs）
             has_function_call = False
             matched_func = None
+            match_pos = -1
             for func in FUNCTION_CALLS_TO_REPLACE:
                 pattern = fr'\b{func}\s*\('
-                if re.search(pattern, line):
-                    has_function_call = True
-                    matched_func = func
-                    break
+                match = re.search(pattern, line)
+                if match:
+                    # 检查是否是函数声明，如果是则跳过
+                    if not is_function_declaration(lines, i, match.start(), func):
+                        has_function_call = True
+                        matched_func = func
+                        match_pos = match.start()
+                        break
 
             if should_comment and not line.strip().startswith('//'):
                 # 注释整行
@@ -282,58 +301,52 @@ def process_file(filepath):
 
             elif has_function_call:
                 # 处理普通函数调用，如 addLogs(...)
-                pattern = fr'\b{matched_func}\s*\('
-                match = re.search(pattern, line)
-                if match:
-                    start_line_idx = i
-                    start_col_idx = match.start()
+                start_line_idx = i
+                start_col_idx = match_pos
 
-                    # 非lambda表达式
-                    is_lambda = False
+                # 非lambda表达式
+                is_lambda = False
 
-                    # 找到函数调用的结束位置（匹配右括号）
-                    end_line_idx, end_col_idx = find_expression_end(
-                        lines, start_line_idx, start_col_idx, is_lambda
-                    )
+                # 找到函数调用的结束位置（匹配右括号）
+                end_line_idx, end_col_idx = find_expression_end(
+                    lines, start_line_idx, start_col_idx, is_lambda
+                )
 
-                    if start_line_idx == end_line_idx:
-                        # 单行调用
-                        indent_match = re.match(r'^(\s*)', lines[start_line_idx])
-                        indent = indent_match.group(1) if indent_match else ''
+                if start_line_idx == end_line_idx:
+                    # 单行调用
+                    indent_match = re.match(r'^(\s*)', lines[start_line_idx])
+                    indent = indent_match.group(1) if indent_match else ''
 
-                        before_call = lines[start_line_idx][:start_col_idx]
-                        after_call = lines[start_line_idx][end_col_idx+1:]
+                    before_call = lines[start_line_idx][:start_col_idx]
+                    after_call = lines[start_line_idx][end_col_idx+1:]
 
-                        # 检查调用前是否有非空语句（如赋值）
-                        before_trimmed = before_call.rstrip()
-                        if before_trimmed and not before_trimmed.endswith(';'):
-                            new_line = before_call + '{}' + after_call
-                        else:
-                            new_line = before_call + '{}' + after_call
-                        new_lines.append(new_line)
-
-                        i += 1
+                    # 检查调用前是否有非空语句（如赋值）
+                    before_trimmed = before_call.rstrip()
+                    if before_trimmed and not before_trimmed.endswith(';'):
+                        new_line = before_call + '{}' + after_call
                     else:
-                        # 多行调用，注释掉所有相关行（替换为 {} 跨行较复杂，使用注释方式）
-                        for idx in range(start_line_idx, end_line_idx + 1):
-                            comment_line = lines[idx]
-                            if not comment_line.strip().startswith('//'):
-                                cmt_indent_match = re.match(r'^(\s*)', comment_line)
-                                if cmt_indent_match:
-                                    cmt_indent = cmt_indent_match.group(1)
-                                    cmt_rest = comment_line[len(cmt_indent):].rstrip('\n')
-                                    new_lines.append(cmt_indent + '//' + cmt_rest + '\n')
-                                else:
-                                    new_lines.append('//' + comment_line)
-                            else:
-                                new_lines.append(comment_line)
+                        new_line = before_call + '{}' + after_call
+                    new_lines.append(new_line)
 
-                        i = end_line_idx + 1
-
-                    modified = True
-                else:
-                    new_lines.append(line)
                     i += 1
+                else:
+                    # 多行调用，注释掉所有相关行（替换为 {} 跨行较复杂，使用注释方式）
+                    for idx in range(start_line_idx, end_line_idx + 1):
+                        comment_line = lines[idx]
+                        if not comment_line.strip().startswith('//'):
+                            cmt_indent_match = re.match(r'^(\s*)', comment_line)
+                            if cmt_indent_match:
+                                cmt_indent = cmt_indent_match.group(1)
+                                cmt_rest = comment_line[len(cmt_indent):].rstrip('\n')
+                                new_lines.append(cmt_indent + '//' + cmt_rest + '\n')
+                            else:
+                                new_lines.append('//' + comment_line)
+                        else:
+                            new_lines.append(comment_line)
+
+                    i = end_line_idx + 1
+
+                modified = True
 
             else:
                 new_lines.append(line)
