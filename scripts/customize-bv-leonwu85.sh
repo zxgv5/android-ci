@@ -11,7 +11,7 @@ LEONWU85_BV_APPCONFIGURATION_KT="$LEONWU85_BV_SOURCE_ROOT/buildSrc/src/main/kotl
 #   -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.leonwu85.bv"/' \
 #   "$LEONWU85_BV_APPCONFIGURATION_KT"
 sed -i \
-  -e 's/const val applicationId = "dev.aaa1115910.bv2"/const val applicationId = "dev.leonwu85.bv"/' \
+  -e 's/private const val defaultApplicationId = "dev.aaa1115910.bv2"/private const val defaultApplicationId = "dev.leonwu85.bv"/' \
   "$LEONWU85_BV_APPCONFIGURATION_KT"
 # 2、生成空壳google-services.json以通过编译
 LEONWU85_BV_GOOGLESERVICES_JSON="$LEONWU85_BV_SOURCE_ROOT/app/google-services.json"
