@@ -67,16 +67,16 @@ sed -i \
   "$LEONWU85_BV_PICTUREMENU_KT"
  
 # 5、隐藏左侧边栏中的“搜索”、“UGC”、“PGC”和“直播”等四个页面导航按钮，尤其是UGC和PGC，太卡了
-LEONWU85_BV_DRAWERCONTENT_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
-sed -i \
-  -e 's/^\([[:space:]]*\)add(DrawerItem\.Search)/\1\/\/add(DrawerItem.Search)/' \
-  -e 's/^\([[:space:]]*\)add(DrawerItem\.UGC)/\1\/\/add(DrawerItem.UGC)/' \
-  -e 's/^\([[:space:]]*\)add(DrawerItem\.PGC)/\1\/\/add(DrawerItem.PGC)/' \
-  -e 's/^\([[:space:]]*\)add(DrawerItem\.Live)/\1\/\/add(DrawerItem.Live)/' \
-  "$LEONWU85_BV_DRAWERCONTENT_KT"
+# LEONWU85_BV_DRAWERCONTENT_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/main/DrawerContent.kt"
+# sed -i \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.Search)/\1\/\/add(DrawerItem.Search)/' \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.UGC)/\1\/\/add(DrawerItem.UGC)/' \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.PGC)/\1\/\/add(DrawerItem.PGC)/' \
+#   -e 's/^\([[:space:]]*\)add(DrawerItem\.Live)/\1\/\/add(DrawerItem.Live)/' \
+#   "$LEONWU85_BV_DRAWERCONTENT_KT"
 # 配套修改
-LEONWU85_BV_MAINSCREEN_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_MAINSCREEN_KT}"
+# LEONWU85_BV_MAINSCREEN_KT="$LEONWU85_BV_SOURCE_ROOT/app/tv/src/main/kotlin/dev/aaa1115910/bv/tv/screens/MainScreen.kt"
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_mainscreen_kt.py" "${LEONWU85_BV_MAINSCREEN_KT}"
 # - - - - - - - - - - - - - - - - - -更加灵活和后期易变的修改，用python处理实现 - - - - - - - - - - - - - - - - - -
 # 6、使用python处理如下几个*Screen.kt文件，解决视频列表加载和焦点左漂问题
 # echo "处理*Screen.kt代码..."
