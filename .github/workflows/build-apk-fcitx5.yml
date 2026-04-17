@@ -104,14 +104,15 @@ jobs:
           # 遍历所有插件apk
           for apk in plugin/*/build/outputs/apk/release/*.apk; do
               filename=$(basename "$apk")
-              # 1. 匹配 arm64-v8a 架构的插件
+              # 1. 匹配 arm64-v8a 架构的插件（保持不变，它本身没问题）
               if [[ "$filename" =~ ^org\.fcitx\.fcitx5\.android\.plugin\.([^-]+)-.*-(arm64-v8a)-release\.apk$ ]]; then
                   plugin="${BASH_REMATCH[1]}"
                   arch="${BASH_REMATCH[2]}"
                   newname="fcitx5.plugin.${plugin}-${arch}.apk"
                   mv -v "$apk" "${{ github.workspace }}/fcitx5/$newname"
-              # 2. 匹配无架构特例（如 clipboard_filter）
-              elif [[ "$filename" =~ ^org\.fcitx\.fcitx5\.android\.plugin\.([^-]+)-.*-release\.apk$ ]]; then
+              # 2. 匹配无架构特例（如 clipboard_filter），且必须不是任何已知架构
+              elif [[ "$filename" =~ ^org\.fcitx\.fcitx5\.android\.plugin\.([^-]+)-.*-release\.apk$ ]] && \
+                  [[ ! "$filename" =~ -(arm64-v8a|armeabi-v7a|x86|x86_64)-release\.apk$ ]]; then
                   plugin="${BASH_REMATCH[1]}"
                   newname="fcitx5.plugin.${plugin}.apk"
                   mv -v "$apk" "${{ github.workspace }}/fcitx5/$newname"
@@ -120,7 +121,7 @@ jobs:
                   echo "跳过: $filename" >&2
               fi
           done
-
+          
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
