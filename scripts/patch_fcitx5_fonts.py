@@ -1,19 +1,13 @@
 #!/usr/bin/env python3
 """
-fcitx5-android 自定义字体补丁脚本 (最终稳定版)
+fcitx5-android 自定义字体补丁脚本 (修复 Parcelize 序列化问题)
 
 用法:
     python patch_font.py /path/to/fcitx5-android
 
-功能:
-    1. 修改 Theme.kt：添加字体抽象属性及三个子类的覆盖属性（正确放置逗号与 @Transient）
-    2. 修改 ThemeManager.kt：
-       - 加载 assets/fonts/JetBrainsMapleMono.ttf
-       - 注入到 BuiltinThemes、monetThemes 初始化、onSystemPlatteChange 和 getTheme 返回
-    3. 修改 KeyView.kt：TextKeyView 应用键盘字体
-    4. 修改 CandidateItemUi.kt / LabeledCandidateItemUi.kt：应用候选框字体
-
-幂等性保证：所有插入操作均检查目标代码是否已存在，可多次安全运行。
+解决编译错误:
+    Type is not directly supported by 'Parcelize'. Annotate with '@RawValue'
+    Serializer has not been found for type 'Typeface?'. Use @Contextual or @Transient.
 """
 
 import re
@@ -73,8 +67,7 @@ class FontPatcher:
         class_start_line: int,
         params_to_add: List[str],
     ) -> List[str]:
-        """在 data class 参数列表末尾添加新参数，正确处理逗号。"""
-        # 定位开括号行
+        """在 data class 参数列表末尾添加新参数。"""
         i = class_start_line
         while i < len(lines) and '(' not in lines[i]:
             i += 1
@@ -82,7 +75,6 @@ class FontPatcher:
             return lines
         open_paren_line = i
 
-        # 找到对应的闭括号行
         paren_count = 0
         close_paren_line = -1
         for j in range(open_paren_line, len(lines)):
@@ -106,7 +98,6 @@ class FontPatcher:
         stripped = close_line.strip()
         indent = close_line[:len(close_line) - len(close_line.lstrip())]
 
-        # 闭括号独占一行的情况
         if stripped == ')' or stripped.startswith(') :'):
             prev = close_paren_line - 1
             while prev >= 0 and lines[prev].strip() == '':
@@ -118,7 +109,6 @@ class FontPatcher:
             for param in reversed(params_to_add):
                 lines.insert(close_paren_line, indent + param)
         else:
-            # 闭括号与参数同行
             if close_line.rstrip().endswith(','):
                 modified = close_line.replace(')', ', ' + ', '.join(params_to_add) + ')')
             else:
@@ -128,13 +118,16 @@ class FontPatcher:
         return lines
 
     def patch_theme_file(self):
-        """修改 Theme.kt"""
+        """修改 Theme.kt，添加字体属性并处理序列化注解"""
         theme_path = "app/src/main/java/org/fcitx/fcitx5/android/data/theme/Theme.kt"
         content = self.read_file(theme_path)
         if content is None:
             return
 
+        # 添加必需的 import
         content, _ = self.ensure_import(content, "import android.graphics.Typeface")
+        content, _ = self.ensure_import(content, "import kotlinx.parcelize.RawValue")
+
         lines = content.split('\n')
 
         # 1. sealed class Theme 抽象属性
@@ -153,7 +146,7 @@ class FontPatcher:
                         lines.insert(j + idx, ins)
                 break
 
-        # 2. Custom data class
+        # 2. Custom data class (带 @Transient 和 @RawValue)
         custom_start = -1
         for i, line in enumerate(lines):
             if line.strip().startswith('data class Custom('):
@@ -162,12 +155,12 @@ class FontPatcher:
         if custom_start != -1:
             if not any('keyTypeface' in l for l in lines[custom_start:custom_start+50]):
                 params = [
-                    "@Transient override val keyTypeface: Typeface? = null,",
-                    "@Transient override val candidateTypeface: Typeface? = null"
+                    "@Transient @RawValue override val keyTypeface: Typeface? = null,",
+                    "@Transient @RawValue override val candidateTypeface: Typeface? = null"
                 ]
                 lines = self._add_params_to_data_class(lines, custom_start, params)
 
-        # 3. Builtin data class
+        # 3. Builtin data class (带 @Transient 和 @RawValue)
         builtin_start = -1
         for i, line in enumerate(lines):
             if line.strip().startswith('data class Builtin('):
@@ -176,12 +169,12 @@ class FontPatcher:
         if builtin_start != -1:
             if not any('keyTypeface' in l for l in lines[builtin_start:builtin_start+50]):
                 params = [
-                    "override val keyTypeface: Typeface? = null,",
-                    "override val candidateTypeface: Typeface? = null"
+                    "@Transient @RawValue override val keyTypeface: Typeface? = null,",
+                    "@Transient @RawValue override val candidateTypeface: Typeface? = null"
                 ]
                 lines = self._add_params_to_data_class(lines, builtin_start, params)
 
-        # 4. Monet data class
+        # 4. Monet data class (带 @Transient 和 @RawValue)
         monet_start = -1
         for i, line in enumerate(lines):
             if line.strip().startswith('data class Monet('):
@@ -190,8 +183,8 @@ class FontPatcher:
         if monet_start != -1:
             if not any('keyTypeface' in l for l in lines[monet_start:monet_start+50]):
                 params = [
-                    "override val keyTypeface: Typeface? = null,",
-                    "override val candidateTypeface: Typeface? = null"
+                    "@Transient @RawValue override val keyTypeface: Typeface? = null,",
+                    "@Transient @RawValue override val candidateTypeface: Typeface? = null"
                 ]
                 lines = self._add_params_to_data_class(lines, monet_start, params)
 
@@ -207,7 +200,6 @@ class FontPatcher:
         content, _ = self.ensure_import(content, "import android.graphics.Typeface")
         content, _ = self.ensure_import(content, "import org.fcitx.fcitx5.android.utils.appContext")
 
-        # 插入字体加载属性
         if 'customKeyTypeface' not in content:
             pattern = r'(object ThemeManager\s*\{)'
             insert_code = f"""
@@ -222,7 +214,6 @@ class FontPatcher:
 """
             content = re.sub(pattern, r'\1' + insert_code, content, count=1)
 
-        # 修改 BuiltinThemes 列表
         if 'copy(keyTypeface = customKeyTypeface' not in content:
             content = re.sub(
                 r'(val BuiltinThemes = listOf\()([\s\S]*?)(\))',
@@ -235,7 +226,6 @@ class FontPatcher:
                 flags=re.DOTALL
             )
 
-        # 修改 monetThemes 初始化
         monet_init = 'private var monetThemes = listOf(ThemeMonet.getLight(), ThemeMonet.getDark())'
         if monet_init in content and 'map { it.copy' not in content:
             content = content.replace(
@@ -243,7 +233,6 @@ class FontPatcher:
                 monet_init + '.map { it.copy(keyTypeface = customKeyTypeface, candidateTypeface = customCandidateTypeface) }'
             )
 
-        # 修改 onSystemPlatteChange 中的 monetThemes 赋值 —— 关键修正点
         onchange_line = 'monetThemes = listOf(ThemeMonet.getLight(), ThemeMonet.getDark())'
         if onchange_line in content and 'map { it.copy' not in content:
             content = content.replace(
@@ -251,7 +240,6 @@ class FontPatcher:
                 onchange_line + '.map { it.copy(keyTypeface = customKeyTypeface, candidateTypeface = customCandidateTypeface) }'
             )
 
-        # 修改 getTheme 方法返回值
         get_theme_pattern = r'(fun getTheme\(name: String\) =\s*)([^\n]+)'
         match = re.search(get_theme_pattern, content)
         if match:
@@ -279,7 +267,6 @@ class FontPatcher:
 
     def patch_candidate_files(self):
         """修改候选框渲染文件"""
-        # CandidateItemUi.kt
         ciu_path = "app/src/main/java/org/fcitx/fcitx5/android/input/candidates/CandidateItemUi.kt"
         content = self.read_file(ciu_path)
         if content:
@@ -291,7 +278,6 @@ class FontPatcher:
                 )
                 self.write_file(ciu_path, content)
 
-        # LabeledCandidateItemUi.kt
         lciu_path = "app/src/main/java/org/fcitx/fcitx5/android/input/candidates/floating/LabeledCandidateItemUi.kt"
         content = self.read_file(lciu_path)
         if content:
