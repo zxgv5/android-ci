@@ -101,21 +101,24 @@ jobs:
         run: |
           mkdir -p "${{ github.workspace }}/fcitx5"
           mv "./app/build/outputs/apk/release/org.fcitx.fcitx5.android"*"arm64-v8a-release.apk" "${{ github.workspace }}/fcitx5/fcitx5-${{ env.BUILD_DATE }}.apk"
+          # 遍历所有插件apk
           for apk in plugin/*/build/outputs/apk/release/*.apk; do
               filename=$(basename "$apk")
-              if [[ "$filename" =~ ^org\.fcitx\.fcitx5\.android\.plugin\.([^-]+)-.*-(arm64-v8a|armeabi-v7a|x86|x86_64)-release\.apk$ ]]; then
+              # 1. 匹配 arm64-v8a 架构的插件
+              if [[ "$filename" =~ ^org\.fcitx\.fcitx5\.android\.plugin\.([^-]+)-.*-(arm64-v8a)-release\.apk$ ]]; then
                   plugin="${BASH_REMATCH[1]}"
                   arch="${BASH_REMATCH[2]}"
                   newname="fcitx5.plugin.${plugin}-${arch}.apk"
-              # 单独处理匹配无架构的格式 (如 clipboard_filter)
+                  mv -v "$apk" "${{ github.workspace }}/fcitx5/$newname"
+              # 2. 匹配无架构特例（如 clipboard_filter）
               elif [[ "$filename" =~ ^org\.fcitx\.fcitx5\.android\.plugin\.([^-]+)-.*-release\.apk$ ]]; then
                   plugin="${BASH_REMATCH[1]}"
                   newname="fcitx5.plugin.${plugin}.apk"
+                  mv -v "$apk" "${{ github.workspace }}/fcitx5/$newname"
+              # 3. 其他架构文件跳过
               else
-                  echo "警告: 无法解析文件名 $filename" >&2
-                  continue
+                  echo "跳过: $filename" >&2
               fi
-              mv -v "$apk" "${{ github.workspace }}/fcitx5/$newname"
           done
 
       - name: Erase keystore, encrypt package and create release
