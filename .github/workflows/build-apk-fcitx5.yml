@@ -115,7 +115,7 @@ jobs:
                   echo "警告: 无法解析文件名 $filename" >&2
                   continue
               fi
-              mv -v "$apk" "/fcitx5/$newname"
+              mv -v "$apk" "${{ github.workspace }}/fcitx5/$newname"
           done
 
       - name: Erase keystore, encrypt package and create release
