@@ -1,19 +1,19 @@
 name: build-apk-fcitx5
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+
 permissions:
   contents: write
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,12 +33,12 @@ jobs:
           path: fcitx5_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -53,7 +53,7 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
- 
+
       - name: Decode keystore and create init script
         working-directory: ./fcitx5_source
         run: |
@@ -80,24 +80,24 @@ jobs:
           }
           EOF
  
-      - name: Download and extract fonts files
-        working-directory: ./fcitx5_source
-        run: |
-          mkdir -p "./app/src/main/assets/fonts"
-          mkdir -p "${{ github.workspace }}/fonts"
-          curl -L -o "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" "https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/pre/JetBrainsMapleMono-NF-XX-NL-XX.zip"
-          unzip "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" -d "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX"
-          cp -f "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX/JetBrainsMapleMono-Regular.ttf" "./app/src/main/assets/fonts/JetBrainsMapleMono.ttf"
+      # - name: Download and extract fonts files
+      #   working-directory: ./fcitx5_source
+      #   run: |
+      #     mkdir -p "./app/src/main/assets/fonts"
+      #     mkdir -p "${{ github.workspace }}/fonts"
+      #     curl -L -o "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" "https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/pre/JetBrainsMapleMono-NF-XX-NL-XX.zip"
+      #     unzip "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX.zip" -d "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX"
+      #     cp -f "${{ github.workspace }}/fonts/JetBrainsMapleMono-NF-XX-NL-XX/JetBrainsMapleMono-Regular.ttf" "./app/src/main/assets/fonts/JetBrainsMapleMono.ttf"
  
-      - name: Setup python 3.12
-        uses: actions/setup-python@main
-        with:
-          python-version: '3.12'
- 
-      - name: Patch files for new fonts
-        working-directory: ./fcitx5_source
-        run: |
-          python3 "${{ github.workspace }}/ci_source/scripts/patch_fcitx5_fonts.py" .
+      # - name: Setup python 3.12
+      #   uses: actions/setup-python@main
+      #   with:
+      #     python-version: '3.12'
+
+      # - name: Patch files for new fonts
+      #   working-directory: ./fcitx5_source
+      #   run: |
+      #     python3 "${{ github.workspace }}/ci_source/scripts/patch_fcitx5_fonts.py" .
  
       - name: Build signed apk with init script
         working-directory: ./fcitx5_source
