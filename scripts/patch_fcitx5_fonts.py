@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
 """
-fcitx5-android 自定义字体补丁脚本 (修复 Parcelize 序列化问题)
-
+fcitx5-android 自定义字体补丁脚本
 用法:
     python patch_font.py /path/to/fcitx5-android
-
-解决编译错误:
-    Type is not directly supported by 'Parcelize'. Annotate with '@RawValue'
-    Serializer has not been found for type 'Typeface?'. Use @Contextual or @Transient.
 """
 
 import re
