@@ -2,7 +2,12 @@ name: build-apk-fcitx5
 
 on:
   workflow_dispatch:
-  workflow_call:
+    inputs:
+      branch_name:
+        description: '分支'
+        required: true
+        default: 'master'
+        type: string
 
 env:
   JDK_VERSION: '21'
@@ -29,7 +34,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: fcitx5-android/fcitx5-android
-          ref: master
+          ref: '${{ inputs.branch_name }}'
           path: fcitx5_source
           fetch-depth: 0
           submodules: recursive
