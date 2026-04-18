@@ -155,5 +155,6 @@ jobs:
         with:
           P12_KEYSTORE_PATH: "./fcitx5_source/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./fcitx5"
+          # BUILD_ARTIFACT_PATH: "./fcitx5"
+          BUILD_ARTIFACT_PATH: "./fcitx5/fcitx5-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-fcitx5"
