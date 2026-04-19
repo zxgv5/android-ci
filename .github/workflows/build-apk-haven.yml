@@ -9,7 +9,7 @@ env:
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  NDK_VERSION: '27.0.12077973'
+  NDK_VERSION: 'r27d'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
  
 permissions:
