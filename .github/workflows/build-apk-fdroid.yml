@@ -94,7 +94,7 @@ jobs:
         working-directory: ./fdroid_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/fdroid-${{ env.BUILD_DATE }}.apk"
+          mv "./app/build/outputs/apk/fullDefault/release/app-full-default-release.apk" "${{ github.workspace }}/dist/fdroid-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
