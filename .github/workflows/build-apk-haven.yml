@@ -11,6 +11,7 @@ env:
   ANDROID_BUILD_TOOLS: '36.0.0'
   NDK_VERSION: 'r27d'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  RUSTFLAGS: "-A dead_code"           # 允许死代码警告，避免因警告导致构建失败
  
 permissions:
   contents: write
@@ -51,7 +52,7 @@ jobs:
           distribution: "${{ env.JDK_DISTRIBUTION }}"
  
       - name: Setup ndk
-        uses: nttld/setup-ndk@v1
+        uses: nttld/setup-ndk@main
         with:
           ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true
@@ -60,6 +61,8 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@main
         with:
           target: aarch64-linux-android
+        env:
+          RUSTFLAGS: "-A dead_code"    # 忽略死代码警告
  
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -67,7 +70,7 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@main
         with:
-          go-version: '1.26'   # 修改为 1.26 以满足 gomobile 的 Go ≥ 1.25 要求
+          go-version: '1.26'
  
       - name: Install gomobile
         run: |
