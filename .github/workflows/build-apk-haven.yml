@@ -9,6 +9,7 @@ env:
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
+  NDK_VERSION: '27.0.12077973'         # 与项目兼容的 NDK 版本
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
  
 permissions:
@@ -48,6 +49,33 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
+ 
+      - name: Setup ndk
+        uses: nttld/setup-ndk@main
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+ 
+      - name: Setup rust
+        uses: actions-rs/toolchain@main
+        with:
+          toolchain: stable
+          target: aarch64-linux-android
+          override: true
+ 
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+ 
+      - name: Setup go
+        uses: actions/setup-go@main
+        with:
+          go-version: '1.24'            # 匹配项目 rclone 构建要求
+ 
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          gomobile init
  
       - name: Decode keystore and create init script
         working-directory: ./haven_source
