@@ -123,7 +123,7 @@ jobs:
         working-directory: ./haven_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv app/build/outputs/apk/arm64/release/haven-*.apk "${{ github.workspace }}/dist/haven-${{ env.BUILD_DATE }}.apk"
+          mv app/build/outputs/apk/arm64/release/haven-*-arm64-release.apk "${{ github.workspace }}/dist/haven-${{ env.BUILD_DATE }}.apk"
  
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
