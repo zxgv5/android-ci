@@ -78,7 +78,7 @@ jobs:
       - name: Patch androidmanifest and generate secrets.xml
         working-directory: ./omnivore_source/android/Omnivore
         run: |
-          sed -i '/android:name="androidx.work.impl.foreground.SystemForegroundService"/ s|<service|<service android:foregroundServiceType="dataSync" |' app/src/main/AndroidManifest.xml
+          sed -i '/<\/application>/i \    <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" android:exported="false" tools:node="merge" />' app/src/main/AndroidManifest.xml
           mkdir -p app/src/main/res/values
           cat > app/src/main/res/values/secrets.xml << EOF
           <?xml version="1.0" encoding="utf-8"?>
