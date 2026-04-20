@@ -74,7 +74,22 @@ jobs:
               }
           }
           EOF
-
+ 
+      - name: Generate secrets.xml
+        working-directory: ./omnivore_source/android/Omnivore
+        run: |
+          mkdir -p app/src/main/res/values
+          cat > app/src/main/res/values/secrets.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="pspdfkit_license_key">unset</string>
+              <string name="posthog_client_key">unset</string>
+              <string name="posthog_instance_address">unset</string>
+              <string name="intercom_api_key">unset</string>
+              <string name="intercom_app_id">unset</string>
+          </resources>
+          EOF
+ 
       - name: Build signed apk with init script
         working-directory: ./omnivore_source/android/Omnivore
         env:
