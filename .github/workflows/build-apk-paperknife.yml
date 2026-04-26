@@ -34,6 +34,11 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -119,7 +124,7 @@ jobs:
           mv "./android/app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/paperknife-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
-        uses: ./.github/actions/erase_aes256pac_release/
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "./paperknife_source/android/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
