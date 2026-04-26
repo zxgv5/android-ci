@@ -1,4 +1,4 @@
-name: build-apk-pcapdroid
+name: build-apk-paperknife
 
 on:
   workflow_dispatch:
@@ -9,7 +9,6 @@ env:
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
-  NDK_VERSION: 'r29'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
 permissions:
@@ -29,9 +28,9 @@ jobs:
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
-          repository: emanuele-f/PCAPdroid
-          ref: master
-          path: pcapdroid_source
+          repository: potatameister/PaperKnife
+          ref: main
+          path: paperknife_source
           fetch-depth: 0
           submodules: recursive
 
@@ -50,15 +49,33 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Setup ndk
-        uses: nttld/setup-ndk@main
-        id: setup-ndk
+      - name: Setup node
+        uses: actions/setup-node@main
         with:
-          ndk-version: ${{ env.NDK_VERSION }}
-          add-to-path: true
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: ./paperknife_source
+        run: npm ci
+
+      - name: Fetch ocr binaries
+        working-directory: ./paperknife_source
+        run: |
+          mkdir -p public/tesseract
+          curl -Lo public/tesseract/tesseract-core.wasm https://unpkg.com/tesseract.js-core@v5.1.1/tesseract-core.wasm
+          curl -Lo public/tesseract/tesseract-core-simd.wasm https://unpkg.com/tesseract.js-core@v5.1.1/tesseract-core-simd.wasm
+          curl -Lo public/tesseract/tesseract-core-lstm.wasm https://unpkg.com/tesseract.js-core@v5.1.1/tesseract-core-lstm.wasm
+          curl -Lo public/tesseract/tesseract-core.wasm.js https://unpkg.com/tesseract.js-core@v5.1.1/tesseract-core.wasm.js
+          curl -Lo public/tesseract/worker.min.js https://unpkg.com/tesseract.js@v5.1.1/dist/worker.min.js
+          curl -Lo public/tesseract/eng.traineddata.gz https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0/eng.traineddata.gz
+          gunzip public/tesseract/eng.traineddata.gz
+
+      - name: Build web assets
+        working-directory: ./paperknife_source
+        run: npm run build
 
       - name: Decode keystore and create init script
-        working-directory: ./pcapdroid_source
+        working-directory: ./paperknife_source/android
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
           cat > init.gradle << EOF
@@ -83,31 +100,33 @@ jobs:
           }
           EOF
 
-      - name: Build signed apk with init script
-        working-directory: ./pcapdroid_source
+      - name: Sync capacitor and build signed apk
+        working-directory: ./paperknife_source
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          chmod +x ./gradlew
-          ./gradlew assembleStandardRelease --no-daemon -I init.gradle
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -I init.gradle
 
       - name: List generated apk files
-        working-directory: ./pcapdroid_source
+        working-directory: ./paperknife_source
         run: |
           echo "Listing all apk files generated:"
-          find app/build/outputs -type f -name "*.apk" | sort
+          find android/app/build/outputs -type f -name "*.apk" | sort
 
-      - name: Rename and move
-        working-directory: ./pcapdroid_source
+      - name: Rename and move apk
+        working-directory: ./paperknife_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/standard/release/app-standard-release.apk" "${{ github.workspace }}/dist/pcapdroid-${{ env.BUILD_DATE }}.apk"
+          mv "./android/app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/paperknife-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./pcapdroid_source/app/keystore.p12"
+          P12_KEYSTORE_PATH: "./paperknife_source/android/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/pcapdroid-${{ env.BUILD_DATE }}.apk"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-pcapdroid"
+          BUILD_ARTIFACT_PATH: "./dist/paperknife-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-paperknife"
