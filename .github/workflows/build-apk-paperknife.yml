@@ -70,7 +70,7 @@ jobs:
         run: npm run build
 
       - name: Decode keystore and create init script
-        working-directory: ./paperknife_source
+        working-directory: ./paperknife_source/android
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
           cat > init.gradle << EOF
@@ -104,7 +104,7 @@ jobs:
           npx cap sync android
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -I ../init.gradle
+          ./gradlew assembleRelease --no-daemon -I init.gradle
 
       - name: List generated apk files
         working-directory: ./paperknife_source
@@ -121,7 +121,7 @@ jobs:
       - name: Erase keystore, encrypt package and create release
         uses: ./.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./paperknife_source/app/keystore.p12"
+          P12_KEYSTORE_PATH: "./paperknife_source/android/app/keystore.p12"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/paperknife-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-paperknife"
