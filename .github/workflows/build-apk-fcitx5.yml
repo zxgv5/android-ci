@@ -104,6 +104,13 @@ jobs:
       #   run: |
       #     python3 "${{ github.workspace }}/ci_source/scripts/patch_fcitx5_fonts.py" .
  
+      - name: Do not build fcitx5 plugins
+        working-directory: ./fcitx5_source
+        run: |
+          # 注释 lib:plugin-base 和所有 :plugin:* 模块
+          sed -i 's/^include(":lib:plugin-base")$/\/\/ &/' settings.gradle.kts
+          sed -i 's/^include(":plugin:[^"]*")$/\/\/ &/' settings.gradle.kts
+
       - name: Build signed apk with init script
         working-directory: ./fcitx5_source
         env:
@@ -112,13 +119,6 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -I init.gradle
-
-      - name: Do not build fcitx5 plugins
-        working-directory: ./fcitx5_source
-        run: |
-          # 注释 lib:plugin-base 和所有 :plugin:* 模块
-          sed -i 's/^include(":lib:plugin-base")$/\/\/ &/' settings.gradle.kts
-          sed -i 's/^include(":plugin:[^"]*")$/\/\/ &/' settings.gradle.kts
 
       - name: List generated apk files
         working-directory: ./fcitx5_source
