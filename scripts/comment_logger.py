@@ -11,117 +11,82 @@
 # logger("BvVideoPlayer")
 # logger("BvPlayer")
 # androidLogger
-# logger.info { xxx }   -> 替换为 logger.info {}
-# logger.fInfo { xxx }  -> 替换为 logger.fInfo {}
-# logger.warn { xxx }   -> 替换为 logger.warn {}
-# logger.fWarn { xxx }  -> 替换为 logger.fWarn {}
-# logger.error { xxx }  -> 替换为 logger.error {}
-# logger.fError { xxx } -> 替换为 logger.fError {}
-# logger.exception { xxx } -> 替换为 logger.exception {}
-# logger.fException { xxx } -> 替换为 logger.fException {}
-# logger.debug { xxx }  -> 替换为 logger.debug {}
-# logger.fDebug { xxx } -> 替换为 logger.fDebug {}
+# logger.info { xxx }   -> 替换为 {}
+# logger.fInfo { xxx }  -> 替换为 {}
+# logger.warn { xxx }   -> 替换为 {}
+# logger.fWarn { xxx }  -> 替换为 {}
+# logger.error { xxx }  -> 替换为 {}
+# logger.fError { xxx } -> 替换为 {}
+# logger.exception { xxx } -> 替换为 {}
+# logger.fException { xxx } -> 替换为 {}
+# logger.debug { xxx }  -> 替换为 {}
+# logger.fDebug { xxx } -> 替换为 {}
 # addLogs(...)          -> 整行注释（多行时逐行注释）
 """
 import os
 import re
 import sys
- 
+
 LOGGER_METHODS = ['info', 'fInfo', 'warn', 'fWarn', 'error',
                   'fError', 'exception', 'fException', 'debug', 'fDebug']
- 
+
 FUNCTION_CALLS_TO_REPLACE = ['addLogs']
- 
+
 def is_function_declaration(lines, line_idx, col_idx, func_name):
-    """
-    判断当前匹配位置是否属于函数声明（前面有 fun 关键字）
-    """
     line = lines[line_idx]
     before = line[:col_idx]
     if re.search(r'\bfun\s+\w*\s*$', before):
         return True
     return False
- 
-def is_lambda_expression(lines, start_line_idx, start_col_idx):
+
+def find_expression_end(lines, start_line_idx, start_col_idx):
     """
-    判断logger调用是否是lambda表达式形式（logger.info { ... }）
-    """
-    line = lines[start_line_idx]
- 
-    for method in LOGGER_METHODS:
-        pattern = fr'logger\.{method}\b'
-        match = re.search(pattern, line[start_col_idx:])
-        if match:
-            after_method = line[start_col_idx + match.end():].strip()
-            index = 0
-            paren_count = 0
-            while index < len(after_method):
-                char = after_method[index]
-                if char == '(':
-                    paren_count += 1
-                elif char == ')':
-                    paren_count -= 1
-                elif char == '{' and paren_count == 0:
-                    return True
-                elif not char.isspace() and paren_count == 0:
-                    return False
-                index += 1
- 
-            if start_line_idx + 1 < len(lines):
-                next_line = lines[start_line_idx + 1].strip()
-                if next_line.startswith('{'):
-                    return True
-    return False
- 
-def find_expression_end(lines, start_line_idx, start_col_idx, is_lambda):
-    """
-    找到表达式结束的位置（用于多行调用时确定范围）
+    找到从 logger.method 之后开始的表达式结束位置（适用于各种形式）
+    返回 (line_idx, col_idx) 指向结束括号/花括号
     """
     line_idx = start_line_idx
     col_idx = start_col_idx
- 
+
     paren_count = 0
     brace_count = 0
     in_string = False
     string_char = None
     escape = False
- 
-    # 定位到 logger.method 之后
+
+    # 定位到 logger.method 之后（即第一个非标识符字符处）
     for method in LOGGER_METHODS:
         pattern = fr'logger\.{method}\b'
         match = re.search(pattern, lines[line_idx][col_idx:])
         if match:
             col_idx = col_idx + match.start()
             break
- 
+
     for i in range(line_idx, len(lines)):
         current_line = lines[i]
         start_pos = col_idx if i == line_idx else 0
- 
+
         for j in range(start_pos, len(current_line)):
             char = current_line[j]
- 
+
             if escape:
                 escape = False
                 continue
             if char == '\\':
                 escape = True
                 continue
- 
+
             if not in_string:
                 if char == '(':
                     paren_count += 1
                 elif char == ')':
                     paren_count -= 1
-                    if not is_lambda and paren_count == 0 and brace_count == 0:
+                    if paren_count == 0 and brace_count == 0:
                         return i, j
                 elif char == '{':
                     brace_count += 1
-                    if is_lambda and brace_count == 1:
-                        paren_count = 0
                 elif char == '}':
                     brace_count -= 1
-                    if brace_count == 0 and (not is_lambda or (is_lambda and paren_count == 0)):
+                    if brace_count == 0 and paren_count == 0:
                         return i, j
                 elif char in ('"', "'"):
                     in_string = True
@@ -131,9 +96,9 @@ def find_expression_end(lines, start_line_idx, start_col_idx, is_lambda):
                     in_string = False
                     string_char = None
         col_idx = 0
- 
+
     return len(lines) - 1, len(lines[-1]) - 1
- 
+
 def comment_out_lines(new_lines, lines, start_idx, end_idx):
     """将指定范围的行注释掉，保留缩进"""
     for idx in range(start_idx, end_idx + 1):
@@ -148,20 +113,20 @@ def comment_out_lines(new_lines, lines, start_idx, end_idx):
                 new_lines.append('//' + comment_line)
         else:
             new_lines.append(comment_line)
- 
+
 def process_file(filepath):
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             lines = f.readlines()
- 
+
         modified = False
         new_lines = []
         i = 0
- 
+
         while i < len(lines):
             line = lines[i]
             should_comment = False
- 
+
             # 检查需要整行注释的导入和声明
             if re.search(r'^\s*import\s+io\.github\.oshai\.kotlinlogging\.KotlinLogging', line):
                 should_comment = True
@@ -175,17 +140,16 @@ def process_file(filepath):
                 should_comment = True
             elif re.search(r'\bandroidLogger\b', line):
                 should_comment = True
- 
+
             # 检查 logger 方法调用
             has_logger_call = False
             for method in LOGGER_METHODS:
                 if re.search(fr'\blogger\.{method}\b', line):
                     has_logger_call = True
                     break
- 
+
             # 检查 addLogs 调用（排除函数声明）
             has_function_call = False
-            matched_func = None
             match_pos = -1
             for func in FUNCTION_CALLS_TO_REPLACE:
                 pattern = fr'\b{func}\s*\('
@@ -193,10 +157,9 @@ def process_file(filepath):
                 if match:
                     if not is_function_declaration(lines, i, match.start(), func):
                         has_function_call = True
-                        matched_func = func
                         match_pos = match.start()
                         break
- 
+
             if should_comment and not line.strip().startswith('//'):
                 indent_match = re.match(r'^(\s*)', line)
                 if indent_match:
@@ -207,106 +170,80 @@ def process_file(filepath):
                     new_lines.append('//' + line)
                 modified = True
                 i += 1
- 
+
             elif has_logger_call:
+                # 找到具体匹配的 logger 方法
                 match = None
                 for method in LOGGER_METHODS:
                     pattern = fr'\blogger\.{method}\b'
                     match = re.search(pattern, line)
                     if match:
                         break
- 
+
                 if match:
                     start_line_idx = i
                     start_col_idx = match.start()
-                    is_lambda = is_lambda_expression(lines, start_line_idx, start_col_idx)
- 
+
+                    # 统一查找表达式结束位置
                     end_line_idx, end_col_idx = find_expression_end(
-                        lines, start_line_idx, start_col_idx, is_lambda
+                        lines, start_line_idx, start_col_idx
                     )
- 
-                    # ================== 修改点 ==================
-                    if is_lambda:
-                        # Lambda 形式：替换为 logger.method {} ，保留表达式的完整性
-                        # 获取方法名
-                        method_name = None
-                        for method in LOGGER_METHODS:
-                            m = re.search(fr'\blogger\.{method}\b', lines[start_line_idx][start_col_idx:])
-                            if m:
-                                method_name = method
-                                break
-                        if method_name is None:
-                            # 理论上不会发生，为安全起见直接保留原行
-                            new_lines.append(lines[i])
-                            i += 1
-                            continue
- 
-                        replacement = 'logger.' + method_name + ' {}'
-                        before = lines[start_line_idx][:start_col_idx]
-                        after = lines[end_line_idx][end_col_idx+1:] if end_col_idx+1 < len(lines[end_line_idx]) else ''
-                        new_line = before + replacement + after
-                        new_lines.append(new_line)
-                        modified = True
-                        i = end_line_idx + 1
-                    else:
-                        # 非 Lambda 形式（如 logger.info("msg")）：替换为 {}
-                        if start_line_idx == end_line_idx:
-                            before_logger = lines[start_line_idx][:start_col_idx]
-                            after_logger = lines[start_line_idx][end_col_idx+1:]
-                            new_line = before_logger + '{}' + after_logger
-                            new_lines.append(new_line)
-                            i += 1
-                        else:
-                            # 多行非 lambda 极少见，也直接注释（为了简洁，也改为替换为 {} 可能更好，但暂保留原逻辑）
-                            comment_out_lines(new_lines, lines, start_line_idx, end_line_idx)
-                            i = end_line_idx + 1
-                        modified = True
+
+                    # 构造替换行：将整个 logger.method(...) 或 logger.method {...} 替换为 {}
+                    before = lines[start_line_idx][:start_col_idx]
+                    after = lines[end_line_idx][end_col_idx + 1:] if end_col_idx + 1 < len(lines[end_line_idx]) else ''
+                    # 去掉 after 末尾可能原有的换行符，后续统一加回
+                    if after.endswith('\n'):
+                        after = after[:-1]
+                    replacement = before + '{}' + after
+                    new_lines.append(replacement + '\n')
+                    modified = True
+                    i = end_line_idx + 1   # 跳过表达式占用的剩余行
                 else:
                     new_lines.append(line)
                     i += 1
- 
+
             elif has_function_call:
                 start_line_idx = i
                 start_col_idx = match_pos
-                is_lambda = False
+                # 对于 addLogs 直接注释
                 end_line_idx, end_col_idx = find_expression_end(
-                    lines, start_line_idx, start_col_idx, is_lambda
+                    lines, start_line_idx, start_col_idx
                 )
-                # addLogs 一律注释，避免语法干扰
                 comment_out_lines(new_lines, lines, start_line_idx, end_line_idx)
                 modified = True
                 i = end_line_idx + 1
- 
+
             else:
                 new_lines.append(line)
                 i += 1
- 
+
         if modified:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.writelines(new_lines)
             return True
         return False
- 
+
     except Exception as e:
         print(f"处理文件 {filepath} 时出错: {e}")
         import traceback
         traceback.print_exc()
         return False
- 
+
 def main():
     if len(sys.argv) != 2:
         print("用法: python comment_logger.py <项目根目录>")
         sys.exit(1)
- 
+
     root_dir = sys.argv[1]
     if not os.path.isdir(root_dir):
         print(f"错误: 目录不存在: {root_dir}")
         sys.exit(1)
- 
+
     print(f"开始处理目录: {root_dir}")
     processed_count = 0
     error_count = 0
- 
+
     for root, dirs, files in os.walk(root_dir):
         if 'build' in dirs:
             dirs.remove('build')
@@ -320,8 +257,8 @@ def main():
                 except Exception as e:
                     error_count += 1
                     print(f"处理失败: {filepath} - {e}")
- 
+
     print(f"\n处理完成! 成功: {processed_count}, 失败: {error_count}")
- 
+
 if __name__ == "__main__":
     main()
