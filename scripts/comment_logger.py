@@ -2,26 +2,26 @@
 # -*- coding: utf-8 -*-
 """
 注释日志工具
-用于注释掉Kotlin项目中特定的日志相关代码，并将logger方法调用替换为空操作
+用于注释掉Kotlin项目中特定的日志相关代码，并将logger方法调用替换为空操作(Unit)
 对于函数的处理，可以正确识别函数整体，处理多行情况
-主要注释以下内容：
-# import io.github.oshai.kotlinlogging.KotlinLogging
-# import dev.aaa1115910.bv.util.fInfo
-# KotlinLogging.logger
-# logger("BvVideoPlayer")
-# logger("BvPlayer")
-# androidLogger
-# logger.info { xxx }   -> 替换为 {}
-# logger.fInfo { xxx }  -> 替换为 {}
-# logger.warn { xxx }   -> 替换为 {}
-# logger.fWarn { xxx }  -> 替换为 {}
-# logger.error { xxx }  -> 替换为 {}
-# logger.fError { xxx } -> 替换为 {}
-# logger.exception { xxx } -> 替换为 {}
-# logger.fException { xxx } -> 替换为 {}
-# logger.debug { xxx }  -> 替换为 {}
-# logger.fDebug { xxx } -> 替换为 {}
-# addLogs(...)          -> 整行注释（多行时逐行注释）
+主要处理以下内容：
+# import io.github.oshai.kotlinlogging.KotlinLogging      -> 注释
+# import dev.aaa1115910.bv.util.fInfo                      -> 注释
+# KotlinLogging.logger                                     -> 注释
+# logger("BvVideoPlayer")                                  -> 注释
+# logger("BvPlayer")                                       -> 注释
+# androidLogger                                            -> 注释
+# logger.info { xxx }   替换为 Unit
+# logger.fInfo { xxx }  替换为 Unit
+# logger.warn { xxx }   替换为 Unit
+# logger.fWarn { xxx }  替换为 Unit
+# logger.error { xxx }  替换为 Unit
+# logger.fError { xxx } 替换为 Unit
+# logger.exception { xxx }  替换为 Unit
+# logger.fException { xxx } 替换为 Unit
+# logger.debug { xxx }  替换为 Unit
+# logger.fDebug { xxx } 替换为 Unit
+# addLogs(...)          替换为 Unit
 """
 import os
 import re
@@ -33,16 +33,49 @@ LOGGER_METHODS = ['info', 'fInfo', 'warn', 'fWarn', 'error',
 FUNCTION_CALLS_TO_REPLACE = ['addLogs']
 
 def is_function_declaration(lines, line_idx, col_idx, func_name):
+    """
+    判断当前匹配位置是否属于函数声明（前面有 fun 关键字）
+    """
     line = lines[line_idx]
     before = line[:col_idx]
     if re.search(r'\bfun\s+\w*\s*$', before):
         return True
     return False
 
-def find_expression_end(lines, start_line_idx, start_col_idx):
+def is_lambda_expression(lines, start_line_idx, start_col_idx):
     """
-    找到从 logger.method 之后开始的表达式结束位置（适用于各种形式）
-    返回 (line_idx, col_idx) 指向结束括号/花括号
+    判断logger调用是否是lambda表达式形式（logger.info { ... }）
+    """
+    line = lines[start_line_idx]
+
+    for method in LOGGER_METHODS:
+        pattern = fr'logger\.{method}\b'
+        match = re.search(pattern, line[start_col_idx:])
+        if match:
+            after_method = line[start_col_idx + match.end():].strip()
+            index = 0
+            paren_count = 0
+            while index < len(after_method):
+                char = after_method[index]
+                if char == '(':
+                    paren_count += 1
+                elif char == ')':
+                    paren_count -= 1
+                elif char == '{' and paren_count == 0:
+                    return True
+                elif not char.isspace() and paren_count == 0:
+                    return False
+                index += 1
+
+            if start_line_idx + 1 < len(lines):
+                next_line = lines[start_line_idx + 1].strip()
+                if next_line.startswith('{'):
+                    return True
+    return False
+
+def find_expression_end(lines, start_line_idx, start_col_idx, is_lambda):
+    """
+    找到表达式结束的位置（用于多行调用时确定范围）
     """
     line_idx = start_line_idx
     col_idx = start_col_idx
@@ -53,7 +86,7 @@ def find_expression_end(lines, start_line_idx, start_col_idx):
     string_char = None
     escape = False
 
-    # 定位到 logger.method 之后（即第一个非标识符字符处）
+    # 定位到 logger.method 之后
     for method in LOGGER_METHODS:
         pattern = fr'logger\.{method}\b'
         match = re.search(pattern, lines[line_idx][col_idx:])
@@ -80,13 +113,15 @@ def find_expression_end(lines, start_line_idx, start_col_idx):
                     paren_count += 1
                 elif char == ')':
                     paren_count -= 1
-                    if paren_count == 0 and brace_count == 0:
+                    if not is_lambda and paren_count == 0 and brace_count == 0:
                         return i, j
                 elif char == '{':
                     brace_count += 1
+                    if is_lambda and brace_count == 1:
+                        paren_count = 0
                 elif char == '}':
                     brace_count -= 1
-                    if brace_count == 0 and paren_count == 0:
+                    if brace_count == 0 and (not is_lambda or (is_lambda and paren_count == 0)):
                         return i, j
                 elif char in ('"', "'"):
                     in_string = True
@@ -98,21 +133,6 @@ def find_expression_end(lines, start_line_idx, start_col_idx):
         col_idx = 0
 
     return len(lines) - 1, len(lines[-1]) - 1
-
-def comment_out_lines(new_lines, lines, start_idx, end_idx):
-    """将指定范围的行注释掉，保留缩进"""
-    for idx in range(start_idx, end_idx + 1):
-        comment_line = lines[idx]
-        if not comment_line.strip().startswith('//'):
-            indent_match = re.match(r'^(\s*)', comment_line)
-            if indent_match:
-                indent = indent_match.group(1)
-                rest = comment_line[len(indent):].rstrip('\n')
-                new_lines.append(indent + '//' + rest + '\n')
-            else:
-                new_lines.append('//' + comment_line)
-        else:
-            new_lines.append(comment_line)
 
 def process_file(filepath):
     try:
@@ -150,6 +170,7 @@ def process_file(filepath):
 
             # 检查 addLogs 调用（排除函数声明）
             has_function_call = False
+            matched_func = None
             match_pos = -1
             for func in FUNCTION_CALLS_TO_REPLACE:
                 pattern = fr'\b{func}\s*\('
@@ -157,6 +178,7 @@ def process_file(filepath):
                 if match:
                     if not is_function_declaration(lines, i, match.start(), func):
                         has_function_call = True
+                        matched_func = func
                         match_pos = match.start()
                         break
 
@@ -172,7 +194,6 @@ def process_file(filepath):
                 i += 1
 
             elif has_logger_call:
-                # 找到具体匹配的 logger 方法
                 match = None
                 for method in LOGGER_METHODS:
                     pattern = fr'\blogger\.{method}\b'
@@ -183,22 +204,20 @@ def process_file(filepath):
                 if match:
                     start_line_idx = i
                     start_col_idx = match.start()
+                    is_lambda = is_lambda_expression(lines, start_line_idx, start_col_idx)
 
-                    # 统一查找表达式结束位置
                     end_line_idx, end_col_idx = find_expression_end(
-                        lines, start_line_idx, start_col_idx
+                        lines, start_line_idx, start_col_idx, is_lambda
                     )
 
-                    # 构造替换行：将整个 logger.method(...) 或 logger.method {...} 替换为 {}
-                    before = lines[start_line_idx][:start_col_idx]
-                    after = lines[end_line_idx][end_col_idx + 1:] if end_col_idx + 1 < len(lines[end_line_idx]) else ''
-                    # 去掉 after 末尾可能原有的换行符，后续统一加回
-                    if after.endswith('\n'):
-                        after = after[:-1]
-                    replacement = before + '{}' + after
-                    new_lines.append(replacement + '\n')
+                    # 整个调用替换为 Unit，保留前后代码和缩进
+                    first_line = lines[start_line_idx]
+                    before = first_line[:start_col_idx]
+                    after_last = lines[end_line_idx][end_col_idx+1:]
+                    new_line = before + "Unit" + after_last
+                    new_lines.append(new_line)
                     modified = True
-                    i = end_line_idx + 1   # 跳过表达式占用的剩余行
+                    i = end_line_idx + 1
                 else:
                     new_lines.append(line)
                     i += 1
@@ -206,11 +225,17 @@ def process_file(filepath):
             elif has_function_call:
                 start_line_idx = i
                 start_col_idx = match_pos
-                # 对于 addLogs 直接注释
+                is_lambda = False
                 end_line_idx, end_col_idx = find_expression_end(
-                    lines, start_line_idx, start_col_idx
+                    lines, start_line_idx, start_col_idx, is_lambda
                 )
-                comment_out_lines(new_lines, lines, start_line_idx, end_line_idx)
+
+                # addLogs 调用也替换为 Unit，避免破坏控制流结构
+                first_line = lines[start_line_idx]
+                before = first_line[:start_col_idx]
+                after_last = lines[end_line_idx][end_col_idx+1:]
+                new_line = before + "Unit" + after_last
+                new_lines.append(new_line)
                 modified = True
                 i = end_line_idx + 1
 
