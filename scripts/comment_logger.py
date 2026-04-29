@@ -2,26 +2,28 @@
 # -*- coding: utf-8 -*-
 """
 注释日志工具
-用于注释掉Kotlin项目中特定的日志相关代码，并将logger方法调用替换为空操作(Unit)
+用于注释掉Kotlin项目中特定的日志相关代码，并将logger方法调用替换为空操作
 对于函数的处理，可以正确识别函数整体，处理多行情况
-主要处理以下内容：
-# import io.github.oshai.kotlinlogging.KotlinLogging      -> 注释
-# import dev.aaa1115910.bv.util.fInfo                      -> 注释
-# KotlinLogging.logger                                     -> 注释
-# logger("BvVideoPlayer")                                  -> 注释
-# logger("BvPlayer")                                       -> 注释
-# androidLogger                                            -> 注释
-# logger.info { xxx }   替换为 Unit
-# logger.fInfo { xxx }  替换为 Unit
-# logger.warn { xxx }   替换为 Unit
-# logger.fWarn { xxx }  替换为 Unit
-# logger.error { xxx }  替换为 Unit
-# logger.fError { xxx } 替换为 Unit
-# logger.exception { xxx }  替换为 Unit
-# logger.fException { xxx } 替换为 Unit
-# logger.debug { xxx }  替换为 Unit
-# logger.fDebug { xxx } 替换为 Unit
-# addLogs(...)          替换为 Unit
+主要注释以下内容：
+# import io.github.oshai.kotlinlogging.KotlinLogging
+# import dev.aaa1115910.bv.util.fInfo
+# KotlinLogging.logger
+# logger("BvVideoPlayer")
+# logger("BvPlayer")
+# androidLogger
+# logger.info { xxx }   -> 整行注释（非 when 分支）
+# logger.fInfo { xxx }  -> 整行注释（非 when 分支）
+# logger.warn { xxx }   -> 整行注释（非 when 分支）
+# logger.fWarn { xxx }  -> 整行注释（非 when 分支）
+# logger.error { xxx }  -> 整行注释（非 when 分支）
+# logger.fError { xxx } -> 整行注释（非 when 分支）
+# logger.exception { xxx } -> 整行注释（非 when 分支）
+# logger.fException { xxx } -> 整行注释（非 when 分支）
+# logger.debug { xxx }  -> 整行注释（非 when 分支）
+# logger.fDebug { xxx } -> 整行注释（非 when 分支）
+# addLogs(...)          -> 整行注释（非 when 分支）
+#
+# 当以上调用处于 when 分支时（-> 之后），替换为 kotlin.Unit 保证分支完整
 """
 import os
 import re
@@ -32,6 +34,7 @@ LOGGER_METHODS = ['info', 'fInfo', 'warn', 'fWarn', 'error',
 
 FUNCTION_CALLS_TO_REPLACE = ['addLogs']
 
+
 def is_function_declaration(lines, line_idx, col_idx, func_name):
     """
     判断当前匹配位置是否属于函数声明（前面有 fun 关键字）
@@ -41,6 +44,7 @@ def is_function_declaration(lines, line_idx, col_idx, func_name):
     if re.search(r'\bfun\s+\w*\s*$', before):
         return True
     return False
+
 
 def is_lambda_expression(lines, start_line_idx, start_col_idx):
     """
@@ -72,6 +76,7 @@ def is_lambda_expression(lines, start_line_idx, start_col_idx):
                 if next_line.startswith('{'):
                     return True
     return False
+
 
 def find_expression_end(lines, start_line_idx, start_col_idx, is_lambda):
     """
@@ -133,6 +138,28 @@ def find_expression_end(lines, start_line_idx, start_col_idx, is_lambda):
         col_idx = 0
 
     return len(lines) - 1, len(lines[-1]) - 1
+
+
+def comment_out_lines(new_lines, lines, start_idx, end_idx):
+    """将指定范围的行注释掉，保留缩进"""
+    for idx in range(start_idx, end_idx + 1):
+        comment_line = lines[idx]
+        if not comment_line.strip().startswith('//'):
+            indent_match = re.match(r'^(\s*)', comment_line)
+            if indent_match:
+                indent = indent_match.group(1)
+                rest = comment_line[len(indent):].rstrip('\n')
+                new_lines.append(indent + '//' + rest + '\n')
+            else:
+                new_lines.append('//' + comment_line)
+        else:
+            new_lines.append(comment_line)
+
+
+def is_when_branch(line_before):
+    """判断代码是否位于 when 分支的 -> 之后"""
+    return bool(re.search(r'->\s*$', line_before))
+
 
 def process_file(filepath):
     try:
@@ -204,20 +231,44 @@ def process_file(filepath):
                 if match:
                     start_line_idx = i
                     start_col_idx = match.start()
-                    is_lambda = is_lambda_expression(lines, start_line_idx, start_col_idx)
 
-                    end_line_idx, end_col_idx = find_expression_end(
-                        lines, start_line_idx, start_col_idx, is_lambda
-                    )
+                    # 判断是否在 when 分支中
+                    if is_when_branch(line[:start_col_idx]):
+                        # when 分支：替换为 kotlin.Unit，保持分支完整
+                        is_lambda = is_lambda_expression(lines, start_line_idx, start_col_idx)
+                        end_line_idx, end_col_idx = find_expression_end(
+                            lines, start_line_idx, start_col_idx, is_lambda
+                        )
 
-                    # 整个调用替换为 Unit，保留前后代码和缩进
-                    first_line = lines[start_line_idx]
-                    before = first_line[:start_col_idx]
-                    after_last = lines[end_line_idx][end_col_idx+1:]
-                    new_line = before + "Unit" + after_last
-                    new_lines.append(new_line)
-                    modified = True
-                    i = end_line_idx + 1
+                        first_line = lines[start_line_idx]
+                        before = first_line[:start_col_idx]
+                        after_last = lines[end_line_idx][end_col_idx+1:]
+                        new_line = before + "kotlin.Unit" + after_last
+                        new_lines.append(new_line)
+                        modified = True
+                        i = end_line_idx + 1
+                    else:
+                        # 非 when 分支：沿用原有注释逻辑
+                        is_lambda = is_lambda_expression(lines, start_line_idx, start_col_idx)
+                        if is_lambda:
+                            end_line_idx, end_col_idx = find_expression_end(
+                                lines, start_line_idx, start_col_idx, is_lambda
+                            )
+                            comment_out_lines(new_lines, lines, start_line_idx, end_line_idx)
+                            modified = True
+                            i = end_line_idx + 1
+                        else:
+                            # 单行非 lambda 调用：注释整行
+                            if not line.strip().startswith('//'):
+                                indent_match = re.match(r'^(\s*)', line)
+                                if indent_match:
+                                    indent = indent_match.group(1)
+                                    rest = line[len(indent):].rstrip('\n')
+                                    new_lines.append(indent + '//' + rest + '\n')
+                                else:
+                                    new_lines.append('//' + line)
+                                modified = True
+                            i += 1
                 else:
                     new_lines.append(line)
                     i += 1
@@ -225,19 +276,28 @@ def process_file(filepath):
             elif has_function_call:
                 start_line_idx = i
                 start_col_idx = match_pos
-                is_lambda = False
-                end_line_idx, end_col_idx = find_expression_end(
-                    lines, start_line_idx, start_col_idx, is_lambda
-                )
 
-                # addLogs 调用也替换为 Unit，避免破坏控制流结构
-                first_line = lines[start_line_idx]
-                before = first_line[:start_col_idx]
-                after_last = lines[end_line_idx][end_col_idx+1:]
-                new_line = before + "Unit" + after_last
-                new_lines.append(new_line)
-                modified = True
-                i = end_line_idx + 1
+                # 判断是否在 when 分支中
+                if is_when_branch(line[:start_col_idx]):
+                    # when 分支：替换为 kotlin.Unit
+                    end_line_idx, end_col_idx = find_expression_end(
+                        lines, start_line_idx, start_col_idx, is_lambda=False
+                    )
+                    first_line = lines[start_line_idx]
+                    before = first_line[:start_col_idx]
+                    after_last = lines[end_line_idx][end_col_idx+1:]
+                    new_line = before + "kotlin.Unit" + after_last
+                    new_lines.append(new_line)
+                    modified = True
+                    i = end_line_idx + 1
+                else:
+                    # 非 when 分支：注释掉 addLogs 调用（多行则逐行注释）
+                    end_line_idx, end_col_idx = find_expression_end(
+                        lines, start_line_idx, start_col_idx, is_lambda=False
+                    )
+                    comment_out_lines(new_lines, lines, start_line_idx, end_line_idx)
+                    modified = True
+                    i = end_line_idx + 1
 
             else:
                 new_lines.append(line)
@@ -254,6 +314,7 @@ def process_file(filepath):
         import traceback
         traceback.print_exc()
         return False
+
 
 def main():
     if len(sys.argv) != 2:
@@ -284,6 +345,7 @@ def main():
                     print(f"处理失败: {filepath} - {e}")
 
     print(f"\n处理完成! 成功: {processed_count}, 失败: {error_count}")
+
 
 if __name__ == "__main__":
     main()
