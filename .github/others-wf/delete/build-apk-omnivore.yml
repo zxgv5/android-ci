@@ -1,0 +1,121 @@
+name: build-apk-omnivore
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: omnivore-app/omnivore
+          ref: main
+          path: omnivore_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+
+      - name: Decode keystore and create init script
+        working-directory: ./omnivore_source/android/Omnivore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          cat > init.gradle << EOF
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.plugins.hasPlugin('com.android.application')) {
+                      if (!project.android.signingConfigs.hasProperty('release')) {
+                          project.android.signingConfigs.create('release')
+                      }
+                      def releaseConfig = project.android.signingConfigs.getByName('release')
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
+                  }
+              }
+          }
+          EOF
+ 
+      - name: Patch androidmanifest and generate secrets.xml
+        working-directory: ./omnivore_source/android/Omnivore
+        run: |
+          sed -i '/<\/application>/i \    <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" android:exported="false" tools:node="merge" />' app/src/main/AndroidManifest.xml
+          mkdir -p app/src/main/res/values
+          cat > app/src/main/res/values/secrets.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="pspdfkit_license_key">unset</string>
+              <string name="posthog_client_key">unset</string>
+              <string name="posthog_instance_address">unset</string>
+              <string name="intercom_api_key">unset</string>
+              <string name="intercom_app_id">unset</string>
+          </resources>
+          EOF
+ 
+      - name: Build signed apk with init script
+        working-directory: ./omnivore_source/android/Omnivore
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon -I init.gradle
+
+      - name: List generated apk files
+        working-directory: ./omnivore_source/android/Omnivore
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
+
+      - name: Rename and move
+        working-directory: ./omnivore_source/android/Omnivore
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/omnivore-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./omnivore_source/android/Omnivore/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/omnivore-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-omnivore"
