@@ -39,14 +39,6 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
  
-      - name: Set version variables
-        id: version
-        working-directory: ./ltvlauncher_source
-        run: |
-          cat version_numbers >> $GITHUB_OUTPUT
-          export $(cat version_numbers | xargs)
-          echo "FULL_VERSION_NUMBER=$(date '+%Y.%m').$(printf '%03d' $MONTH_VERSION_NUMBER)" >> $GITHUB_OUTPUT
- 
       - name: Setup java
         uses: actions/setup-java@main
         with:
