@@ -5,7 +5,7 @@ on:
     inputs:
       version_name:
         description: "Version name (e.g. 0.1.18)"
-        default: '0.1.23'
+        default: '0.1.25'
         required: true
  
 env:
@@ -73,6 +73,15 @@ jobs:
           sed -i 's/name="player_videoshot_preview_short_edge_small">[0-9]*dp</name="player_videoshot_preview_short_edge_small">90dp</' "$VIDEOSHOT_DIMENS_FILE"
           sed -i 's/name="player_videoshot_preview_short_edge_medium">[0-9]*dp</name="player_videoshot_preview_short_edge_medium">153dp</' "$VIDEOSHOT_DIMENS_FILE"
           sed -i 's/name="player_videoshot_preview_short_edge_large">[0-9]*dp</name="player_videoshot_preview_short_edge_large">216dp</' "$VIDEOSHOT_DIMENS_FILE"
+ 
+      # 根据建议，完成下面的patch后
+      # 在大会员登录条件下，可获取会员画质
+      - name: Patch file for vip quality
+        working-directory: ./blbl_source
+        run: |
+          CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT="app/src/main/java/blbl/cat3399/core/api/video/app/AppVideoGrpcTransport.kt"
+          sed -i 's/private const val APP_MOBI_APP = "android_hd"/private const val APP_MOBI_APP = "android"/g' "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
+          cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
  
       - name: Build release apk
         working-directory: ./blbl_source
