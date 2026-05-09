@@ -2,7 +2,12 @@ name: build-apk-zsmth
 
 on:
   workflow_dispatch:
-  workflow_call:
+    inputs:
+      branch_name:
+        description: '分支'
+        required: true
+        default: 'tag-1025'
+        type: string
 
 env:
   JDK_VERSION: '21'
@@ -29,7 +34,8 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: zfdang/zSMTH-Android
-          ref: master
+          # ref: master
+          ref: '${{ inputs.branch_name }}'
           path: zsmth_source
           fetch-depth: 0
           submodules: recursive
