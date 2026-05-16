@@ -5,8 +5,8 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '21'
-  JDK_DISTRIBUTION: 'temurin'
+  JDK_VERSION: '17'
+  JDK_DISTRIBUTION: 'microsoft'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -46,10 +46,15 @@ jobs:
           sed -i '/org.gradle.java.installations.paths/d' gradle.properties
           sed -i '/org.gradle.java.installations.auto-detect/d' gradle.properties
           sed -i '/org.gradle.java.installations.auto-download/d' gradle.properties
-          echo "" >> gradle.properties
-          echo "org.gradle.toolchains.fallback.enabled=true" >> gradle.properties
           echo "=== patched gradle.properties ==="
           cat gradle.properties
+
+      - name: Patch app build.gradle.kts
+        working-directory: ./diliblay_source
+        run: |
+          sed -i '/applicationIdSuffix/s/^/\/\/ /' app/build.gradle.kts
+          echo "=== patched app/build.gradle.kts (applicationIdSuffix lines commented) ==="
+          grep -n 'applicationIdSuffix' app/build.gradle.kts || echo "No active applicationIdSuffix"
 
       - name: Generate timestamp
         run: |
@@ -94,7 +99,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew clean assembleRelease --no-daemon -I init.gradle --stacktrace
+          ./gradlew clean assemblePrivateRelease --no-daemon -I init.gradle --stacktrace
 
       - name: List generated apk files
         working-directory: ./diliblay_source
@@ -106,7 +111,13 @@ jobs:
         working-directory: ./diliblay_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
+          APK_FILE=$(find app/build/outputs -type f -name "*.apk" -path "*private*release*" | head -1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No private release APK found!"
+            exit 1
+          fi
+          echo "Found APK: $APK_FILE"
+          mv "$APK_FILE" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
