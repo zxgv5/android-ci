@@ -49,13 +49,6 @@ jobs:
           echo "=== patched gradle.properties ==="
           cat gradle.properties
 
-      - name: Patch app build.gradle.kts
-        working-directory: ./diliblay_source
-        run: |
-          sed -i '/applicationIdSuffix/s/^/\/\/ /' app/build.gradle.kts
-          echo "=== patched app/build.gradle.kts (applicationIdSuffix lines commented) ==="
-          grep -n 'applicationIdSuffix' app/build.gradle.kts || echo "No active applicationIdSuffix"
-
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
