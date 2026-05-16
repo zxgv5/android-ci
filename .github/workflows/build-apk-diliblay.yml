@@ -44,6 +44,9 @@ jobs:
         run: |
           sed -i '/org.gradle.java.home/d' gradle.properties
           sed -i '/org.gradle.java.installations.paths/d' gradle.properties
+          sed -i '/org.gradle.java.installations.auto-detect/d' gradle.properties
+          sed -i '/org.gradle.java.installations.auto-download/d' gradle.properties
+          echo "" >> gradle.properties
           echo "org.gradle.toolchains.fallback.enabled=true" >> gradle.properties
           echo "=== patched gradle.properties ==="
           cat gradle.properties
