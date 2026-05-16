@@ -43,6 +43,8 @@ jobs:
         working-directory: ./diliblay_source
         run: |
           sed -i '/org.gradle.java.home/d' gradle.properties
+          sed -i '/org.gradle.java.installations.paths/d' gradle.properties
+          echo "org.gradle.toolchains.fallback.enabled=true" >> gradle.properties
           echo "=== patched gradle.properties ==="
           cat gradle.properties
 
