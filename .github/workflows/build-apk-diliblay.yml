@@ -39,6 +39,13 @@ jobs:
         with:
           path: ci_source
 
+      - name: Patch gradle properties
+        working-directory: ./diliblay_source
+        run: |
+          sed -i '/org.gradle.java.home/d' gradle.properties
+          echo "=== patched gradle.properties ==="
+          cat gradle.properties
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
