@@ -59,6 +59,39 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
+      - name: Debug resource processing (info log)
+        working-directory: ./diliblay_source
+        run: |
+          chmod +x ./gradlew
+          echo "=== Starting resource processing for privateRelease ==="
+          ./gradlew :app:processPrivateReleaseResources --info --no-daemon --stacktrace || true
+          echo "=== Resource processing finished ==="
+
+      - name: Check R.txt for ugc_type_v2 resources
+        if: always()
+        working-directory: ./diliblay_source
+        run: |
+          echo "=== Searching for R.txt ==="
+          find . -name "R.txt" 2>/dev/null
+          R_TXT=$(find app/build -name "R.txt" 2>/dev/null | head -1)
+          if [ -f "$R_TXT" ]; then
+            echo "=== First 200 lines of $R_TXT ==="
+            head -200 "$R_TXT"
+            echo "=== Search for 'ugc_type_v2' in R.txt ==="
+            grep -i "ugc_type_v2" "$R_TXT" || echo "!!! 'ugc_type_v2' NOT FOUND in R.txt"
+          else
+            echo "!!! R.txt not generated. Resource linking likely failed."
+          fi
+
+      - name: Check BuildConfig and R.java existence
+        if: always()
+        working-directory: ./diliblay_source
+        run: |
+          echo "=== BuildConfig files ==="
+          find app/build/generated -name "BuildConfig.java" 2>/dev/null || echo "No BuildConfig found"
+          echo "=== R.java files ==="
+          find app/build/generated -name "R.java" 2>/dev/null || echo "No R.java found"
+
       - name: Decode keystore and create init script
         working-directory: ./diliblay_source
         run: |
@@ -92,7 +125,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew clean assemblePrivateRelease --no-daemon -I init.gradle --stacktrace
+          ./gradlew clean assembleRelease --no-daemon -I init.gradle --stacktrace
 
       - name: List generated apk files
         working-directory: ./diliblay_source
