@@ -59,39 +59,6 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      - name: Debug resource processing (info log)
-        working-directory: ./diliblay_source
-        run: |
-          chmod +x ./gradlew
-          echo "=== Starting resource processing for privateRelease ==="
-          ./gradlew :app:processPrivateReleaseResources --info --no-daemon --stacktrace || true
-          echo "=== Resource processing finished ==="
-
-      - name: Check R.txt for ugc_type_v2 resources
-        if: always()
-        working-directory: ./diliblay_source
-        run: |
-          echo "=== Searching for R.txt ==="
-          find . -name "R.txt" 2>/dev/null
-          R_TXT=$(find app/build -name "R.txt" 2>/dev/null | head -1)
-          if [ -f "$R_TXT" ]; then
-            echo "=== First 200 lines of $R_TXT ==="
-            head -200 "$R_TXT"
-            echo "=== Search for 'ugc_type_v2' in R.txt ==="
-            grep -i "ugc_type_v2" "$R_TXT" || echo "!!! 'ugc_type_v2' NOT FOUND in R.txt"
-          else
-            echo "!!! R.txt not generated. Resource linking likely failed."
-          fi
-
-      - name: Check BuildConfig and R.java existence
-        if: always()
-        working-directory: ./diliblay_source
-        run: |
-          echo "=== BuildConfig files ==="
-          find app/build/generated -name "BuildConfig.java" 2>/dev/null || echo "No BuildConfig found"
-          echo "=== R.java files ==="
-          find app/build/generated -name "R.java" 2>/dev/null || echo "No R.java found"
-
       - name: Decode keystore and create init script
         working-directory: ./diliblay_source
         run: |
@@ -131,19 +98,13 @@ jobs:
         working-directory: ./diliblay_source
         run: |
           echo "Listing all apk files generated:"
-          find app/build/outputs -type f -name "*.apk" | sort
+          find app/build/outputs -type f \( -iname "*.apk" -o -iname "*.aab" \) | sort
 
       - name: Rename and move
         working-directory: ./diliblay_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          APK_FILE=$(find app/build/outputs -type f -name "*.apk" -path "*private*release*" | head -1)
-          if [ -z "$APK_FILE" ]; then
-            echo "Error: No private release APK found!"
-            exit 1
-          fi
-          echo "Found APK: $APK_FILE"
-          mv "$APK_FILE" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
+          # mv "$APK_FILE" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
