@@ -104,7 +104,7 @@ jobs:
         working-directory: ./diliblay_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          # mv "$APK_FILE" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
+          mv "app/build/outputs/apk/private/release/DiliBlay"*"release.private.APK" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
