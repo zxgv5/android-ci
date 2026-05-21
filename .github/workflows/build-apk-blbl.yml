@@ -89,7 +89,7 @@ jobs:
           # 将 media3 系列依赖统一升级到 1.10.1
           sed -i 's/\(androidx\.media3:media3-[^:]*:\)[0-9.]*/\11.10.1/g' build.gradle.kts
           # 将 okhttp 升级到 5.3.2
-          # sed -i 's/\(com\.squareup\.okhttp3:okhttp:\)[0-9.]*/\15.0.0/g' build.gradle.kts
+          sed -i 's/\(com\.squareup\.okhttp3:okhttp:\)[0-9.]*/\15.0.0/g' build.gradle.kts
           # 将 minSdk 修改为 23
           sed -i 's/minSdk = 21/minSdk = 23/' build.gradle.kts
           # 将所有 io.grpc 依赖和插件版本升级到 1.73.0
