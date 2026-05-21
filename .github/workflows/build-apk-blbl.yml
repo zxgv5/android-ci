@@ -83,6 +83,16 @@ jobs:
           sed -i 's/private const val APP_MOBI_APP = "android_hd"/private const val APP_MOBI_APP = "android"/g' "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
           cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
  
+      - name: Patch file for dependencies update
+        working-directory: ./blbl_source
+        run: |
+          # 将 media3 系列依赖统一升级到 1.10.1
+          sed -i 's/\(androidx\.media3:media3-[^:]*:\)[0-9.]*/\11.10.1/g' build.gradle.kts
+          # 将 okhttp 升级到 5.3.2
+          sed -i 's/\(com\.squareup\.okhttp3:okhttp:\)[0-9.]*/\15.3.2/g' build.gradle.kts
+          # 输出修改后的相关行，便于验证
+          grep -E "androidx\.media3|okhttp" build.gradle.kts
+ 
       - name: Build release apk
         working-directory: ./blbl_source
         env:
