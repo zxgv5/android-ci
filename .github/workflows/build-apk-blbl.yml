@@ -99,13 +99,12 @@ jobs:
           sed -i 's/minSdk = 21/minSdk = 23/' app/build.gradle.kts
           # 6. 升级 gRPC 所有模块到 1.81.0
           sed -i 's/\(io\.grpc:[^:]*:\)[0-9.]*/\11.81.0/g' app/build.gradle.kts
-          # 7. 升级 AGP 到 8.13.1
-          sed -i 's/version "8\.5\.2"/version "8.13.1"/g' build.gradle.kts
+          # 7. 升级 AGP 到 9.1.0
+          sed -i 's/version "8\.5\.2"/version "9.1.0"/g' build.gradle.kts
+          sed -i 's/gradle-8\.7-bin\.zip/gradle-9.1-bin.zip/' gradle/wrapper/gradle-wrapper.properties
           # 8. 升级 protobuf 插件到 0.10.0
           sed -i 's/version "0\.9\.4"/version "0.10.0"/g' build.gradle.kts
-          # 9. 升级 Gradle wrapper 到 8.13
-          sed -i 's/gradle-8\.7-bin\.zip/gradle-8.13-bin.zip/' gradle/wrapper/gradle-wrapper.properties
-          # 10. 迁移 kotlinOptions 到 compilerOptions（Kotlin 2.3+ 要求）
+          # 9. 迁移 kotlinOptions 到 compilerOptions（Kotlin 2.3+ 要求）
           sed -i '/kotlinOptions {/,/}/c\    kotlin {\n        compilerOptions {\n            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n        }\n    }' app/build.gradle.kts
           # 验证修改
           cat build.gradle.kts
