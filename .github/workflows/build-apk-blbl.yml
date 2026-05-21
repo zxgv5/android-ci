@@ -84,19 +84,25 @@ jobs:
           cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
  
       - name: Patch file for dependencies update
-        working-directory: ./blbl_source/app
+        working-directory: ./blbl_source
         run: |
-          # 将 media3 系列依赖统一升级到 1.10.1
-          sed -i 's/\(androidx\.media3:media3-[^:]*:\)[0-9.]*/\11.10.1/g' build.gradle.kts
-          # 将 okhttp 升级到 5.3.2
-          # 暂时不兼容
-          # sed -i 's/\(com\.squareup\.okhttp3:okhttp:\)[0-9.]*/\15.3.2/g' build.gradle.kts
-          # 将 minSdk 修改为 23
-          sed -i 's/minSdk = 21/minSdk = 23/' build.gradle.kts
-          # 将所有 io.grpc 依赖和插件版本升级到 1.81.0
-          sed -i 's/\(io\.grpc:[^:]*:\)[0-9.]*/\11.81.0/g' build.gradle.kts
-          # 输出修改后的相关行，便于验证
-          grep -E "minSdk|androidx\.media3|okhttp|io\.grpc" build.gradle.kts
+          # 1. 升级 Kotlin 插件版本到 2.3.21（兼容 okhttp 5.x）
+          #    匹配常见的 id("org.jetbrains.kotlin.android") version "x.x.x" 或 kotlin("android") version "x.x.x"
+          sed -i 's/\(org\.jetbrains\.kotlin\.\(android\|jvm\)"\) version "[^"]*"/\1 version "2.3.21"/g' build.gradle.kts
+          sed -i 's/\(kotlin("android")\) version "[^"]*"/\1 version "2.3.21"/g' build.gradle.kts
+          # 2. 更新 kotlinx-coroutines 到与 Kotlin 2.0.21 兼容的版本
+          sed -i 's/\(kotlinx-coroutines-android:\)[0-9.]*/\11.9.0/g' app/build.gradle.kts
+          sed -i 's/\(kotlinx-coroutines-test:\)[0-9.]*/\11.9.0/g' app/build.gradle.kts
+          # 3. 升级 media3 到 1.11.1
+          sed -i 's/\(androidx\.media3:media3-[^:]*:\)[0-9.]*/\11.11.1/g' app/build.gradle.kts
+          # 4. 升级 okhttp 到 5.3.2（现在编译器已兼容）
+          sed -i 's/\(com\.squareup\.okhttp3:okhttp:\)[0-9.]*/\15.3.2/g' app/build.gradle.kts
+          # 5. 修改 minSdk 为 23
+          sed -i 's/minSdk = 21/minSdk = 23/' app/build.gradle.kts
+          # 6. 升级 gRPC 所有模块到 1.81.0
+          sed -i 's/\(io\.grpc:[^:]*:\)[0-9.]*/\11.81.0/g' app/build.gradle.kts
+          # 验证修改
+          cat app/build.gradle.kts
  
       - name: Build release apk
         working-directory: ./blbl_source
