@@ -87,8 +87,7 @@ jobs:
         working-directory: ./blbl_source
         run: |
           # 1. 升级 Kotlin 插件版本到 2.3.21
-          sed -i 's/\("org\.jetbrains\.kotlin\.\(android\|jvm\)"\)\) version "[^"]*"/\1 version "2.3.21"/g' build.gradle.kts
-          sed -i 's/\(kotlin("android")\)\) version "[^"]*"/\1 version "2.3.21"/g' build.gradle.kts
+          sed -i 's/id("org\.jetbrains\.kotlin\.android") version "[^"]*"/id("org.jetbrains.kotlin.android") version "2.3.21"/' build.gradle.kts
           # 2. 更新 kotlinx-coroutines 到与 Kotlin 2.3.21 兼容的版本
           sed -i 's/\(kotlinx-coroutines-android:\)[0-9.]*/\11.9.0/g' app/build.gradle.kts
           sed -i 's/\(kotlinx-coroutines-test:\)[0-9.]*/\11.9.0/g' app/build.gradle.kts
