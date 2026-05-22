@@ -88,6 +88,7 @@ jobs:
         run: |
           cp -f "${{ github.workspace }}/ci_source/patches/blbl/root.build.gradle.kts" "./build.gradle.kts"
           cp -f "${{ github.workspace }}/ci_source/patches/blbl/app.build.gradle.kts" "./app/build.gradle.kts"
+          sed -i 's/gradle-8\.7-bin\.zip/gradle-9.5.1-bin.zip/' gradle/wrapper/gradle-wrapper.properties
 
       - name: Build release apk
         working-directory: ./blbl_source
