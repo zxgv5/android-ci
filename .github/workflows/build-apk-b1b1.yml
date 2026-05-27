@@ -75,6 +75,11 @@ jobs:
           }
           EOF
 
+      - name: Patch app name
+        working-directory: ./B1b1_source
+        run: |
+          sed -i 's/rootProject.name = "MyBili"/rootProject.name = "B1b1"/' settings.gradle.kts
+
       - name: Build signed apk with init script
         working-directory: ./B1b1_source
         env:
