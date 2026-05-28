@@ -3,8 +3,13 @@ name: build-apk-blbl
 on:
   workflow_dispatch:
     inputs:
+      branch_name:
+        description: 'Brach name'
+        required: true
+        default: 'main'
+        type: string
       version_name:
-        description: "Version name (e.g. 0.1.18)"
+        description: "Version name"
         default: '0.1.26'
         required: true
  
@@ -33,7 +38,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: cat3399/blbl
-          ref: main
+          ref: '${{ inputs.branch_name }}'
           path: blbl_source
           fetch-depth: 0
           submodules: recursive
@@ -83,13 +88,21 @@ jobs:
           sed -i 's/private const val APP_MOBI_APP = "android_hd"/private const val APP_MOBI_APP = "android"/g' "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
           cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
 
+      # 试图解决5b5aceeb8d提交带来的字幕问题
+      - name: Patch file for subtitle load problem
+        working-directory: ./blbl_source
+        run: |
+          PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
+          sed -i 's/^\([ \t]*\)reloadStream(keepPosition = true)/\1\/\/ reloadStream(keepPosition = true)/' "$PLAYERACTIVITY_KT_FILE"
+          grep -n 'reloadStream' "$PLAYERACTIVITY_KT_FILE"
+
       # - name: Patch build gradle files for update dependencies
       #   working-directory: ./blbl_source
       #   run: |
       #     cp -f "${{ github.workspace }}/ci_source/patches/blbl/root.build.gradle.kts" "./build.gradle.kts"
       #     cp -f "${{ github.workspace }}/ci_source/patches/blbl/app.build.gradle.kts" "./app/build.gradle.kts"
       #     sed -i 's/gradle-8\.7-bin\.zip/gradle-9.5.1-bin.zip/' gradle/wrapper/gradle-wrapper.properties
-
+ 
       - name: Build release apk
         working-directory: ./blbl_source
         env:
