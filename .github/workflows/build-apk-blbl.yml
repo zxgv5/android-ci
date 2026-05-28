@@ -1,5 +1,5 @@
 name: build-apk-blbl
- 
+
 on:
   workflow_dispatch:
     inputs:
@@ -12,17 +12,17 @@ on:
         description: "Version name"
         default: '0.1.26'
         required: true
- 
+
 env:
   JDK_VERSION: '24'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+
 permissions:
   contents: write
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,12 +42,12 @@ jobs:
           path: blbl_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -57,7 +57,7 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
- 
+
       - name: Decode keystore
         working-directory: ./blbl_source
         run: |
@@ -69,7 +69,7 @@ jobs:
       #   working-directory: ./blbl_source
       #   run: |
       #     sed -i 's/recyclerView\.smoothScrollBy(0, dy)/recyclerView.scrollBy(0, dy)/g' app/src/main/java/blbl/cat3399/core/ui/DpadGridController.kt
- 
+
       # 调大进度条缩略图不同档位对应的窗口尺寸
       - name: Modify videoshot preview size
         working-directory: ./blbl_source
@@ -87,15 +87,15 @@ jobs:
           CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT="app/src/main/java/blbl/cat3399/core/api/video/app/AppVideoGrpcTransport.kt"
           sed -i 's/private const val APP_MOBI_APP = "android_hd"/private const val APP_MOBI_APP = "android"/g' "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
           cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
-
+ 
       # 试图解决5b5aceeb8d提交带来的字幕问题
       # - name: Patch file for subtitle load problem
       #   working-directory: ./blbl_source
       #   run: |
-          PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
+      #     PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
       #     sed -i 's/^\([ \t]*\)reloadStream(keepPosition = true)/\1\/\/ reloadStream(keepPosition = true)/' "$PLAYERACTIVITY_KT_FILE"
       #     grep -n 'reloadStream' "$PLAYERACTIVITY_KT_FILE"
-
+ 
       - name: Patch build gradle files for update dependencies
         working-directory: ./blbl_source
         run: |
