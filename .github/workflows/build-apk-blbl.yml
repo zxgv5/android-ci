@@ -1,5 +1,5 @@
 name: build-apk-blbl
-
+ 
 on:
   workflow_dispatch:
     inputs:
@@ -12,17 +12,17 @@ on:
         description: "Version name"
         default: '0.1.26'
         required: true
-
+ 
 env:
   JDK_VERSION: '24'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,12 +42,12 @@ jobs:
           path: blbl_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -57,7 +57,7 @@ jobs:
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
-
+ 
       - name: Decode keystore
         working-directory: ./blbl_source
         run: |
@@ -69,7 +69,7 @@ jobs:
       #   working-directory: ./blbl_source
       #   run: |
       #     sed -i 's/recyclerView\.smoothScrollBy(0, dy)/recyclerView.scrollBy(0, dy)/g' app/src/main/java/blbl/cat3399/core/ui/DpadGridController.kt
-
+ 
       # 调大进度条缩略图不同档位对应的窗口尺寸
       - name: Modify videoshot preview size
         working-directory: ./blbl_source
@@ -88,23 +88,23 @@ jobs:
           sed -i 's/private const val APP_MOBI_APP = "android_hd"/private const val APP_MOBI_APP = "android"/g' "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
           cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
  
-      # 试图解决5b5aceeb8d提交带来的字幕问题
-      - name: Patch file for subtitle load problem
-        working-directory: ./blbl_source
-        run: |
-          PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
-          # 修复问题1：注释掉手动加载字幕后的 reloadStream 调用，防止视频抖动
-          # 对应 startSubtitleLoad 函数中的调用
-          sed -i 's/^\([ \t]*\)reloadStream(keepPosition = true)/\1\/\/ reloadStream(keepPosition = true)/' "$PLAYERACTIVITY_KT_FILE"
-          # 修复问题2：在 loadAndEnableSubtitlesOnDemand 函数开头添加取消 Job 的逻辑
-          # 防止后台任务运行时，手动快捷键触发被阻塞或显示假状态
-          # 在函数定义行后插入 subtitleLoadJob?.cancel()
-          sed -i '/internal fun loadAndEnableSubtitlesOnDemand(exo: ExoPlayer) {/a\        subtitleLoadJob?.cancel()' "$PLAYERACTIVITY_KT_FILE"
-          # 验证修改
-          echo "=== 检查 reloadStream 是否被注释 ==="
-          grep -n "reloadStream(keepPosition = true)" "$PLAYERACTIVITY_KT_FILE" | head -5
-          echo "=== 检查 loadAndEnableSubtitlesOnDemand 是否包含 cancel 逻辑 ==="
-          grep -A 2 "internal fun loadAndEnableSubtitlesOnDemand" "$PLAYERACTIVITY_KT_FILE" | grep "subtitleLoadJob?.cancel()"
+      # 尝试解决5b5aceeb8d提交带来的字幕问题
+      # - name: Patch file for subtitle load problem
+      #   working-directory: ./blbl_source
+      #   run: |
+      #     PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
+      #     # 修复问题1：注释掉手动加载字幕后的 reloadStream 调用，防止视频抖动
+      #     # 对应 startSubtitleLoad 函数中的调用
+      #     sed -i 's/^\([ \t]*\)reloadStream(keepPosition = true)/\1\/\/ reloadStream(keepPosition = true)/' "$PLAYERACTIVITY_KT_FILE"
+      #     # 修复问题2：在 loadAndEnableSubtitlesOnDemand 函数开头添加取消 Job 的逻辑
+      #     # 防止后台任务运行时，手动快捷键触发被阻塞或显示假状态
+      #     # 在函数定义行后插入 subtitleLoadJob?.cancel()
+      #     sed -i '/internal fun loadAndEnableSubtitlesOnDemand(exo: ExoPlayer) {/a\        subtitleLoadJob?.cancel()' "$PLAYERACTIVITY_KT_FILE"
+      #     # 验证修改
+      #     echo "=== 检查 reloadStream 是否被注释 ==="
+      #     grep -n "reloadStream(keepPosition = true)" "$PLAYERACTIVITY_KT_FILE" | head -5
+      #     echo "=== 检查 loadAndEnableSubtitlesOnDemand 是否包含 cancel 逻辑 ==="
+      #     grep -A 2 "internal fun loadAndEnableSubtitlesOnDemand" "$PLAYERACTIVITY_KT_FILE" | grep "subtitleLoadJob?.cancel()"
  
       - name: Patch build gradle files for update dependencies
         working-directory: ./blbl_source
