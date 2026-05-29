@@ -31,7 +31,7 @@ jobs:
           ref: develop
           path: bv_source
           fetch-depth: 0
-          # submodules: recursive
+          submodules: recursive
  
       - name: Checkout ci source repo
         uses: actions/checkout@main
