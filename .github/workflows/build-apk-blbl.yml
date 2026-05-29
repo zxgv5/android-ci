@@ -89,12 +89,22 @@ jobs:
           cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
  
       # 试图解决5b5aceeb8d提交带来的字幕问题
-      # - name: Patch file for subtitle load problem
-      #   working-directory: ./blbl_source
-      #   run: |
-      #     PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
-      #     sed -i 's/^\([ \t]*\)reloadStream(keepPosition = true)/\1\/\/ reloadStream(keepPosition = true)/' "$PLAYERACTIVITY_KT_FILE"
-      #     grep -n 'reloadStream' "$PLAYERACTIVITY_KT_FILE"
+      - name: Patch file for subtitle load problem
+        working-directory: ./blbl_source
+        run: |
+          PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
+          # 修复问题1：注释掉手动加载字幕后的 reloadStream 调用，防止视频抖动
+          # 对应 startSubtitleLoad 函数中的调用
+          sed -i 's/^\([ \t]*\)reloadStream(keepPosition = true)/\1\/\/ reloadStream(keepPosition = true)/' "$PLAYERACTIVITY_KT_FILE"
+          # 修复问题2：在 loadAndEnableSubtitlesOnDemand 函数开头添加取消 Job 的逻辑
+          # 防止后台任务运行时，手动快捷键触发被阻塞或显示假状态
+          # 在函数定义行后插入 subtitleLoadJob?.cancel()
+          sed -i '/internal fun loadAndEnableSubtitlesOnDemand(exo: ExoPlayer) {/a\        subtitleLoadJob?.cancel()' "$PLAYERACTIVITY_KT_FILE"
+          # 验证修改
+          echo "=== 检查 reloadStream 是否被注释 ==="
+          grep -n "reloadStream(keepPosition = true)" "$PLAYERACTIVITY_KT_FILE" | head -5
+          echo "=== 检查 loadAndEnableSubtitlesOnDemand 是否包含 cancel 逻辑 ==="
+          grep -A 2 "internal fun loadAndEnableSubtitlesOnDemand" "$PLAYERACTIVITY_KT_FILE" | grep "subtitleLoadJob?.cancel()"
  
       - name: Patch build gradle files for update dependencies
         working-directory: ./blbl_source
