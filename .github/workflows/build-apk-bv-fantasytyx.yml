@@ -59,6 +59,7 @@ jobs:
           "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
 
       - name: Temp patches
+        working-directory: ./bv_source
         run: |
           rm -f bv_source/libs
           sed -i 's/^include(":libs:ffmpegDecoder")$/\/\/ &/' bv_source/settings.gradle.kts
