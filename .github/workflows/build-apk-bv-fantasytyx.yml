@@ -61,10 +61,10 @@ jobs:
       - name: Temp patches
         working-directory: ./bv_source
         run: |
-          rm -f bv_source/libs
-          sed -i 's/^include(":libs:ffmpegDecoder")$/\/\/ &/' bv_source/settings.gradle.kts
-          sed -i 's/^include(":libs:av1Decoder")$/\/\/ &/' bv_source/settings.gradle.kts
-          sed -i 's/^include(":libs:libVLC")$/\/\/ &/' bv_source/settings.gradle.kts
+          rm -f ./libs
+          sed -i 's/^include(":libs:ffmpegDecoder")$/\/\/ &/' ./settings.gradle.kts
+          sed -i 's/^include(":libs:av1Decoder")$/\/\/ &/' ./settings.gradle.kts
+          sed -i 's/^include(":libs:libVLC")$/\/\/ &/' ./settings.gradle.kts
 
       - name: Decode keystore
         working-directory: ./bv_source
