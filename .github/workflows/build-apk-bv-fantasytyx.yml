@@ -61,7 +61,7 @@ jobs:
       - name: Temp patches
         working-directory: ./bv_source
         run: |
-          rm -f ./libs
+          rm -rf ./libs
           sed -i 's/^include(":libs:ffmpegDecoder")$/\/\/ &/' ./settings.gradle.kts
           sed -i 's/^include(":libs:av1Decoder")$/\/\/ &/' ./settings.gradle.kts
           sed -i 's/^include(":libs:libVLC")$/\/\/ &/' ./settings.gradle.kts
