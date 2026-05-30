@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@main
         with:
           repository: fantasytyx/bv
-          ref: develop
+          ref: master
           path: bv_source
           fetch-depth: 0
           submodules: recursive
