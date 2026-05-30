@@ -31,7 +31,7 @@ jobs:
           ref: develop
           path: bv_source
           fetch-depth: 0
-          # submodules: recursive
+          submodules: recursive
  
       - name: Checkout ci source repo
         uses: actions/checkout@main
@@ -57,7 +57,14 @@ jobs:
         run: |
           chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
           "${{ github.workspace }}/ci_source/scripts/customize-bv-fantasy.sh"
- 
+
+      - name: Temp patches
+        run: |
+          rm -f bv_source/libs
+          sed -i 's/^include(":libs:ffmpegDecoder")$/\/\/ &/' bv_source/settings.gradle.kts
+          sed -i 's/^include(":libs:av1Decoder")$/\/\/ &/' bv_source/settings.gradle.kts
+          sed -i 's/^include(":libs:libVLC")$/\/\/ &/' bv_source/settings.gradle.kts
+
       - name: Decode keystore
         working-directory: ./bv_source
         run: |
