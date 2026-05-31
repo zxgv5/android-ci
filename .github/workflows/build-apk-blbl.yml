@@ -87,28 +87,28 @@ jobs:
           CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT="app/src/main/java/blbl/cat3399/core/api/video/app/AppVideoGrpcTransport.kt"
           sed -i 's/private const val APP_MOBI_APP = "android_hd"/private const val APP_MOBI_APP = "android"/g' "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
           cat "$CAT3399_BLBL_APPVIDEOGRPCTRANSPORT_KT"
-
+ 
       # 尝试解决5b5aceeb8d提交带来的字幕问题：1. 避免视频抖动；2. 防止快捷键加载失败
-      - name: Patch file for subtitle load problem
-        working-directory: ./blbl_source
-        run: |
-          PLAYERACTIVITYSTARTPLAYBACK_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivityStartPlayback.kt"
-          PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
-          if [ -n "$PLAYERACTIVITYSTARTPLAYBACK_KT_FILE" ]; then
-            echo "Patching $PLAYERACTIVITYSTARTPLAYBACK_KT_FILE ..."
-            # 修复问题2：防止 resetPlaybackStateForNewMedia 在字幕加载时清空状态和取消 Job
-            perl -0777 -pi -e 's/    subtitleLoadJob\?\.cancel\(\)\n    subtitleLoadJob = null\n    currentVideoDetail = null\n    subtitleAvailabilityKnown = false\n    subtitleAvailable = false\n    subtitleConfig = null\n    subtitleItems = emptyList\(\)/    if (subtitleLoadJob?.isActive != true) {\n        subtitleLoadJob?.cancel()\n        subtitleLoadJob = null\n        currentVideoDetail = null\n        subtitleAvailabilityKnown = false\n        subtitleAvailable = false\n        subtitleConfig = null\n        subtitleItems = emptyList()\n    }/g' "$PLAYERACTIVITYSTARTPLAYBACK_KT_FILE"
-          else
-            echo "Warning: PlayerActivityStartPlayback.kt not found!"
-          fi
-          if [ -n "$PLAYERACTIVITY_KT_FILE" ]; then
-            echo "Patching $PLAYERACTIVITY_KT_FILE ..."
-            # 修复问题1：优化 reloadStream 调用，避免视频流重新缓冲导致的抖动
-            perl -0777 -pi -e 's/                        reloadStream\(keepPosition = true\)/                        val currentItem = activeExo.currentMediaItem\n                        if (currentItem != null \&\& config != null) {\n                            val newMediaItem = currentItem.buildUpon().setSubtitleConfigurations(listOf(config)).build()\n                            activeExo.setMediaItem(newMediaItem, activeExo.currentPosition)\n                            activeExo.prepare()\n                        } else {\n                            reloadStream(keepPosition = true)\n                        }/g' "$PLAYERACTIVITY_KT_FILE"
-          else
-            echo "Warning: PlayerActivity.kt not found!"
-          fi
-
+      # - name: Patch file for subtitle load problem
+      #   working-directory: ./blbl_source
+      #   run: |
+      #     PLAYERACTIVITYSTARTPLAYBACK_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivityStartPlayback.kt"
+      #     PLAYERACTIVITY_KT_FILE="app/src/main/java/blbl/cat3399/feature/player/PlayerActivity.kt"
+      #     if [ -n "$PLAYERACTIVITYSTARTPLAYBACK_KT_FILE" ]; then
+      #       echo "Patching $PLAYERACTIVITYSTARTPLAYBACK_KT_FILE ..."
+      #       # 修复问题2：防止 resetPlaybackStateForNewMedia 在字幕加载时清空状态和取消 Job
+      #       perl -0777 -pi -e 's/    subtitleLoadJob\?\.cancel\(\)\n    subtitleLoadJob = null\n    currentVideoDetail = null\n    subtitleAvailabilityKnown = false\n    subtitleAvailable = false\n    subtitleConfig = null\n    subtitleItems = emptyList\(\)/    if (subtitleLoadJob?.isActive != true) {\n        subtitleLoadJob?.cancel()\n        subtitleLoadJob = null\n        currentVideoDetail = null\n        subtitleAvailabilityKnown = false\n        subtitleAvailable = false\n        subtitleConfig = null\n        subtitleItems = emptyList()\n    }/g' "$PLAYERACTIVITYSTARTPLAYBACK_KT_FILE"
+      #     else
+      #       echo "Warning: PlayerActivityStartPlayback.kt not found!"
+      #     fi
+      #     if [ -n "$PLAYERACTIVITY_KT_FILE" ]; then
+      #       echo "Patching $PLAYERACTIVITY_KT_FILE ..."
+      #       # 修复问题1：优化 reloadStream 调用，避免视频流重新缓冲导致的抖动
+      #       perl -0777 -pi -e 's/                        reloadStream\(keepPosition = true\)/                        val currentItem = activeExo.currentMediaItem\n                        if (currentItem != null \&\& config != null) {\n                            val newMediaItem = currentItem.buildUpon().setSubtitleConfigurations(listOf(config)).build()\n                            activeExo.setMediaItem(newMediaItem, activeExo.currentPosition)\n                            activeExo.prepare()\n                        } else {\n                            reloadStream(keepPosition = true)\n                        }/g' "$PLAYERACTIVITY_KT_FILE"
+      #     else
+      #       echo "Warning: PlayerActivity.kt not found!"
+      #     fi
+ 
       # 尝试解决5b5aceeb8d提交带来的字幕问题
       # - name: Patch file for subtitle load problem
       #   working-directory: ./blbl_source
