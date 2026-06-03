@@ -106,13 +106,14 @@ jobs:
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           # 不区分大小写，查找 public release APK
-          APK_FILE=$(find app/build/outputs -type f -iname "*.apk" -path "*public*release*" | head -1)
-          if [ -z "$APK_FILE" ]; then
-            echo "Error: No public release APK found!"
-            exit 1
-          fi
-          echo "Found APK: $APK_FILE"
-          mv "$APK_FILE" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
+                    # APK_FILE=$(find app/build/outputs -type f -iname "*.apk" -path "*public*release*" | head -1)
+          # if [ -z "$APK_FILE" ]; then
+          #   echo "Error: No public release APK found!"
+          #   exit 1
+          # fi
+          # echo "Found APK: $APK_FILE"
+          # mv "$APK_FILE" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
+          mv "app/build/outputs/apk/private/release/DiliBlay"*"release.private.APK" "${{ github.workspace }}/dist/diliblay-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
