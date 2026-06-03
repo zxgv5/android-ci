@@ -92,7 +92,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew clean assemblePublicRelease --no-daemon -I init.gradle --stacktrace
+          # ./gradlew clean assemblePublicRelease --no-daemon -I init.gradle --stacktrace
+          ./gradlew clean assemblePrivateRelease --no-daemon -I init.gradle --stacktrace
 
       - name: List generated apk files
         working-directory: ./diliblay_source
