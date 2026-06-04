@@ -53,15 +53,6 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "temurin"
  
-      - name: Setup python 3.12
-        uses: actions/setup-python@main
-        with:
-          python-version: '3.12'
- 
-      - name: Customize scripts
-        run: |
-          python3 "./ci_source/scripts/comment_logger.py" "./bv_source"
- 
       - name: Decode keystore
         working-directory: ./bv_source
         run: |
