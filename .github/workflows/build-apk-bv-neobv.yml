@@ -60,8 +60,7 @@ jobs:
  
       - name: Customize scripts
         run: |
-          chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
-          "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
+          python3 "./ci_source/scripts/comment_logger.py" "./bv_source"
  
       - name: Decode keystore
         working-directory: ./bv_source
