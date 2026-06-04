@@ -58,10 +58,10 @@ jobs:
         with:
           python-version: '3.12'
  
-      # - name: Customize scripts
-      #   run: |
-      #     chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
-      #     "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
+      - name: Customize scripts
+        run: |
+          chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
+          "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
  
       - name: Decode keystore
         working-directory: ./bv_source
@@ -84,6 +84,12 @@ jobs:
           chmod +x ./gradlew
           # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
           ./gradlew :app:assembleRelease 
+ 
+      - name: List generated apk files
+        working-directory: ./bv_source
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
  
       - name: Rename and move apk
         working-directory: ./bv_source
