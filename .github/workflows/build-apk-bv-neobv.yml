@@ -1,0 +1,96 @@
+name: build-apk-bv-neobv
+ 
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: '分支'
+        required: true
+        default: 'feature'
+        type: string
+ 
+env:
+  JDK_VERSION: '22'
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ 
+permissions:
+  contents: write
+ 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+ 
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: b1ackmarket/NeoBV
+          ref: '${{ inputs.branch_name }}'
+          path: bv_source
+          fetch-depth: 0
+          submodules: recursive
+ 
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+ 
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+ 
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "temurin"
+ 
+      - name: Setup python 3.12
+        uses: actions/setup-python@main
+        with:
+          python-version: '3.12'
+ 
+      # - name: Customize scripts
+      #   run: |
+      #     chmod +x "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
+      #     "${{ github.workspace }}/ci_source/scripts/customize-bv-leonwu85.sh"
+ 
+      - name: Decode keystore
+        working-directory: ./bv_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.p12
+          cat << EOF > signing.properties
+          keystore.path=keystore.p12
+          keystore.pwd=${{ secrets.KEYSTORE_PASSWORD }}
+          keystore.alias=${{ secrets.KEY_ALIAS }}
+          keystore.alias_pwd=${{ secrets.KEY_ALIAS_PASSWORD }}
+          EOF
+ 
+      - name: Build release apk
+        working-directory: ./bv_source
+        run: |
+          chmod +x ./gradlew
+          # 构建主应用的 release 变体（会生成所有 flavor 的 APK，包括 TV 和 Mobile）
+          ./gradlew :app:assembleRelease 
+ 
+      - name: Rename and move apk
+        working-directory: ./bv_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/default/release/BV"*"release_default_universal.apk" "${{ github.workspace }}/dist/neobv-${{ env.BUILD_DATE }}.apk"
+ 
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./bv_source/keystore/release.keystore"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/neobv-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-neobv"
