@@ -48,6 +48,9 @@ jobs:
           distribution: '${{ env.JDK_DISTRIBUTION }}'
           java-version: '${{ env.JDK_VERSION }}'
  
+      - name: Accept android sdk licenses
+        run: yes | ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --licenses
+ 
       # app/build.gradle.kts中，硬编码了xed.keystore和signing.properties的路径
       - name: Decode and create secrets
         run: |
