@@ -52,8 +52,10 @@ jobs:
       - name: Patch gradle-wrapper properties
         working-directory: ./diliblay_source
         run: |
-          sed -i 's/^#distributionUrl=https:/distributionUrl=https:/' gradle/wrapper/gradle-wrapper.properties
+          # 删除本地 Windows 路径配置
           sed -i '/^distributionUrl=file:\/\/\/D:/d' gradle/wrapper/gradle-wrapper.properties
+          # 取消注释官方 Gradle 发行版 URL（去掉行首的 #）
+          sed -i 's/^#distributionUrl=/distributionUrl=/' gradle/wrapper/gradle-wrapper.properties
           echo "=== Updated gradle-wrapper.properties ==="
           cat gradle/wrapper/gradle-wrapper.properties
 
