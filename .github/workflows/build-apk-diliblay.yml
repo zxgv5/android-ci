@@ -59,6 +59,14 @@ jobs:
           echo "=== Updated gradle-wrapper.properties ==="
           cat gradle/wrapper/gradle-wrapper.properties
 
+      - name: Patch settings gradle kts
+        working-directory: ./diliblay_source
+        run: |
+          # 注释所有包含 'aliyun' 的仓库行（保留缩进）
+          sed -i 's|^\(\s*\)\(maven.*aliyun.*\)|\1// \2|' settings.gradle.kts
+          echo "=== Patched settings.gradle.kts (aliyun lines commented) ==="
+          grep -E "aliyun|maven" settings.gradle.kts || echo "No aliyun/maven lines found"
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
