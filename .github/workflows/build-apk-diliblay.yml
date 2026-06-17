@@ -49,6 +49,14 @@ jobs:
           echo "=== patched gradle.properties ==="
           cat gradle.properties
 
+      - name: Patch gradle-wrapper properties
+        working-directory: ./diliblay_source
+        run: |
+          sed -i 's/^#distributionUrl=https:/distributionUrl=https:/' gradle/wrapper/gradle-wrapper.properties
+          sed -i '/^distributionUrl=file:\/\/\/D:/d' gradle/wrapper/gradle-wrapper.properties
+          echo "=== Updated gradle-wrapper.properties ==="
+          cat gradle/wrapper/gradle-wrapper.properties
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
