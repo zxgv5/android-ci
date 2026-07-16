@@ -5,7 +5,7 @@ on:
   workflow_call:
 
 env:
-  JDK_VERSION: '17'
+  JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
@@ -110,12 +110,8 @@ jobs:
         working-directory: ./mpv_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          UNIVERSAL_APK=$(find app/build/outputs -type f -name "*universal*.apk" | head -1)
-          if [ -z "$UNIVERSAL_APK" ]; then
-            echo "No universal APK found, falling back to any release APK"
-            UNIVERSAL_APK=$(find app/build/outputs -type f -name "*.apk" | head -1)
-          fi
-          mv "$UNIVERSAL_APK" "${{ github.workspace }}/dist/mpv-${{ env.BUILD_DATE }}.apk"
+          mv "app/build/outputs/apk/default/release/app-default-release.apk" "${{ github.workspace }}/dist/mpv-${{ env.BUILD_DATE }}.apk"
+          # mv "app/build/outputs/apk/api29/release/app-api29-release.apk" "${{ github.workspace }}/dist/mpv-${{ env.BUILD_DATE }}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
