@@ -59,7 +59,7 @@ jobs:
 
       - name: Apply bottom sheet patch
         working-directory: ${{ env.FLUTTER_ROOT }}
-        run: git apply $GITHUB_WORKSPACE/lib/scripts/bottom_sheet_patch.diff
+        run: git apply $GITHUB_WORKSPACE/lib/scripts/bottom_sheet_android_patch.diff
         continue-on-error: true
         
       - name: Decode and write keys
