@@ -61,6 +61,13 @@ jobs:
         working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/patch.ps1 android
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}/piliplus_source
+ 
+      - name: Apply Patch
+        working-directory: ./piliplus_source
+        shell: pwsh
+        run: lib/scripts/patch.ps1 android
  
       - name: Decode and write keys
         working-directory: ./piliplus_source
