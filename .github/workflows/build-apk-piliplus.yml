@@ -62,12 +62,7 @@ jobs:
           # 在工作区根目录创建软链接，使根目录的 lib 指向 piliplus_source/lib
           ln -s ${{ github.workspace }}/piliplus_source/lib ${{ github.workspace }}/lib
  
-      - name: Apply Patch
-        working-directory: ./piliplus_source
-        shell: pwsh
-        run: lib/scripts/patch.ps1 android
- 
-      - name: Apply Patch
+      - name: Apply patch script
         working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/patch.ps1 android
