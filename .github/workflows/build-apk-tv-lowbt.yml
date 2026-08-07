@@ -7,8 +7,6 @@ on:
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
-  ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
 permissions:
@@ -49,30 +47,59 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      # ================================================================
-      # 1. 安装 Android SDK（使用新的 cmdline-tools，不依赖旧 tools/bin/sdkmanager）
-      # ================================================================
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
+      - name: Setup Android SDK (ensure cmdline-tools available)
+        uses: android-actions/setup-android@v4
 
       # ================================================================
-      # 2. 只改 Gradle 配置，不改 Java 源码
+      # 核心：用 hiddenjar 从模拟器生成带隐藏 API 的 android.jar
       # ================================================================
-      - name: Patch project to compile against hidden APIs
+      - name: Generate hidden android.jar from emulator
+        run: |
+          set -e
+
+          # 1. 克隆 android-hidden-api 仓库（包含 hiddenjar CLI）
+          git clone --depth=1 https://github.com/anggrayudi/android-hidden-api.git android-hidden-api
+          cd android-hidden-api
+
+          # 2. 启动一个 API 34 的模拟器
+          #    使用 actions/setup-android@v4 后，cmdline-tools 和 emulator 已可用
+          echo "no" | android create avd \
+            -n hidden_api_34 \
+            -t android-34 \
+            -b x86_64 \
+            -c 2048M \
+            --device "pixel_2"
+
+          # 3. 在后台启动模拟器并等待启动完成
+          emulator -avd hidden_api_34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect &
+          EMULATOR_PID=$!
+          echo "Waiting for emulator to boot..."
+          boot_completed=""
+          for i in $(seq 1 60); do
+            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null || echo "")
+            if [ "$boot_completed" = "1" ]; then
+              echo "Emulator booted."
+              break
+            fi
+            sleep 2
+          done
+          if [ "$boot_completed" != "1" ]; then
+            echo "Emulator did not boot in time"
+            exit 1
+          fi
+
+          # 4. 用 hiddenjar 从运行中的模拟器生成隐藏 android.jar，并安装到 SDK 目录
+          ./cli/hiddenjar build --api 34 --install
+
+          # 5. 关闭模拟器
+          adb emu kill
+          kill $EMULATOR_PID || true
+
+      - name: Patch project to use compileSdk 34
         working-directory: ./tvlowbt_source
         run: |
-          # 2.1 将 compileSdk 从 31 提升到 34（BluetoothCodecConfig 等类在 API 33 才公开）
+          # 将 compileSdk 从 31 提升到 34，让 BluetoothCodecConfig 等类可见
           sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
-
-          # 2.2 在 dependencies 块追加对 android-hidden-api 的依赖
-          #     该库提供隐藏 API 的编译时签名，来自 Maven Central
-          cat >> app/build.gradle << 'EOF'
-
-          dependencies {
-              // 仅在编译时使用隐藏 API stub，不会打包进 APK
-              compileOnly 'com.anggrayudi:android-hidden-api:35.0'
-          }
-          EOF
 
       - name: Decode keystore and create init script
         working-directory: ./tvlowbt_source
