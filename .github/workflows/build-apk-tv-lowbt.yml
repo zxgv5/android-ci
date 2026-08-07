@@ -1,19 +1,19 @@
 name: build-apk-tv-lowbt
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+
 permissions:
   contents: write
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,7 +24,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
- 
+
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -33,52 +33,51 @@ jobs:
           path: tvlowbt_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
-      - name: Setup java
-        uses: actions/setup-java@main
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
- 
+
       # ================================================================
-      # 核心修复步骤：替换 SDK JAR + 升级 compileSdk
+      # 安装 Android SDK 组件（替代直接调用 sdkmanager）
       # ================================================================
-      - name: Patch project with hidden APIs
+      - name: Setup Android SDK components
+        uses: maxim-lobanov/setup-android-tools@v1
+        with:
+          packages: |
+            platforms;android-34
+            build-tools;36.0.0
+
+      # ================================================================
+      # 核心步骤：只改 Gradle 配置，不改 Java 源码
+      # ================================================================
+      - name: Patch project to compile against hidden APIs
+        working-directory: ./tvlowbt_source
         run: |
-          # 1. 定义版本和路径
-          TARGET_API=34
-          ROBOLECTRIC_VERSION="14-robolectric-10818077"
-          ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          PLATFORM_DIR="${ANDROID_SDK_ROOT}/platforms/android-${TARGET_API}"
-          JAR_NAME="android-all-${ROBOLECTRIC_VERSION}.jar"
-          
-          # 2. 确保 API 34 平台目录存在 (防止 CI 环境未预装)
-          echo "Installing Android SDK Platform ${TARGET_API}..."
-          sdkmanager "platforms;android-${TARGET_API}" > /dev/null
-          
-          # 3. 下载包含所有隐藏 API 的完整 JAR (来自 Maven Central)
-          echo "Downloading Robolectric android-all JAR..."
-          wget -q "https://repo1.maven.org/maven2/org/robolectric/android-all/${ROBOLECTRIC_VERSION}/${JAR_NAME}" -O "/tmp/${JAR_NAME}"
-          
-          # 4. 用完整 JAR 替换 SDK 目录下的 android.jar
-          #    这一步让编译器直接看到 connect/disconnect 等隐藏方法
-          echo "Replacing ${PLATFORM_DIR}/android.jar with hidden-api JAR..."
-          cp "/tmp/${JAR_NAME}" "${PLATFORM_DIR}/android.jar"
-          
-          # 5. 修改项目 compileSdk 为 34
-          #    BluetoothCodecConfig 等类在 API 31 中不存在，必须升级
-          echo "Patching app/build.gradle to compileSdk 34..."
-          sed -i 's/compileSdk [0-9]\+/compileSdk 34/' tvlowbt_source/app/build.gradle
- 
+          # 1. 将 compileSdk 从 31 提升到 34，否则 BluetoothCodecConfig 等类根本不存在
+          sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
+
+          # 2. 在 dependencies 块末尾追加对 android-hidden-api 的依赖
+          #    这个库在 Maven Central 上，提供隐藏 API 的签名，用于编译期解析符号
+          cat >> app/build.gradle << 'EOF'
+
+          dependencies {
+              // 仅在编译时使用隐藏 API stub，不会打包进 APK
+              compileOnly 'com.anggrayudi:android-hidden-api:35.0'
+          }
+          EOF
+
       - name: Decode keystore and create init script
         working-directory: ./tvlowbt_source
         run: |
@@ -104,8 +103,8 @@ jobs:
               }
           }
           EOF
- 
-      - name: Build signed apk with init script
+
+      - name: Build signed APK
         working-directory: ./tvlowbt_source
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -113,19 +112,19 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -I init.gradle
- 
-      - name: List generated apk files
+
+      - name: List generated APK files
         working-directory: ./tvlowbt_source
         run: |
-          echo "Listing all apk files generated:"
+          echo "Listing all APK files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
- 
-      - name: Rename and move
+
+      - name: Rename and move APK
         working-directory: ./tvlowbt_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/tv-lowbt-${{ env.BUILD_DATE }}.apk"
- 
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
