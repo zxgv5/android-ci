@@ -50,40 +50,34 @@ jobs:
           distribution: "${{ env.JDK_DISTRIBUTION }}"
  
       # ================================================================
-      # 核心：在 CI 中替换 SDK 的 android.jar 为包含隐藏 API 的版本
+      # 核心修复步骤：替换 SDK JAR + 升级 compileSdk
       # ================================================================
-      - name: Install hidden-API android.jar for compilation
+      - name: Patch project with hidden APIs
         run: |
-          # 1. 确定目标 API level 和 SDK 目录
-          TARGET_API="34"
+          # 1. 定义版本和路径
+          TARGET_API=34
+          ROBOLECTRIC_VERSION="14-robolectric-10818077"
           ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          ANDROID_PLATFORM_DIR="${ANDROID_SDK_ROOT}/platforms/android-${TARGET_API}"
-          ANDROID_JAR="${ANDROID_PLATFORM_DIR}/android.jar"
+          PLATFORM_DIR="${ANDROID_SDK_ROOT}/platforms/android-${TARGET_API}"
+          JAR_NAME="android-all-${ROBOLECTRIC_VERSION}.jar"
           
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
-          echo "ANDROID_JAR=${ANDROID_JAR}"
+          # 2. 确保 API 34 平台目录存在 (防止 CI 环境未预装)
+          echo "Installing Android SDK Platform ${TARGET_API}..."
+          sdkmanager "platforms;android-${TARGET_API}" > /dev/null
           
-          # 2. 确保 platforms/android-34 目录存在（通常 GitHub Actions 镜像已经存在）
-          mkdir -p "${ANDROID_PLATFORM_DIR}"
+          # 3. 下载包含所有隐藏 API 的完整 JAR (来自 Maven Central)
+          echo "Downloading Robolectric android-all JAR..."
+          wget -q "https://repo1.maven.org/maven2/org/robolectric/android-all/${ROBOLECTRIC_VERSION}/${JAR_NAME}" -O "/tmp/${JAR_NAME}"
           
-          # 3. 下载带隐藏 API 的 android.jar
-          #    这里使用 anggrayudi/android-hidden-api 提供的预编译 JAR（对应 API 34）
-          HIDDEN_ANDROID_JAR_URL="https://github.com/anggrayudi/android-hidden-api/releases/download/v1.0/android-34-hidden.jar"
-          echo "Downloading hidden android.jar from ${HIDDEN_ANDROID_JAR_URL}"
-          wget -q "${HIDDEN_ANDROID_JAR_URL}" -O "/tmp/android-34-hidden.jar"
+          # 4. 用完整 JAR 替换 SDK 目录下的 android.jar
+          #    这一步让编译器直接看到 connect/disconnect 等隐藏方法
+          echo "Replacing ${PLATFORM_DIR}/android.jar with hidden-api JAR..."
+          cp "/tmp/${JAR_NAME}" "${PLATFORM_DIR}/android.jar"
           
-          # 4. 备份原有的 android.jar（如果有）
-          if [ -f "${ANDROID_JAR}" ]; then
-            echo "Backing up original android.jar to ${ANDROID_JAR}.orig"
-            mv "${ANDROID_JAR}" "${ANDROID_JAR}.orig"
-          fi
-          
-          # 5. 用隐藏 API 版本替换
-          cp "/tmp/android-34-hidden.jar" "${ANDROID_JAR}"
-          echo "Replaced ${ANDROID_JAR} with hidden-api enabled version."
-          
-          # 6. （可选）验证文件存在
-          ls -l "${ANDROID_JAR}"
+          # 5. 修改项目 compileSdk 为 34
+          #    BluetoothCodecConfig 等类在 API 31 中不存在，必须升级
+          echo "Patching app/build.gradle to compileSdk 34..."
+          sed -i 's/compileSdk [0-9]\+/compileSdk 34/' tvlowbt_source/app/build.gradle
  
       - name: Decode keystore and create init script
         working-directory: ./tvlowbt_source
