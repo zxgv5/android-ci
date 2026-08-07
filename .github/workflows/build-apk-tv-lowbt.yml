@@ -49,28 +49,32 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
  
+      # ======================================================================
+      # 核心修复步骤：动态修补项目以支持隐藏 API
+      # ======================================================================
       - name: Patch project for hidden APIs
         working-directory: ./tvlowbt_source
         run: |
           # 1. 提升 compileSdk 以支持新的公开 API (BluetoothCodecConfig 等)
+          #    使用 sed 将 compileSdk 后的数字替换为 34
           sed -i 's/compileSdk [0-9]\+/compileSdk 34/' app/build.gradle
+
           # 2. 下载包含隐藏 API 的 Robolectric android-all.jar (对应 Android 14 / SDK 34)
-          # 该 JAR 包含了 BluetoothA2dp.connect 等隐藏方法
-          ROBOLECTRIC_JAR="android-all-14-robolectric-8910999.jar"
-          wget -q "https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-8910999/${ROBOLECTRIC_JAR}" -O ./${ROBOLECTRIC_JAR}
+          #    注意：版本号必须是 Maven Central 上存在的正确版本 (10818077)
+          ROBOLECTRIC_JAR="android-all-14-robolectric-10818077.jar"
+          wget -q "https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/${ROBOLECTRIC_JAR}" -O "./${ROBOLECTRIC_JAR}"
+
           # 3. 在 app/build.gradle 末尾注入配置，强制使用该 JAR 作为启动类路径
-          # 这会让编译器优先从这里加载类，从而“看到”隐藏的 API 方法
+          #    这会让编译器优先从这里加载类，从而“看到"隐藏的 API 方法
+          #    注意：使用 cat >> ... << 'EOF' 避免 shell 引号转义问题
           cat >> app/build.gradle << 'EOF'
+
           // 强制 Java 编译任务使用包含隐藏 API 的 JAR
           tasks.withType(JavaCompile).configureEach {
-              options.bootstrapClasspath = files("${rootProject.projectDir}/${ROBOLECTRIC_JAR}")
+              options.bootstrapClasspath = files("${rootProject.projectDir}/android-all-14-robolectric-10818077.jar")
           }
           EOF
-          # 注意：不再需要创建 sdk-patch 模块，因为我们直接替换了核心库
-
-      # ======================================================================
-      # 原有步骤：解码密钥并创建初始化脚本
-      # ======================================================================
+ 
       - name: Decode keystore and create init script
         working-directory: ./tvlowbt_source
         run: |
