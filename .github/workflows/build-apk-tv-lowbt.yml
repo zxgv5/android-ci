@@ -1,19 +1,19 @@
 name: build-apk-tv-lowbt
-
+ 
 on:
   workflow_dispatch:
   workflow_call:
-
+ 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   ANDROID_COMPILE_SDK: '36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,7 +24,7 @@ jobs:
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -33,22 +33,108 @@ jobs:
           path: tvlowbt_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
+ 
+      # ======================================================================
+      # 新增步骤：动态修改项目构建配置并注入 SDK 补丁模块
+      # ======================================================================
+      - name: Patch project for hidden APIs
+        working-directory: ./tvlowbt_source
+        run: |
+          # 1. 提升 compileSdk 以支持新的公开 API (BluetoothCodecConfig 等)
+          sed -i 's/compileSdk [0-9]\+/compileSdk 34/' app/build.gradle
+          
+          # 2. 创建补丁模块目录结构
+          mkdir -p sdk-patch/src/main/java/android/bluetooth
+          
+          # 3. 生成隐藏 API 的存根类
+          cat > sdk-patch/src/main/java/android/bluetooth/BluetoothCodecConfig.java << 'EOF'
+          package android.bluetooth;
+          import android.os.Parcelable;
+          public final class BluetoothCodecConfig implements Parcelable {
+              public static final int SOURCE_CODEC_TYPE_LDAC = 0;
+              public int getCodecType() { return 0; }
+              protected BluetoothCodecConfig() {}
+              // 实现 Parcelable.Creator 等必要成员，但编译时只需签名匹配即可
+              public static final Parcelable.Creator<BluetoothCodecConfig> CREATOR = null;
+              public int describeContents() { return 0; }
+              public void writeToParcel(android.os.Parcel dest, int flags) {}
+          }
+          EOF
 
+          cat > sdk-patch/src/main/java/android/bluetooth/BluetoothCodecStatus.java << 'EOF'
+          package android.bluetooth;
+          import android.os.Parcelable;
+          public final class BluetoothCodecStatus implements Parcelable {
+              public BluetoothCodecConfig getCodecConfig() { return null; }
+              protected BluetoothCodecStatus() {}
+              public static final Parcelable.Creator<BluetoothCodecStatus> CREATOR = null;
+              public int describeContents() { return 0; }
+              public void writeToParcel(android.os.Parcel dest, int flags) {}
+          }
+          EOF
+
+          cat > sdk-patch/src/main/java/android/bluetooth/BluetoothA2dp.java << 'EOF'
+          package android.bluetooth;
+          public final class BluetoothA2dp {
+              public static final String ACTION_ACTIVE_DEVICE_CHANGED = "android.bluetooth.a2dp.profile.action.ACTIVE_DEVICE_CHANGED";
+              public boolean connect(BluetoothDevice device) { return false; }
+              public boolean disconnect(BluetoothDevice device) { return false; }
+              public BluetoothCodecStatus getCodecStatus(BluetoothDevice device) { return null; }
+          }
+          EOF
+
+          cat > sdk-patch/src/main/java/android/bluetooth/BluetoothHeadset.java << 'EOF'
+          package android.bluetooth;
+          public final class BluetoothHeadset {
+              public static final String ACTION_ACTIVE_DEVICE_CHANGED = "android.bluetooth.headset.profile.action.ACTIVE_DEVICE_CHANGED";
+              public boolean disconnect(BluetoothDevice device) { return false; }
+          }
+          EOF
+
+          cat > sdk-patch/src/main/java/android/bluetooth/BluetoothDevice.java << 'EOF'
+          package android.bluetooth;
+          public final class BluetoothDevice {
+              public boolean isConnected() { return false; }
+          }
+          EOF
+
+          # 4. 为补丁模块创建 Gradle 构建文件
+          cat > sdk-patch/build.gradle << 'EOF'
+          plugins {
+              id 'java-library'
+          }
+          java {
+              sourceCompatibility = JavaVersion.VERSION_1_8
+              targetCompatibility = JavaVersion.VERSION_1_8
+          }
+          EOF
+
+          # 5. 将补丁模块动态添加到项目构建中
+          #    修改 settings.gradle 以包含新模块
+          echo "include ':sdk-patch'" >> settings.gradle
+          
+          #    在 app 模块的 build.gradle 中添加对补丁模块的依赖
+          #    使用 sed 在 dependencies 块末尾追加一行
+          sed -i '/dependencies {/a implementation project(\':sdk-patch\')' app/build.gradle
+
+      # ======================================================================
+      # 原有步骤：解码密钥并创建初始化脚本
+      # ======================================================================
       - name: Decode keystore and create init script
         working-directory: ./tvlowbt_source
         run: |
@@ -74,7 +160,7 @@ jobs:
               }
           }
           EOF
-
+ 
       - name: Build signed apk with init script
         working-directory: ./tvlowbt_source
         env:
@@ -83,19 +169,19 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon -I init.gradle
-
+ 
       - name: List generated apk files
         working-directory: ./tvlowbt_source
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
-
+ 
       - name: Rename and move
         working-directory: ./tvlowbt_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/tv-lowbt-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
