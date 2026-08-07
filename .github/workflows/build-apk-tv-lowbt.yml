@@ -50,28 +50,26 @@ jobs:
           distribution: "${{ env.JDK_DISTRIBUTION }}"
  
       # ======================================================================
-      # 核心修复步骤：动态修补项目以支持隐藏 API
+      # 核心修复步骤：正确注入隐藏 API 并提升 SDK 版本
       # ======================================================================
       - name: Patch project for hidden APIs
         working-directory: ./tvlowbt_source
         run: |
-          # 1. 提升 compileSdk 以支持新的公开 API (BluetoothCodecConfig 等)
-          #    使用 sed 将 compileSdk 后的数字替换为 34
-          sed -i 's/compileSdk [0-9]\+/compileSdk 34/' app/build.gradle
-
-          # 2. 下载包含隐藏 API 的 Robolectric android-all.jar (对应 Android 14 / SDK 34)
-          #    注意：版本号必须是 Maven Central 上存在的正确版本 (10818077)
+          # 1. 提升 compileSdk (兼容 compileSdk 和 compileSdkVersion 两种写法)
+          sed -i -E 's/compileSdk(Variation|Version)?[[:space:]]*[0-9]+/compileSdk 34/g' app/build.gradle
+          
+          # 2. 下载包含隐藏 API 的 Robolectric android-all.jar
           ROBOLECTRIC_JAR="android-all-14-robolectric-10818077.jar"
           wget -q "https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/${ROBOLECTRIC_JAR}" -O "./${ROBOLECTRIC_JAR}"
-
-          # 3. 在 app/build.gradle 末尾注入配置，强制使用该 JAR 作为启动类路径
-          #    这会让编译器优先从这里加载类，从而“看到"隐藏的 API 方法
-          #    注意：使用 cat >> ... << 'EOF' 避免 shell 引号转义问题
+          
+          # 3. 注入 Gradle 配置：将 JAR 前置到 bootstrapClasspath
+          #    注意：必须使用 "+" 将其添加到现有类路径之前，而不是替换，否则会丢失 java.lang 等核心类
           cat >> app/build.gradle << 'EOF'
 
           // 强制 Java 编译任务使用包含隐藏 API 的 JAR
+          // 这一步解决了 connect/disconnect 等隐藏方法的编译问题
           tasks.withType(JavaCompile).configureEach {
-              options.bootstrapClasspath = files("${rootProject.projectDir}/android-all-14-robolectric-10818077.jar")
+              options.bootstrapClasspath = files("${rootProject.projectDir}/${ROBOLECTRIC_JAR}") + options.bootstrapClasspath
           }
           EOF
  
