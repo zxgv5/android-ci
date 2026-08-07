@@ -47,48 +47,35 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
-      # 1) 安装 Android SDK（确保有 cmdline-tools / adb / sdkmanager 等）
+      # 1) 安装 Android SDK（确保 cmdline-tools 等工具可用）
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
-      # 2) 启用 KVM（ubuntu-latest 上硬件加速模拟器需要）
+      # 2) 启用 KVM（硬件加速模拟器，ubuntu-latest 必须）
       - name: Enable KVM for Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # 3) 用 android-emulator-runner 启动 API 34 模拟器，并在其中调用 hiddenjar
+      # 3) 核心步骤：启动模拟器，生成并替换隐藏 API JAR
       - name: Build hidden android.jar from emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # 使用 API 34（BluetoothCodecConfig 等在 33 公开，用 34 更稳）
           api-level: 34
           arch: x86_64
           profile: pixel_2
-          # 模拟器选项：无窗口、无音频、GPU 软件渲染，适合 CI
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          # 启动后执行的脚本：下载 hiddenjar，构建并安装带隐藏 API 的 android.jar
-          script: |
-            set -e
-            cd "${RUNNER_TEMP}"
+          # 关键修正：所有命令写在一行，避免路径丢失；添加 chmod +x 确保可执行
+          script: set -e && cd "${RUNNER_TEMP}" && git clone --depth=1 https://github.com/anggrayudi/android-hidden-api.git android-hidden-api && cd android-hidden-api && chmod +x cli/hiddenjar && ./cli/hiddenjar build --api 34 --install
 
-            # 3.1 克隆 android-hidden-api 仓库（包含 hiddenjar CLI）
-            git clone --depth=1 https://github.com/anggrayudi/android-hidden-api.git android-hidden-api
-            cd android-hidden-api
-
-            # 3.2 用 hiddenjar 从当前 AVD 构建带隐藏 API 的 android.jar，并安装到 SDK
-            #     --api 34 对应 compileSdk 34
-            #     --install 会备份原有 android.jar 并替换为新的
-            ./cli/hiddenjar build --api 34 --install
-
-      # 4) 把项目的 compileSdk 从 31 改成 34，让 BluetoothCodecConfig 等类可见
+      # 4) 将项目 compileSdk 从 31 提升到 34
       - name: Patch project to compileSdk 34
         working-directory: ./tvlowbt_source
         run: |
           sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
 
-      # 5) 签名配置与构建
+      # 5) 签名配置
       - name: Decode keystore and create init script
         working-directory: ./tvlowbt_source
         run: |
@@ -115,6 +102,7 @@ jobs:
           }
           EOF
 
+      # 6) 构建签名 APK
       - name: Build signed APK
         working-directory: ./tvlowbt_source
         env:
