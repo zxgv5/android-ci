@@ -49,27 +49,31 @@ jobs:
           java-version: "${{ env.JDK_VERSION }}"
           distribution: "${{ env.JDK_DISTRIBUTION }}"
  
-      # ======================================================================
-      # 核心修复步骤：正确注入隐藏 API 并提升 SDK 版本
-      # ======================================================================
+      # ================================================================
+      # 核心修复：只改 Gradle 构建配置，不改项目 Java 源码
+      # ================================================================
       - name: Patch project for hidden APIs
         working-directory: ./tvlowbt_source
         run: |
-          # 1. 提升 compileSdk (兼容 compileSdk 和 compileSdkVersion 两种写法)
-          sed -i -E 's/compileSdk(Variation|Version)?[[:space:]]*[0-9]+/compileSdk 34/g' app/build.gradle
-          
-          # 2. 下载包含隐藏 API 的 Robolectric android-all.jar
-          ROBOLECTRIC_JAR="android-all-14-robolectric-10818077.jar"
-          wget -q "https://repo1.maven.org/maven2/org/robolectric/android-all/14-robolectric-10818077/${ROBOLECTRIC_JAR}" -O "./${ROBOLECTRIC_JAR}"
-          
-          # 3. 注入 Gradle 配置：将 JAR 前置到 bootstrapClasspath
-          #    注意：必须使用 "+" 将其添加到现有类路径之前，而不是替换，否则会丢失 java.lang 等核心类
+          # 1. 把 compileSdk 从 31 改成 34（匹配 Robolectric android-all-instrumented 14）
+          sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
+
+          # 2. 下载 Robolectric android-all-instrumented JAR（Android 14 framework classes，含隐藏 API）
+          ANDROID_ALL_JAR="android-all-instrumented-14-robolectric-10818077-i6.jar"
+          wget -q \
+            "https://repo1.maven.org/maven2/org/robolectric/android-all-instrumented/14-robolectric-10818077-i6/${ANDROID_ALL_JAR}" \
+            -O "./${ANDROID_ALL_JAR}"
+
+          # 3. 在 app/build.gradle 末尾追加一段 Gradle 配置：
+          #    - 把 android-all-instrumented JAR 前置到 Java 编译的 bootstrapClasspath
+          #    - 使用 Groovy 字符串拼接，避免引用 Shell 变量
           cat >> app/build.gradle << 'EOF'
 
-          // 强制 Java 编译任务使用包含隐藏 API 的 JAR
-          // 这一步解决了 connect/disconnect 等隐藏方法的编译问题
+          // 让编译器优先从 Robolectric 的 android-all-instrumented JAR 加载 Android framework 类
+          // 这样隐藏 API（如 BluetoothA2dp.connect/disconnect）在编译时也能找到
           tasks.withType(JavaCompile).configureEach {
-              options.bootstrapClasspath = files("${rootProject.projectDir}/${ROBOLECTRIC_JAR}") + options.bootstrapClasspath
+              def androidAllJar = file("${rootProject.projectDir}/android-all-instrumented-14-robolectric-10818077-i6.jar")
+              options.bootstrapClasspath = files(androidAllJar) + options.bootstrapClasspath
           }
           EOF
  
