@@ -50,30 +50,35 @@ jobs:
           distribution: "${{ env.JDK_DISTRIBUTION }}"
  
       # ================================================================
-      # 核心修复：只改 Gradle 构建配置，不改项目 Java 源码
+      # 核心步骤：通过 Gradle 脚本注入隐藏 API，不改 Java 源码
       # ================================================================
       - name: Patch project for hidden APIs
         working-directory: ./tvlowbt_source
         run: |
-          # 1. 把 compileSdk 从 31 改成 34（匹配 Robolectric android-all-instrumented 14）
+          # 1. 把 compileSdk 从 31 改成 34（匹配 Robolectric Android 14）
           sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
 
-          # 2. 下载 Robolectric android-all-instrumented JAR（Android 14 framework classes，含隐藏 API）
+          # 2. 下载 Robolectric android-all-instrumented JAR（含完整 Android framework + 隐藏 API）
           ANDROID_ALL_JAR="android-all-instrumented-14-robolectric-10818077-i6.jar"
           wget -q \
             "https://repo1.maven.org/maven2/org/robolectric/android-all-instrumented/14-robolectric-10818077-i6/${ANDROID_ALL_JAR}" \
             -O "./${ANDROID_ALL_JAR}"
 
-          # 3. 在 app/build.gradle 末尾追加一段 Gradle 配置：
-          #    - 把 android-all-instrumented JAR 前置到 Java 编译的 bootstrapClasspath
-          #    - 使用 Groovy 字符串拼接，避免引用 Shell 变量
+          # 3. 在 app/build.gradle 末尾追加一段 Groovy，配置 JavaCompile 的 bootstrapClasspath
+          #    注意：使用 setFrom() 而不是直接赋值 ArrayList，避免 Groovy 把 "+" 当成 List 拼接
           cat >> app/build.gradle << 'EOF'
 
-          // 让编译器优先从 Robolectric 的 android-all-instrumented JAR 加载 Android framework 类
-          // 这样隐藏 API（如 BluetoothA2dp.connect/disconnect）在编译时也能找到
+          // 让 Java 编译优先使用 Robolectric 的 Android framework JAR
+          // 这样隐藏 API（如 BluetoothA2dp.connect/disconnect）在编译时就能找到
           tasks.withType(JavaCompile).configureEach {
               def androidAllJar = file("${rootProject.projectDir}/android-all-instrumented-14-robolectric-10818077-i6.jar")
-              options.bootstrapClasspath = files(androidAllJar) + options.bootstrapClasspath
+              options.bootstrapClasspath = files(androidAllJar)
+              options.bootstrapClasspath = options.bootstrapClasspath ?: files()
+              if (options.bootstrapClasspath) {
+                  // 将原有的 boot classpath（JDK 核心）附加在后面
+                  def originalBootstrap = project.files().from(options.bootstrapClasspath.files)
+                  options.bootstrapClasspath = files(androidAllJar) + originalBootstrap
+              }
           }
           EOF
  
