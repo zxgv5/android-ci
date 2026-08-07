@@ -26,7 +26,7 @@ jobs:
           rm -rf .gradle
 
       - name: Checkout source repo
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
         with:
           repository: qwerty12/TVLowQualityBT
           ref: master
@@ -35,7 +35,7 @@ jobs:
           submodules: recursive
 
       - name: Checkout ci source repo
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
         with:
           path: ci_source
 
@@ -50,26 +50,22 @@ jobs:
           distribution: "${{ env.JDK_DISTRIBUTION }}"
 
       # ================================================================
-      # 安装 Android SDK 组件（替代直接调用 sdkmanager）
+      # 1. 安装 Android SDK（使用新的 cmdline-tools，不依赖旧 tools/bin/sdkmanager）
       # ================================================================
-      - name: Setup Android SDK components
-        uses: maxim-lobanov/setup-android-tools@v1
-        with:
-          packages: |
-            platforms;android-34
-            build-tools;36.0.0
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
 
       # ================================================================
-      # 核心步骤：只改 Gradle 配置，不改 Java 源码
+      # 2. 只改 Gradle 配置，不改 Java 源码
       # ================================================================
       - name: Patch project to compile against hidden APIs
         working-directory: ./tvlowbt_source
         run: |
-          # 1. 将 compileSdk 从 31 提升到 34，否则 BluetoothCodecConfig 等类根本不存在
+          # 2.1 将 compileSdk 从 31 提升到 34（BluetoothCodecConfig 等类在 API 33 才公开）
           sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
 
-          # 2. 在 dependencies 块末尾追加对 android-hidden-api 的依赖
-          #    这个库在 Maven Central 上，提供隐藏 API 的签名，用于编译期解析符号
+          # 2.2 在 dependencies 块追加对 android-hidden-api 的依赖
+          #     该库提供隐藏 API 的编译时签名，来自 Maven Central
           cat >> app/build.gradle << 'EOF'
 
           dependencies {
