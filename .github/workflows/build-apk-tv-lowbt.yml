@@ -50,37 +50,40 @@ jobs:
           distribution: "${{ env.JDK_DISTRIBUTION }}"
  
       # ================================================================
-      # 核心步骤：通过 Gradle 脚本注入隐藏 API，不改 Java 源码
+      # 核心：在 CI 中替换 SDK 的 android.jar 为包含隐藏 API 的版本
       # ================================================================
-      - name: Patch project for hidden APIs
-        working-directory: ./tvlowbt_source
+      - name: Install hidden-API android.jar for compilation
         run: |
-          # 1. 把 compileSdk 从 31 改成 34（匹配 Robolectric Android 14）
-          sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
-
-          # 2. 下载 Robolectric android-all-instrumented JAR（含完整 Android framework + 隐藏 API）
-          ANDROID_ALL_JAR="android-all-instrumented-14-robolectric-10818077-i6.jar"
-          wget -q \
-            "https://repo1.maven.org/maven2/org/robolectric/android-all-instrumented/14-robolectric-10818077-i6/${ANDROID_ALL_JAR}" \
-            -O "./${ANDROID_ALL_JAR}"
-
-          # 3. 在 app/build.gradle 末尾追加一段 Groovy，配置 JavaCompile 的 bootstrapClasspath
-          #    注意：使用 setFrom() 而不是直接赋值 ArrayList，避免 Groovy 把 "+" 当成 List 拼接
-          cat >> app/build.gradle << 'EOF'
-
-          // 让 Java 编译优先使用 Robolectric 的 Android framework JAR
-          // 这样隐藏 API（如 BluetoothA2dp.connect/disconnect）在编译时就能找到
-          tasks.withType(JavaCompile).configureEach {
-              def androidAllJar = file("${rootProject.projectDir}/android-all-instrumented-14-robolectric-10818077-i6.jar")
-              options.bootstrapClasspath = files(androidAllJar)
-              options.bootstrapClasspath = options.bootstrapClasspath ?: files()
-              if (options.bootstrapClasspath) {
-                  // 将原有的 boot classpath（JDK 核心）附加在后面
-                  def originalBootstrap = project.files().from(options.bootstrapClasspath.files)
-                  options.bootstrapClasspath = files(androidAllJar) + originalBootstrap
-              }
-          }
-          EOF
+          # 1. 确定目标 API level 和 SDK 目录
+          TARGET_API="34"
+          ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          ANDROID_PLATFORM_DIR="${ANDROID_SDK_ROOT}/platforms/android-${TARGET_API}"
+          ANDROID_JAR="${ANDROID_PLATFORM_DIR}/android.jar"
+          
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          echo "ANDROID_JAR=${ANDROID_JAR}"
+          
+          # 2. 确保 platforms/android-34 目录存在（通常 GitHub Actions 镜像已经存在）
+          mkdir -p "${ANDROID_PLATFORM_DIR}"
+          
+          # 3. 下载带隐藏 API 的 android.jar
+          #    这里使用 anggrayudi/android-hidden-api 提供的预编译 JAR（对应 API 34）
+          HIDDEN_ANDROID_JAR_URL="https://github.com/anggrayudi/android-hidden-api/releases/download/v1.0/android-34-hidden.jar"
+          echo "Downloading hidden android.jar from ${HIDDEN_ANDROID_JAR_URL}"
+          wget -q "${HIDDEN_ANDROID_JAR_URL}" -O "/tmp/android-34-hidden.jar"
+          
+          # 4. 备份原有的 android.jar（如果有）
+          if [ -f "${ANDROID_JAR}" ]; then
+            echo "Backing up original android.jar to ${ANDROID_JAR}.orig"
+            mv "${ANDROID_JAR}" "${ANDROID_JAR}.orig"
+          fi
+          
+          # 5. 用隐藏 API 版本替换
+          cp "/tmp/android-34-hidden.jar" "${ANDROID_JAR}"
+          echo "Replaced ${ANDROID_JAR} with hidden-api enabled version."
+          
+          # 6. （可选）验证文件存在
+          ls -l "${ANDROID_JAR}"
  
       - name: Decode keystore and create init script
         working-directory: ./tvlowbt_source
