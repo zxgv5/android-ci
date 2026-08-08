@@ -69,11 +69,14 @@ jobs:
           # 关键修正：所有命令写在一行，避免路径丢失；添加 chmod +x 确保可执行
           script: set -e && cd "${RUNNER_TEMP}" && git clone --depth=1 https://github.com/anggrayudi/android-hidden-api.git android-hidden-api && cd android-hidden-api && chmod +x cli/hiddenjar && ./cli/hiddenjar build --api 34 --install
 
-      # 4) 将项目 compileSdk 从 31 提升到 34
-      - name: Patch project to compileSdk 34
+      # 4) 修改项目配置：升级 compileSdk 并关闭 R8 混淆
+      - name: Patch project to compileSdk 34 and disable minification
         working-directory: ./tvlowbt_source
         run: |
+          # 升级 SDK 版本
           sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
+          # 关键修正：关闭 R8 混淆，规避 Missing class android.os.ShellCommand 错误
+          sed -i 's/minifyEnabled true/minifyEnabled false/' app/build.gradle
 
       # 5) 签名配置
       - name: Decode keystore and create init script
