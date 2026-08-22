@@ -1,12 +1,12 @@
 name: build-apk-piliplus
- 
+
 on:
   workflow_dispatch:
   workflow_call:
- 
+
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,12 +26,12 @@ jobs:
           ref: main
           path: piliplus_source
           fetch-depth: 0
- 
+
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -56,7 +56,11 @@ jobs:
           # channel: master # 更新周期每天
           flutter-version-file: ./piliplus_source/pubspec.yaml
           cache: true
- 
+
+      - name: Install dependencies
+        working-directory: ./piliplus_source
+        run: flutter pub get
+
       - name: Create symlink for lib directory
         run: |
           # 在工作区根目录创建软链接，使根目录的 lib 指向 piliplus_source/lib
@@ -66,7 +70,7 @@ jobs:
         working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/patch.ps1 android
- 
+
       - name: Decode and write keys
         working-directory: ./piliplus_source
         run: |
@@ -82,13 +86,13 @@ jobs:
         working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/build.ps1 android
- 
+
       - name: Flutter build release apk
         working-directory: ./piliplus_source
         # run: flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --pub
         # 改为仅编译arm64-v8a架构版本
         run: flutter build apk --release --target-platform=android-arm64 --split-per-abi --dart-define-from-file=pili_release.json --pub
- 
+
       - name: Rename apk file
         working-directory: ./piliplus_source
         run: |
