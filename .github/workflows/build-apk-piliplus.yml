@@ -32,6 +32,15 @@ jobs:
         with:
           path: ci_source
 
+      - name: Move project files to workspace root
+        run: |
+          # 将 piliplus_source 内的文件（包括隐藏文件）移动到 Workspace 根目录
+          # 这样可以模拟原仓库的目录结构，避免 patch.ps1 脚本因路径问题找不到 material_ui
+          mv piliplus_source/* . 2>/dev/null || true
+          mv piliplus_source/.* . 2>/dev/null || true
+          # 清理空的子目录
+          rmdir piliplus_source
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
@@ -43,41 +52,22 @@ jobs:
           distribution: "temurin"
           cache: "gradle"
           cache-dependency-path: |
-            ./piliplus_source/android/*.gradle*
-            ./piliplus_source/android/**/gradle-wrapper.properties
+            ./android/*.gradle*
+            ./android/**/gradle-wrapper.properties
  
       - name: Setup flutter
         uses: subosito/flutter-action@main
         id: flutter-action
         with:
-          channel: stable # 更新周期3月
-          # channel: beta # 更新周期1-2月
-          # channel: dev # 更新周期1周
-          # channel: master # 更新周期每天
-          flutter-version-file: ./piliplus_source/pubspec.yaml
+          channel: stable
+          flutter-version-file: ./pubspec.yaml
           cache: true
 
-      # [修复] 新增步骤：在建立软链接之前，先安装依赖
-      # 使用 bash 和绝对路径确保能找到 pubspec.yaml 并正确下载 material_ui 等包
-      - name: Install dependencies
-        shell: bash
-        run: |
-          cd ${{ github.workspace }}/piliplus_source
-          flutter pub get
- 
-      # [修复] 将软链接步骤移到依赖安装之后，防止干扰 pub get 的路径识别
-      - name: Create symlink for lib directory
-        run: |
-          # 在工作区根目录创建软链接，使根目录的 lib 指向 piliplus_source/lib
-          ln -s ${{ github.workspace }}/piliplus_source/lib ${{ github.workspace }}/lib
- 
       - name: Apply patch script
-        working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/patch.ps1 android
  
       - name: Decode and write keys
-        working-directory: ./piliplus_source
         run: |
           if [ ! -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/key.p12
@@ -88,18 +78,15 @@ jobs:
           fi
  
       - name: Set and extract version
-        working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/build.ps1 android
  
       - name: Flutter build release apk
-        working-directory: ./piliplus_source
         # run: flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --pub
         # 改为仅编译arm64-v8a架构版本
         run: flutter build apk --release --target-platform=android-arm64 --split-per-abi --dart-define-from-file=pili_release.json --pub
  
       - name: Rename apk file
-        working-directory: ./piliplus_source
         run: |
           mv "./build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "./build/app/outputs/flutter-apk/piliplus-${{ env.BUILD_DATE }}.apk"
  
@@ -107,7 +94,7 @@ jobs:
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           # 文件路径为基于github.workspace的绝对路径
-          P12_KEYSTORE_PATH: "./piliplus_source/android/app/key.p12 ./piliplus_source/android/key.properties"
+          P12_KEYSTORE_PATH: "./android/app/key.p12 ./android/key.properties"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./piliplus_source/build/app/outputs/flutter-apk/piliplus-${{ env.BUILD_DATE }}.apk"
+          BUILD_ARTIFACT_PATH: "./build/app/outputs/flutter-apk/piliplus-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-piliplus"
