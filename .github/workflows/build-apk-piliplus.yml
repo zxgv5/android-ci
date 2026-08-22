@@ -57,10 +57,15 @@ jobs:
           flutter-version-file: ./piliplus_source/pubspec.yaml
           cache: true
 
+      # [修复] 新增步骤：在建立软链接之前，先安装依赖
+      # 使用 bash 和绝对路径确保能找到 pubspec.yaml 并正确下载 material_ui 等包
       - name: Install dependencies
-        working-directory: ./piliplus_source
-        run: flutter pub get
-
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/piliplus_source
+          flutter pub get
+ 
+      # [修复] 将软链接步骤移到依赖安装之后，防止干扰 pub get 的路径识别
       - name: Create symlink for lib directory
         run: |
           # 在工作区根目录创建软链接，使根目录的 lib 指向 piliplus_source/lib
@@ -70,7 +75,7 @@ jobs:
         working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/patch.ps1 android
-
+ 
       - name: Decode and write keys
         working-directory: ./piliplus_source
         run: |
@@ -86,13 +91,13 @@ jobs:
         working-directory: ./piliplus_source
         shell: pwsh
         run: lib/scripts/build.ps1 android
-
+ 
       - name: Flutter build release apk
         working-directory: ./piliplus_source
         # run: flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --pub
         # 改为仅编译arm64-v8a架构版本
         run: flutter build apk --release --target-platform=android-arm64 --split-per-abi --dart-define-from-file=pili_release.json --pub
-
+ 
       - name: Rename apk file
         working-directory: ./piliplus_source
         run: |
