@@ -1,0 +1,136 @@
+name: build-apk-tv-lowbt
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '21'
+  JDK_DISTRIBUTION: 'temurin'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          repository: qwerty12/TVLowQualityBT
+          ref: master
+          path: tvlowbt_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout ci source repo
+        uses: actions/checkout@v4
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+
+      # 1) 安装 Android SDK（确保 cmdline-tools 等工具可用）
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      # 2) 启用 KVM（硬件加速模拟器，ubuntu-latest 必须）
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # 3) 核心步骤：启动模拟器，生成并替换隐藏 API JAR
+      - name: Build hidden android.jar from emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          # 关键修正：所有命令写在一行，避免路径丢失；添加 chmod +x 确保可执行
+          script: set -e && cd "${RUNNER_TEMP}" && git clone --depth=1 https://github.com/anggrayudi/android-hidden-api.git android-hidden-api && cd android-hidden-api && chmod +x cli/hiddenjar && ./cli/hiddenjar build --api 34 --install
+
+      # 4) 修改项目配置：升级 compileSdk 并关闭 R8 混淆
+      - name: Patch project to compileSdk 34 and disable minification
+        working-directory: ./tvlowbt_source
+        run: |
+          # 升级 SDK 版本
+          sed -i 's/compileSdk 31/compileSdk 34/' app/build.gradle
+          # 关键修正：关闭 R8 混淆，规避 Missing class android.os.ShellCommand 错误
+          sed -i 's/minifyEnabled true/minifyEnabled false/' app/build.gradle
+
+      # 5) 签名配置
+      - name: Decode keystore and create init script
+        working-directory: ./tvlowbt_source
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          cat > init.gradle << EOF
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.plugins.hasPlugin('com.android.application')) {
+                      if (!project.android.signingConfigs.hasProperty('release')) {
+                          project.android.signingConfigs.create('release')
+                      }
+                      def releaseConfig = project.android.signingConfigs.getByName('release')
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
+                  }
+              }
+          }
+          EOF
+
+      # 6) 构建签名 APK
+      - name: Build signed APK
+        working-directory: ./tvlowbt_source
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon -I init.gradle
+
+      - name: List generated APK files
+        working-directory: ./tvlowbt_source
+        run: |
+          echo "Listing all APK files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
+
+      - name: Rename and move APK
+        working-directory: ./tvlowbt_source
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/tv-lowbt-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./tvlowbt_source/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/tv-lowbt-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-tv-lowbt"
