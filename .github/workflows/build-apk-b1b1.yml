@@ -80,9 +80,16 @@ jobs:
         run: |
           sed -i 's/rootProject.name = "MyBili"/rootProject.name = "B1b1"/' settings.gradle.kts
           sed -i 's/appName.set("MyBili")/appName.set("B1b1")/' app/build.gradle.kts
-          sed -i 's@<string name="app_name">MyBili</string>@<string name="app_name">B1b1</string>@' app/src/main/res/values/strings.xml
+          sed -i 's/MyTVB/B1b1/' app/src/main/java/com/mytvb/feature/cctv/CctvProgramRepository.kt
+          sed -i 's/MyTVB/B1b1/' app/src/main/java/com/mytvb/ui/activity/CctvPlayerActivity.kt
+          sed -i 's/MyTVB/B1b1/' app/src/main/java/com/mytvb/ui/activity/MarmotLiveActivity.kt
+          sed -i 's/MyTVB/B1b1/' app/src/main/res/values/strings.xml
+          # sed -i 's@<string name="app_name">MyBili</string>@<string name="app_name">B1b1</string>@' app/src/main/res/values/strings.xml
           cat settings.gradle.kts
           cat app/build.gradle.kts
+          cat app/src/main/java/com/mytvb/feature/cctv/CctvProgramRepository.kt
+          cat app/src/main/java/com/mytvb/ui/activity/CctvPlayerActivity.kt
+          cat app/src/main/java/com/mytvb/ui/activity/MarmotLiveActivity.kt
           cat app/src/main/res/values/strings.xml
  
       - name: Build signed apk with init script
