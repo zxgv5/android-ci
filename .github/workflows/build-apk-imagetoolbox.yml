@@ -55,14 +55,14 @@ jobs:
           sudo apt install -y --no-install-recommends coreutils
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
 
-      - name: Create Gradle init script to unify Compose versions
+      - name: Create Gradle init script to unify Compose versions via BOM
         run: |
           cat > ${{ github.workspace }}/override.init.gradle.kts << 'EOF'
           allprojects {
               configurations.all {
                   resolutionStrategy.eachDependency {
                       if (requested.group.startsWith("androidx.compose")) {
-                          useVersion("1.9.0-alpha01")
+                          useVersion("2025.02.00")
                       }
                   }
               }
