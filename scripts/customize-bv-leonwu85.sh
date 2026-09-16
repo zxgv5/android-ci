@@ -90,7 +90,8 @@ sed -i \
 # python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/patch_historyscreen_kt.py" "${LEONWU85_BV_HISTORYSCREEN_KT}"
 # echo "*Screen.kt代码处理完成..."
 # - - - - - - - - - - - - - - - - - -注释logger相关代码 - - - - - - - - - - - - - - - - - -
+# 注释日志的py代码有问题，暂时注释掉
 # 7、使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
-echo "注释全部日志代码..."
-python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${LEONWU85_BV_SOURCE_ROOT}"
+# echo "注释全部日志代码..."
+# python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${LEONWU85_BV_SOURCE_ROOT}"
 echo "日志代码注释完成！"
