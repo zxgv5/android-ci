@@ -43,7 +43,7 @@ jobs:
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
       - name: Setup java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: '${{ env.JDK_DISTRIBUTION }}'
@@ -55,13 +55,13 @@ jobs:
           sudo apt install -y --no-install-recommends coreutils
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
 
-      - name: Create Gradle init script to override Compose UI version
+      - name: Create Gradle init script to unify Compose versions
         run: |
           cat > ${{ github.workspace }}/override.init.gradle.kts << 'EOF'
           allprojects {
               configurations.all {
                   resolutionStrategy.eachDependency {
-                      if (requested.group == "androidx.compose.ui") {
+                      if (requested.group.startsWith("androidx.compose")) {
                           useVersion("1.9.0-alpha01")
                       }
                   }
