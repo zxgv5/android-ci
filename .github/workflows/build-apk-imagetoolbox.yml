@@ -55,18 +55,22 @@ jobs:
           sudo apt install -y --no-install-recommends coreutils
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
 
-      - name: Create Gradle init script to pin Compose module versions
+      - name: Create Gradle init script to align Compose versions
         run: |
           cat > ${{ github.workspace }}/override.init.gradle.kts << 'EOF'
           allprojects {
               configurations.all {
                   resolutionStrategy.eachDependency {
                       when (requested.group) {
-                          "androidx.compose.ui" -> useVersion("1.9.0-alpha01")
-                          "androidx.compose.foundation" -> useVersion("1.9.0-alpha01")
-                          "androidx.compose.runtime" -> useVersion("1.9.0-alpha01")
-                          "androidx.compose.animation" -> useVersion("1.9.0-alpha01")
-                          "androidx.compose.material" -> useVersion("1.9.0-alpha01")
+                          "androidx.compose.ui" -> useVersion("1.12.0")
+                          "androidx.compose.foundation" -> useVersion("1.12.0")
+                          "androidx.compose.animation" -> useVersion("1.12.0")
+                          "androidx.compose.material" -> useVersion("1.12.0")
+                          "androidx.compose.runtime" -> {
+                              if (requested.name != "runtime-retain" && requested.name != "runtime-retain-android") {
+                                  useVersion("1.12.0")
+                              }
+                          }
                           "androidx.compose.material3" -> useVersion("1.4.0")
                       }
                   }
