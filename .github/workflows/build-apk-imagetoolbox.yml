@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
 
 env:
-  ANDROID_COMPILE_SDK: '37'
-  ANDROID_BUILD_TOOLS: '37.0.0'
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'adopt'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -64,7 +62,7 @@ jobs:
               configurations.all {
                   resolutionStrategy.eachDependency {
                       if (requested.group == "androidx.compose.ui") {
-                          useVersion("1.7.6")
+                          useVersion("1.9.0-alpha01")
                       }
                   }
               }
