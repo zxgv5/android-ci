@@ -94,4 +94,4 @@ sed -i \
 # 7、使用python在${LEONWU85_BV_SOURCE_ROOT}目录下搜索所有.kt文件，并注释掉含有特定内容的行
 # echo "注释全部日志代码..."
 # python3 "${PYTHON_AND_SHELL_SCRIPT_DIR}/comment_logger.py" "${LEONWU85_BV_SOURCE_ROOT}"
-echo "日志代码注释完成！"
+# echo "日志代码注释完成！"
