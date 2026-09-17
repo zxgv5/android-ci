@@ -1,13 +1,13 @@
 name: build-apk-imagetoolbox
-
+ 
 on:
   workflow_dispatch:
-
+ 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,14 +16,14 @@ jobs:
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 10
-
+ 
       - name: Clean runner environment
         run: |
           rm -rf ~/.gradle/caches/
           rm -rf ~/.gradle/daemon/
           rm -rf ~/.android/build-cache/
           rm -rf .gradle
-
+ 
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -32,29 +32,29 @@ jobs:
           path: imagetoolbox_source
           fetch-depth: 0
           submodules: recursive
-
+ 
       - name: Checkout ci source repo
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
       - name: Setup java
         uses: actions/setup-java@main
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: '${{ env.JDK_DISTRIBUTION }}'
-
+ 
       - name: Setup keystore
         working-directory: ./imagetoolbox_source
         run: |
           sudo apt update -y || true
           sudo apt install -y --no-install-recommends coreutils
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
-
+ 
       - name: Create Gradle init script to align dependency versions
         run: |
           cat > ${{ github.workspace }}/override.init.gradle.kts << 'EOF'
@@ -62,17 +62,18 @@ jobs:
               configurations.all {
                   resolutionStrategy.eachDependency {
                       when (requested.group) {
+                          // 移除 material3 的强制版本锁，让项目自带版本目录决定
+                          // "androidx.compose.material3" -> useVersion("1.5.0-alpha01")
                           "androidx.graphics" -> useVersion("1.1.0")
-                          "androidx.compose.ui" -> useVersion("1.9.0-alpha01")
-                          "androidx.compose.foundation" -> useVersion("1.9.0-alpha01")
-                          "androidx.compose.animation" -> useVersion("1.9.0-alpha01")
-                          "androidx.compose.material" -> useVersion("1.9.0-alpha01")
+                          "androidx.compose.ui" -> useVersion("1.10.0-alpha01")
+                          "androidx.compose.foundation" -> useVersion("1.10.0-alpha01")
+                          "androidx.compose.animation" -> useVersion("1.10.0-alpha01")
+                          "androidx.compose.material" -> useVersion("1.10.0-alpha01")
                           "androidx.compose.runtime" -> {
                               if (requested.name != "runtime-retain" && requested.name != "runtime-retain-android") {
-                                  useVersion("1.9.0-alpha01")
+                                  useVersion("1.10.0-alpha01")
                               }
                           }
-                          "androidx.compose.material3" -> useVersion("1.5.0-alpha01")
                       }
                   }
               }
@@ -88,7 +89,7 @@ jobs:
               }
           }
           EOF
-
+ 
       - name: Build market release apk
         working-directory: ./imagetoolbox_source
         run: |
@@ -99,19 +100,19 @@ jobs:
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
-
+ 
       - name: List generated apk files
         working-directory: ./imagetoolbox_source
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
-
+ 
       - name: Rename and move
         working-directory: ./imagetoolbox_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv app/build/outputs/apk/market/release/*-arm64-v8a-release.apk "${{ github.workspace }}/dist/imagetoolbox-${{ env.BUILD_DATE }}.apk"
-
+ 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
