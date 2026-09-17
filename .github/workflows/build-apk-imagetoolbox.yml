@@ -55,16 +55,14 @@ jobs:
           sudo apt install -y --no-install-recommends coreutils
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
 
-      - name: Create Gradle init script to align all dependency versions
+      - name: Create Gradle init script to add graphics-shapes dependency
         run: |
           cat > ${{ github.workspace }}/override.init.gradle.kts << 'EOF'
           allprojects {
               configurations.all {
                   resolutionStrategy.eachDependency {
-                      if (requested.group == "androidx.graphics") {
-                          useVersion("1.1.0")
-                      }
                       when (requested.group) {
+                          "androidx.graphics" -> useVersion("1.1.0")
                           "androidx.compose.ui" -> useVersion("1.9.0-alpha01")
                           "androidx.compose.foundation" -> useVersion("1.9.0-alpha01")
                           "androidx.compose.animation" -> useVersion("1.9.0-alpha01")
@@ -77,6 +75,9 @@ jobs:
                           "androidx.compose.material3" -> useVersion("1.4.0")
                       }
                   }
+              }
+              dependencies {
+                  add("implementation", "androidx.graphics:graphics-shapes:1.1.0")
               }
           }
           EOF
