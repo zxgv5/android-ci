@@ -62,7 +62,6 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleMarketRelease \
-            -Pandroid.compileSdk=37.1 \
             -Pandroid.injected.signing.store.file=${{ github.workspace }}/imagetoolbox_source/keystore.p12 \
             -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
