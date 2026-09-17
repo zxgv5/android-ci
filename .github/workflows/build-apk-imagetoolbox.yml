@@ -55,7 +55,7 @@ jobs:
           sudo apt install -y --no-install-recommends coreutils
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
 
-      - name: Create Gradle init script to add graphics-shapes dependency
+      - name: Create Gradle init script to align dependency versions
         run: |
           cat > ${{ github.workspace }}/override.init.gradle.kts << 'EOF'
           allprojects {
@@ -72,7 +72,7 @@ jobs:
                                   useVersion("1.9.0-alpha01")
                               }
                           }
-                          "androidx.compose.material3" -> useVersion("1.4.0")
+                          "androidx.compose.material3" -> useVersion("1.5.0-alpha01")
                       }
                   }
               }
