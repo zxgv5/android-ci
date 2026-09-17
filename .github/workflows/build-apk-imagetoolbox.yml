@@ -76,8 +76,15 @@ jobs:
                       }
                   }
               }
-              dependencies {
-                  add("implementation", "androidx.graphics:graphics-shapes:1.1.0")
+              pluginManager.withPlugin("com.android.library") {
+                  dependencies {
+                      add("implementation", "androidx.graphics:graphics-shapes:1.1.0")
+                  }
+              }
+              pluginManager.withPlugin("com.android.application") {
+                  dependencies {
+                      add("implementation", "androidx.graphics:graphics-shapes:1.1.0")
+                  }
               }
           }
           EOF
