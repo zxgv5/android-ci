@@ -1,13 +1,16 @@
 name: build-apk-imagetoolbox
- 
+
 on:
   workflow_dispatch:
- 
+
 env:
   JDK_VERSION: '21'
-  JDK_DISTRIBUTION: 'temurin'
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
- 
+  JDK_DISTRIBUTION: 'adopt'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,107 +19,75 @@ jobs:
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 10
- 
-      - name: Clean runner environment
-        run: |
-          rm -rf ~/.gradle/caches/
-          rm -rf ~/.gradle/daemon/
-          rm -rf ~/.android/build-cache/
-          rm -rf .gradle
- 
+
       - name: Checkout source repo
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
         with:
           repository: T8RIN/ImageToolbox
           ref: master
           path: imagetoolbox_source
           fetch-depth: 0
           submodules: recursive
- 
+
       - name: Checkout ci source repo
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
         with:
           path: ci_source
- 
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
+
       - name: Setup java
-        uses: actions/setup-java@main
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JDK_VERSION }}
-          distribution: '${{ env.JDK_DISTRIBUTION }}'
- 
+          distribution: ${{ env.JDK_DISTRIBUTION }}
+          cache: gradle
+
       - name: Setup keystore
-        working-directory: ./imagetoolbox_source
         run: |
           sudo apt update -y || true
           sudo apt install -y --no-install-recommends coreutils
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ./keystore.p12
- 
-      - name: Create Gradle init script to align dependency versions
-        run: |
-          cat > ${{ github.workspace }}/override.init.gradle.kts << 'EOF'
-          allprojects {
-              configurations.all {
-                  resolutionStrategy.eachDependency {
-                      when (requested.group) {
-                          // 移除 material3 的强制版本锁，让项目自带版本目录决定
-                          // "androidx.compose.material3" -> useVersion("1.5.0-alpha01")
-                          "androidx.graphics" -> useVersion("1.1.0")
-                          "androidx.compose.ui" -> useVersion("1.10.0-alpha01")
-                          "androidx.compose.foundation" -> useVersion("1.10.0-alpha01")
-                          "androidx.compose.animation" -> useVersion("1.10.0-alpha01")
-                          "androidx.compose.material" -> useVersion("1.10.0-alpha01")
-                          "androidx.compose.runtime" -> {
-                              if (requested.name != "runtime-retain" && requested.name != "runtime-retain-android") {
-                                  useVersion("1.10.0-alpha01")
-                              }
-                          }
-                      }
-                  }
-              }
-              pluginManager.withPlugin("com.android.library") {
-                  dependencies {
-                      add("implementation", "androidx.graphics:graphics-shapes:1.1.0")
-                  }
-              }
-              pluginManager.withPlugin("com.android.application") {
-                  dependencies {
-                      add("implementation", "androidx.graphics:graphics-shapes:1.1.0")
-                  }
-              }
-          }
-          EOF
- 
+          mkdir -p $RUNNER_TEMP/keystores
+          echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > $RUNNER_TEMP/keystores/keystore.jks
+
       - name: Build market release apk
         working-directory: ./imagetoolbox_source
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleMarketRelease \
-            -I ${{ github.workspace }}/override.init.gradle.kts \
-            -Pandroid.injected.signing.store.file=${{ github.workspace }}/imagetoolbox_source/keystore.p12 \
-            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
- 
+          bash ./gradlew assembleMarketRelease
+
+      - name: Sign market release APKs
+        working-directory: ./imagetoolbox_source
+        run: |
+          ANDROID_SDK_PATH=$ANDROID_HOME/build-tools/35.0.0/apksigner
+          for apk in app/build/outputs/apk/market/release/*.apk; do
+            $ANDROID_SDK_PATH sign \
+              --ks $RUNNER_TEMP/keystores/keystore.jks \
+              --ks-key-alias ${{ secrets.ALIAS }} \
+              --ks-pass pass:${{ secrets.KEY_STORE_PASS }} \
+              --key-pass pass:${{ secrets.KEY_STORE_PASS }} \
+              --out "$apk" \
+              "$apk"
+          done
+
       - name: List generated apk files
         working-directory: ./imagetoolbox_source
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
- 
+
       - name: Rename and move
         working-directory: ./imagetoolbox_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
           mv app/build/outputs/apk/market/release/*-arm64-v8a-release.apk "${{ github.workspace }}/dist/imagetoolbox-${{ env.BUILD_DATE }}.apk"
- 
+
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
-          P12_KEYSTORE_PATH: "./imagetoolbox_source/keystore.p12"
+          P12_KEYSTORE_PATH: "${{ runner.temp }}/keystores/keystore.jks"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
           BUILD_ARTIFACT_PATH: "./dist/imagetoolbox-${{ env.BUILD_DATE }}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-imagetoolbox"
