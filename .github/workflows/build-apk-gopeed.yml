@@ -87,21 +87,27 @@ jobs:
           gomobile bind -tags nosqlite -ldflags="-w -s -checklinkname=0 -X github.com/GopeedLab/gopeed/pkg/base.Version=$VERSION" -o ui/flutter/android/app/libs/libgopeed.aar -target=android -androidapi 21 -javapkg="com.gopeed" github.com/GopeedLab/gopeed/bind/mobile
 
       # JDK 21 下，未显式配置 jvmTarget 的 Kotlin 任务默认对齐运行 JDK（=21），
-      # 与子模块 Java 17 冲突。通过 init script 在运行时按类名匹配所有 Kotlin
-      # 编译任务，统一 jvmTarget=17，不改动源码仓库任何文件。
-      # 注意：init script 的 classloader 只有 Gradle 核心 API，不能引用 KGP 的
-      # 类字面量（否则 Groovy 会把 org.jetbrains... 解析为属性链而报
-      # "unknown property 'org'"），因此这里用 task.class.name 做运行时匹配
+      # 而各 Flutter 插件子项目的 Java 编译目标参差不齐（17、1.8 等），硬编码
+      # 任何单一值都会造成一侧不一致。改为动态对齐：对每个 Kotlin 编译任务，
+      # 找到同项目内同名前缀的 Java 编译任务（compileXxxKotlin ↔ 
+      # compileXxxJavaWithJavac），令 kotlin jvmTarget 跟随其 targetCompatibility。
+      # 在 afterEvaluate 中执行，确保读取到的是插件最终配置值。
       - name: Align kotlin jvmTarget with java via gradle init script
         run: |
           mkdir -p ~/.gradle/init.d
           cat > ~/.gradle/init.d/fix-jvm-target.gradle <<'EOF'
           allprojects {
-              tasks.configureEach { task ->
-                  if (task.class.name.startsWith("org.jetbrains.kotlin.gradle.tasks.")
-                          && task.class.name.contains("Compile")
-                          && task.metaClass.hasProperty(task, "kotlinOptions")) {
-                      task.kotlinOptions.jvmTarget = "17"
+              afterEvaluate {
+                  tasks.matching { t ->
+                      t.class.name.startsWith("org.jetbrains.kotlin.gradle.tasks.") &&
+                      t.name.endsWith("Kotlin")
+                  }.all { ktTask ->
+                      def javaTask = tasks.findByName(
+                          ktTask.name.substring(0, ktTask.name.length() - "Kotlin".length()) +
+                          "JavaWithJavac")
+                      if (javaTask != null) {
+                          ktTask.kotlinOptions.jvmTarget = javaTask.targetCompatibility
+                      }
                   }
               }
           }
