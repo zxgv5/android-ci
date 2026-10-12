@@ -49,9 +49,10 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@main
         with:
-          go-version: "1.25.4"
+          go-version: "1.26"
           cache: true
           cache-dependency-path: ./gopeed_source/go.sum
+
 
       - name: Setup flutter
         uses: subosito/flutter-action@main
