@@ -76,7 +76,6 @@ jobs:
             echo keyPassword='${{ secrets.KEY_ALIAS_PASSWORD }}' >> gopeed_source/ui/flutter/android/key.properties
           fi
 
-      # gomobile 必须在仓库根（go module 所在目录）执行，依赖 runner 预装的 Android NDK
       - name: Build go core aar
         working-directory: ./gopeed_source
         run: |
@@ -87,20 +86,26 @@ jobs:
           mkdir -p ui/flutter/android/app/libs
           gomobile bind -tags nosqlite -ldflags="-w -s -checklinkname=0 -X github.com/GopeedLab/gopeed/pkg/base.Version=$VERSION" -o ui/flutter/android/app/libs/libgopeed.aar -target=android -androidapi 21 -javapkg="com.gopeed" github.com/GopeedLab/gopeed/bind/mobile
 
-      # JDK 21 下，未显式配置 jvmTarget 的 Kotlin 任务会默认对齐运行 JDK（=21），
-      # 与子模块（install_plugin 等）的 Java 17 冲突（Inconsistent JVM-target）。
-      # 通过 Gradle init script 统一所有子项目 Kotlin 目标为 17，与 Java 侧对齐，
-      # 不改动源码仓库任何文件；Gradle 会在每次构建前自动加载 ~/.gradle/init.d/
+      # JDK 21 下，未显式配置 jvmTarget 的 Kotlin 任务默认对齐运行 JDK（=21），
+      # 与子模块 Java 17 冲突。通过 init script 在运行时按类名匹配所有 Kotlin
+      # 编译任务，统一 jvmTarget=17，不改动源码仓库任何文件。
+      # 注意：init script 的 classloader 只有 Gradle 核心 API，不能引用 KGP 的
+      # 类字面量（否则 Groovy 会把 org.jetbrains... 解析为属性链而报
+      # "unknown property 'org'"），因此这里用 task.class.name 做运行时匹配
       - name: Align kotlin jvmTarget with java via gradle init script
         run: |
           mkdir -p ~/.gradle/init.d
-          printf '%s\n' \
-            'allprojects {' \
-            '    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {' \
-            '        kotlinOptions.jvmTarget = "17"' \
-            '    }' \
-            '}' \
-            > ~/.gradle/init.d/fix-jvm-target.gradle
+          cat > ~/.gradle/init.d/fix-jvm-target.gradle <<'EOF'
+          allprojects {
+              tasks.configureEach { task ->
+                  if (task.class.name.startsWith("org.jetbrains.kotlin.gradle.tasks.")
+                          && task.class.name.contains("Compile")
+                          && task.metaClass.hasProperty(task, "kotlinOptions")) {
+                      task.kotlinOptions.jvmTarget = "17"
+                  }
+              }
+          }
+          EOF
           echo "--- init script content ---"
           cat ~/.gradle/init.d/fix-jvm-target.gradle
 
