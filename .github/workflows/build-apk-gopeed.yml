@@ -53,7 +53,6 @@ jobs:
           cache: true
           cache-dependency-path: ./gopeed_source/go.sum
 
-
       - name: Setup flutter
         uses: subosito/flutter-action@main
         with:
@@ -87,6 +86,23 @@ jobs:
           gomobile init
           mkdir -p ui/flutter/android/app/libs
           gomobile bind -tags nosqlite -ldflags="-w -s -checklinkname=0 -X github.com/GopeedLab/gopeed/pkg/base.Version=$VERSION" -o ui/flutter/android/app/libs/libgopeed.aar -target=android -androidapi 21 -javapkg="com.gopeed" github.com/GopeedLab/gopeed/bind/mobile
+
+      # JDK 21 下，未显式配置 jvmTarget 的 Kotlin 任务会默认对齐运行 JDK（=21），
+      # 与子模块（install_plugin 等）的 Java 17 冲突（Inconsistent JVM-target）。
+      # 通过 Gradle init script 统一所有子项目 Kotlin 目标为 17，与 Java 侧对齐，
+      # 不改动源码仓库任何文件；Gradle 会在每次构建前自动加载 ~/.gradle/init.d/
+      - name: Align kotlin jvmTarget with java via gradle init script
+        run: |
+          mkdir -p ~/.gradle/init.d
+          printf '%s\n' \
+            'allprojects {' \
+            '    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {' \
+            '        kotlinOptions.jvmTarget = "17"' \
+            '    }' \
+            '}' \
+            > ~/.gradle/init.d/fix-jvm-target.gradle
+          echo "--- init script content ---"
+          cat ~/.gradle/init.d/fix-jvm-target.gradle
 
       - name: Flutter build release apk
         # 仅编译arm64-v8a架构版本
