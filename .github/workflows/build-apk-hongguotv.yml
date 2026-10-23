@@ -1,0 +1,122 @@
+name: build-apk-hongguotv
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  JDK_VERSION: '17'             # 项目 Java 17 / Gradle 8.11.1 / AGP 8.9.2 / Kotlin 2.1.20
+  JDK_DISTRIBUTION: 'temurin'
+  ANDROID_COMPILE_SDK: '35'     # 与项目 compileSdk = 35 一致
+  ANDROID_BUILD_TOOLS: '35.0.0'
+  NDK_VERSION: '28.2.13676358'  # 项目 ndkVersion（QuickJS JNI 原生构建所需）
+  CMAKE_VERSION: '3.22.1'
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean runner environment
+        run: |
+          rm -rf ~/.gradle/caches/
+          rm -rf ~/.gradle/daemon/
+          rm -rf ~/.android/build-cache/
+          rm -rf .gradle
+
+      - name: Checkout source repo
+        uses: actions/checkout@main
+        with:
+          repository: sgsjsvc/hongguoTV
+          ref: main
+          path: hongguo_source
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup java
+        uses: actions/setup-java@main
+        with:
+          java-version: "${{ env.JDK_VERSION }}"
+          distribution: "${{ env.JDK_DISTRIBUTION }}"
+
+      - name: Install NDK, CMake and SDK components
+        # 工程含 QuickJS JNI（CMake 3.22.1 + NDK 28.2.13676358，四种 ABI），
+        # runner 未必预装该精确 NDK 版本，显式安装后导出 ANDROID_NDK_HOME，
+        # app/build.gradle.kts 会读取该环境变量设置 ndkPath
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f | head -n 1)"
+          fi
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "ndk;${NDK_VERSION}" "cmake;${CMAKE_VERSION}" \
+            "platforms;android-${ANDROID_COMPILE_SDK}" "build-tools;${ANDROID_BUILD_TOOLS}" > /dev/null
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/${NDK_VERSION}" >> $GITHUB_ENV
+
+      - name: Decode keystore and create init script
+        working-directory: ./hongguo_source/apps/tv-android
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.p12
+          cat > init.gradle << EOF
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.plugins.hasPlugin('com.android.application')) {
+                      if (!project.android.signingConfigs.hasProperty('release')) {
+                          project.android.signingConfigs.create('release')
+                      }
+                      def releaseConfig = project.android.signingConfigs.getByName('release')
+                      releaseConfig.storeFile = project.rootProject.file('app/keystore.p12')
+                      releaseConfig.storePassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.keyAlias = System.getenv('KEY_ALIAS')
+                      releaseConfig.keyPassword = System.getenv('KEYSTORE_PASSWORD')
+                      releaseConfig.storeType = 'PKCS12'
+                      releaseConfig.enableV1Signing = true
+                      releaseConfig.enableV2Signing = true
+                      releaseConfig.enableV3Signing = true
+                      project.android.buildTypes.release.signingConfig = releaseConfig
+                  }
+              }
+          }
+          EOF
+
+      - name: Build signed apk with init script
+        working-directory: ./hongguo_source/apps/tv-android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon -I init.gradle
+
+      - name: List generated apk files
+        working-directory: ./hongguo_source/apps/tv-android
+        run: |
+          echo "Listing all apk files generated:"
+          find app/build/outputs -type f -name "*.apk" | sort
+
+      - name: Rename and move
+        working-directory: ./hongguo_source/apps/tv-android
+        run: |
+          mkdir -p "${{ github.workspace }}/dist"
+          mv "./app/build/outputs/apk/release/app-release.apk" "${{ github.workspace }}/dist/hongguotv-tv-${{ env.BUILD_DATE }}.apk"
+
+      - name: Erase keystore, encrypt package and create release
+        uses: ./ci_source/.github/actions/erase_aes256pac_release/
+        with:
+          P12_KEYSTORE_PATH: "./hongguo_source/apps/tv-android/app/keystore.p12"
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          BUILD_ARTIFACT_PATH: "./dist/hongguotv-tv-${{ env.BUILD_DATE }}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-hongguotv-tv"
