@@ -1,16 +1,15 @@
 name: download-apks-from-apkmirror
-
+ 
 on:
   workflow_dispatch:
     inputs:
-      # APKMirror 使用 org/repo 结构，而非 Android 包名
-      # 获取方法：访问 https://www.apkmirror.com/?s=应用名
-      # 例如 YouTube 的 APKMirror 页面是 /apk/google-inc/youtube/
-      # 则此输入为 "google-inc/youtube"
+      # 注意：APKMirror 使用 org/repo 结构（不是 Android 包名）
+      # 在 apkmirror.com 搜索应用，取地址栏 /apk/ 之后的部分
+      # default 中的 org/repo 仅为示例，务必自行在网站上核对
       apps:
         description: "应用列表，格式：org/repo，分号分隔"
         required: true
-        default: "eltacrew/mdviewer;spockzio/project-engineering-menu;via-browser/via-browser;moon+reader/moon-reader-pro;mx-tech/mx-player"
+        default: "eltacrew/mdviewer;via-browser/via-browser;moon+reader/moon-reader;mx-tech/mx-player"
         type: string
       architecture:
         description: "架构（universal、arm64-v8a、armeabi-v7a 等）"
@@ -22,28 +21,20 @@ on:
         required: false
         default: "apk"
         type: string
-      # 回退架构，若指定架构不存在则尝试此架构下载
-      architecture_fallback:
-        description: "回退架构（设为 none 禁用）"
-        required: false
-        default: "universal"
-        type: string
-      # 单个应用最大重试次数（应对 Cloudflare 风控）
       max_retries:
-        description: "单应用最大重试次数"
+        description: "整批下载最大重试次数"
         required: false
         default: "5"
         type: string
-      # 重试间隔基数（秒，指数退避：base, base*2, base*4...）
       retry_base_delay:
-        description: "重试基础间隔（秒）"
+        description: "重试基础间隔（秒，指数退避：30/60/120/240...）"
         required: false
         default: "30"
         type: string
-
+ 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+ 
 jobs:
   download:
     runs-on: ubuntu-latest
@@ -53,74 +44,105 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
-
+ 
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-
+ 
+      # 使用 Node 22：该 bin 是无扩展名的 ESM 打包产物，
+      # Node 22 对它的模块类型自动检测更可靠
       - name: Setup Node.js
         uses: actions/setup-node@main
         with:
-          node-version: '20'
-
+          node-version: '22'
+ 
+      # [关键修复] 该 npm 包发布的 bin 文件缺少 shebang，
+      # Linux 会用 bash 解释 JS 导致语法错误，安装后补上并严格验证
       - name: Install apkmirror-downloader
         run: |
           set -euo pipefail
           npm install -g apkmirror-downloader
-          apkmd --version || echo "apkmd installed"
-
+          APKMD_BIN=$(realpath "$(command -v apkmd)")
+          echo "apkmd 实际路径: $APKMD_BIN"
+          if ! head -n 1 "$APKMD_BIN" | grep -q '^#!'; then
+            echo "检测到 bin 文件缺少 shebang，正在补上..."
+            sed -i '1i #!/usr/bin/env node' "$APKMD_BIN"
+          fi
+          # 严格验证：失败即中断，绝不再用 || echo 掩盖错误
+          apkmd --help
+ 
       - name: Create apps.json for batch download
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+          ARCH: ${{ inputs.architecture }}
+          APP_TYPE: ${{ inputs.app_type }}
         run: |
           set -euo pipefail
-          mkdir -p "./apks-apkmirror-${{ env.BUILD_DATE }}"
-          mkdir -p /tmp/apkmd
-          cat > /tmp/apkmd/apps.json <<EOF
-          {
-            "options": {
-              "arch": "${{ inputs.architecture }}",
-              "type": "${{ inputs.app_type }}",
-              "outDir": "${{ github.workspace }}/apks-apkmirror-${{ env.BUILD_DATE }}"
-            },
-            "apps": [
-          EOF
-          # 分割应用列表
-          IFS=';' read -ra app_list <<< "${{ inputs.apps }}"
-          first=true
+          OUT_DIR="${GITHUB_WORKSPACE}/apks-apkmirror-${BUILD_DATE}"
+          mkdir -p "$OUT_DIR" /tmp/apkmd
+          apps_json=""
+          IFS=';' read -ra app_list <<< "$APPS_INPUT"
           for app in "${app_list[@]}"; do
-            app_trimmed=$(echo "$app" | xargs)
-            if [ -n "$app_trimmed" ]; then
-              # 切分 org/repo
-              org=$(echo "$app_trimmed" | cut -d'/' -f1 | xargs)
-              repo=$(echo "$app_trimmed" | cut -d'/' -f2 | xargs)
-              if [ -n "$org" ] && [ -n "$repo" ]; then
-                if [ "$first" = true ]; then
-                  first=false
-                else
-                  echo "," >> /tmp/apkmd/apps.json
-                fi
-                echo "  添加应用：org=$org, repo=$repo" >&2
-                printf '    {"org": "%s", "repo": "%s"}' "$org" "$repo" >> /tmp/apkmd/apps.json
-              fi
+            app=$(echo "$app" | xargs)
+            [ -z "$app" ] && continue
+            org="${app%%/*}"
+            repo="${app##*/}"
+            if [ "$app" = "$org" ]; then
+              echo "::error::输入格式应为 org/repo，收到: $app"
+              exit 1
             fi
+            [ -n "$apps_json" ] && apps_json+=","
+            apps_json+="    {\"org\": \"$org\", \"repo\": \"$repo\"}"
+            echo "已添加：org=$org, repo=$repo" >&2
           done
-          echo "" >> /tmp/apkmd/apps.json
-          echo "  ]" >> /tmp/apkmd/apps.json
-          echo "}" >> /tmp/apkmd/apps.json
+          if [ -z "$apps_json" ]; then
+            echo "::error::应用列表为空"
+            exit 1
+          fi
+          {
+            echo '{'
+            echo '  "options": {'
+            echo '    "arch": "'"$ARCH"'",'
+            echo '    "type": "'"$APP_TYPE"'",'
+            echo '    "outDir": "'"$OUT_DIR"'"'
+            echo '  },'
+            echo '  "apps": ['
+            echo "$apps_json"
+            echo '  ]'
+            echo '}'
+          } > /tmp/apkmd/apps.json
           echo "--- apps.json 内容 ---"
           cat /tmp/apkmd/apps.json
-
-      - name: Download APKs from APKMirror
+ 
+      - name: Download APKs from APKMirror (with retry)
         run: |
           set -euo pipefail
           cd /tmp/apkmd
-          apkmd apps.json
-
+          MAX_RETRIES="${{ inputs.max_retries }}"
+          BASE_DELAY="${{ inputs.retry_base_delay }}"
+          attempt=1
+          while [ "$attempt" -le "$MAX_RETRIES" ]; do
+            echo "尝试第 $attempt/$MAX_RETRIES 次..."
+            if apkmd apps.json; then
+              echo "下载成功！"
+              break
+            fi
+            if [ "$attempt" -eq "$MAX_RETRIES" ]; then
+              echo "已达最大重试次数，放弃。"
+              exit 1
+            fi
+            delay=$((BASE_DELAY * (2 ** (attempt - 1))))
+            echo "失败，${delay}s 后重试..."
+            sleep "$delay"
+            attempt=$((attempt + 1))
+          done
+ 
       - name: List downloaded files
         if: always()
         run: |
           echo "下载完成，文件清单："
           ls -lh "./apks-apkmirror-${{ env.BUILD_DATE }}/" || echo "目录为空或不存在"
-
+ 
       - name: Encrypt apks and create release
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
