@@ -1,15 +1,14 @@
 name: download-apks-from-apkmirror
- 
+
 on:
   workflow_dispatch:
     inputs:
-      # 注意：APKMirror 使用 org/repo 结构（不是 Android 包名）
-      # 在 apkmirror.com 搜索应用，取地址栏 /apk/ 之后的部分
-      # default 中的 org/repo 仅为示例，务必自行在网站上核对
+      # 获取方法：访问 https://www.apkmirror.com/?s=应用名 搜索，
+      # 进入应用主页后复制地址栏 /apk/ 之后的部分，例如 YouTube 为 google-inc/youtube
       apps:
         description: "应用列表，格式：org/repo，分号分隔"
         required: true
-        default: "eltacrew/mdviewer;via-browser/via-browser;moon+reader/moon-reader;mx-tech/mx-player"
+        default: "google-inc/youtube"
         type: string
       architecture:
         description: "架构（universal、arm64-v8a、armeabi-v7a 等）"
@@ -22,7 +21,7 @@ on:
         default: "apk"
         type: string
       max_retries:
-        description: "整批下载最大重试次数"
+        description: "整批最大尝试次数"
         required: false
         default: "5"
         type: string
@@ -31,10 +30,10 @@ on:
         required: false
         default: "30"
         type: string
- 
+
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
- 
+
 jobs:
   download:
     runs-on: ubuntu-latest
@@ -44,20 +43,17 @@ jobs:
         uses: actions/checkout@main
         with:
           path: ci_source
- 
+
       - name: Generate timestamp
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
- 
-      # 使用 Node 22：该 bin 是无扩展名的 ESM 打包产物，
-      # Node 22 对它的模块类型自动检测更可靠
+
       - name: Setup Node.js
         uses: actions/setup-node@main
         with:
           node-version: '22'
- 
-      # [关键修复] 该 npm 包发布的 bin 文件缺少 shebang，
-      # Linux 会用 bash 解释 JS 导致语法错误，安装后补上并严格验证
+
+      # 该 npm 包的 bin 缺少 shebang，需安装后补上，否则 bash 会去解析 JS
       - name: Install apkmirror-downloader
         run: |
           set -euo pipefail
@@ -68,10 +64,9 @@ jobs:
             echo "检测到 bin 文件缺少 shebang，正在补上..."
             sed -i '1i #!/usr/bin/env node' "$APKMD_BIN"
           fi
-          # 严格验证：失败即中断，绝不再用 || echo 掩盖错误
           apkmd --help
- 
-      - name: Create apps.json for batch download
+
+      - name: Create apps.json
         env:
           APPS_INPUT: ${{ inputs.apps }}
           ARCH: ${{ inputs.architecture }}
@@ -81,21 +76,23 @@ jobs:
           OUT_DIR="${GITHUB_WORKSPACE}/apks-apkmirror-${BUILD_DATE}"
           mkdir -p "$OUT_DIR" /tmp/apkmd
           apps_json=""
+          count=0
           IFS=';' read -ra app_list <<< "$APPS_INPUT"
           for app in "${app_list[@]}"; do
             app=$(echo "$app" | xargs)
             [ -z "$app" ] && continue
             org="${app%%/*}"
             repo="${app##*/}"
-            if [ "$app" = "$org" ]; then
+            if [ "$app" = "$org" ] || [ -z "$repo" ]; then
               echo "::error::输入格式应为 org/repo，收到: $app"
               exit 1
             fi
             [ -n "$apps_json" ] && apps_json+=","
             apps_json+="    {\"org\": \"$org\", \"repo\": \"$repo\"}"
+            count=$((count + 1))
             echo "已添加：org=$org, repo=$repo" >&2
           done
-          if [ -z "$apps_json" ]; then
+          if [ "$count" -eq 0 ]; then
             echo "::error::应用列表为空"
             exit 1
           fi
@@ -111,38 +108,117 @@ jobs:
             echo '  ]'
             echo '}'
           } > /tmp/apkmd/apps.json
+          echo "APP_COUNT=$count" >> "$GITHUB_ENV"
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
           echo "--- apps.json 内容 ---"
           cat /tmp/apkmd/apps.json
- 
-      - name: Download APKs from APKMirror (with retry)
+
+      # [新增] 预检：先确认每个 slug 在 APKMirror 上真实存在
+      # 404 直接硬失败，避免白白重试一个不可能成功的应用
+      - name: Preflight - verify app slugs on APKMirror
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+        run: |
+          set -euo pipefail
+          UA="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
+          bad_slugs=""
+          blocked=0
+          ok=0
+          IFS=';' read -ra app_list <<< "$APPS_INPUT"
+          for app in "${app_list[@]}"; do
+            app=$(echo "$app" | xargs)
+            [ -z "$app" ] && continue
+            url="https://www.apkmirror.com/apk/${app}/"
+            http_code=$(curl -sS -L -A "$UA" --max-time 30 -o /tmp/preflight.html -w '%{http_code}' "$url" || echo "000")
+            case "$http_code" in
+              200)
+                if grep -qi "cannot be loaded without JavaScript" /tmp/preflight.html; then
+                  echo "⚠️  $app -> 返回 JS 质询页（runner IP 可能被拦截）"
+                  blocked=$((blocked + 1))
+                else
+                  echo "✅ $app -> 页面正常：$url"
+                  ok=$((ok + 1))
+                fi
+                ;;
+              404)
+                echo "❌ $app -> 404：slug 不存在：$url"
+                bad_slugs="$bad_slugs $app"
+                ;;
+              *)
+                echo "⚠️  $app -> HTTP $http_code（可能被拦截或站点异常）"
+                blocked=$((blocked + 1))
+                ;;
+            esac
+          done
+          echo "--- 诊断汇总：正常 $ok / slug 不存在 $(echo $bad_slugs | wc -w | tr -d ' ') / 疑似拦截 $blocked ---"
+          if [ -n "$bad_slugs" ]; then
+            echo "::error::以下 slug 在 APKMirror 上不存在，请到 https://www.apkmirror.com/?s=应用名 搜索并核对地址栏路径：$bad_slugs"
+            exit 1
+          fi
+          if [ "$ok" -eq 0 ]; then
+            echo "::warning::所有页面均异常：GitHub 数据中心 IP 可能被 APKMirror 拦截，下载成功率存疑"
+          fi
+
+      # [关键修复] 不信任 apkmd 的退出码，以实际落盘文件数作为唯一成败标准
+      - name: Download APKs from APKMirror (file-verified retry)
+        env:
+          MAX_RETRIES: ${{ inputs.max_retries }}
+          BASE_DELAY: ${{ inputs.retry_base_delay }}
         run: |
           set -euo pipefail
           cd /tmp/apkmd
-          MAX_RETRIES="${{ inputs.max_retries }}"
-          BASE_DELAY="${{ inputs.retry_base_delay }}"
+          EXPECTED="${APP_COUNT}"
+
+          count_files() {
+            find "$OUT_DIR" -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' \) | wc -l | tr -d ' '
+          }
+
+          # 兜底：万一 apkmd 忽略 outDir 把文件写到了工作目录，搬回来
+          rescue_strays() {
+            rescued=$(find /tmp/apkmd -maxdepth 2 -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' \) | wc -l | tr -d ' ')
+            if [ "$rescued" -gt 0 ]; then
+              echo "::warning::发现 $rescued 个文件未写入 outDir，正在搬移"
+              find /tmp/apkmd -maxdepth 2 -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' \) -exec mv {} "$OUT_DIR/" \;
+            fi
+          }
+
           attempt=1
-          while [ "$attempt" -le "$MAX_RETRIES" ]; do
-            echo "尝试第 $attempt/$MAX_RETRIES 次..."
-            if apkmd apps.json; then
-              echo "下载成功！"
+          while true; do
+            echo "=== 尝试第 $attempt/$MAX_RETRIES 次 ==="
+            # 注意：apkmd 下载失败时退出码仍可能为 0，这里不把退出码当成败依据
+            apkmd apps.json || echo "::warning::apkmd 返回非零退出码（第 $attempt 次尝试）"
+            rescue_strays
+            n=$(count_files)
+            echo "当前已下载文件数：$n / 期望（应用数）：$EXPECTED"
+            if [ "$n" -ge "$EXPECTED" ]; then
+              echo "✅ 已下载全部应用"
               break
             fi
-            if [ "$attempt" -eq "$MAX_RETRIES" ]; then
-              echo "已达最大重试次数，放弃。"
+            if [ "$attempt" -ge "$MAX_RETRIES" ]; then
+              if [ "$n" -gt 0 ]; then
+                echo "::warning::重试耗尽，仅下载到 $n/$EXPECTED 个应用的文件，继续处理已下载内容"
+                break
+              fi
+              echo "::error::重试 $MAX_RETRIES 次后一个文件都没下载到，终止（不发布空 release）"
               exit 1
             fi
             delay=$((BASE_DELAY * (2 ** (attempt - 1))))
-            echo "失败，${delay}s 后重试..."
+            echo "未下载完整，${delay}s 后重试..."
             sleep "$delay"
             attempt=$((attempt + 1))
           done
- 
-      - name: List downloaded files
-        if: always()
+
+      - name: List downloaded files (final check)
         run: |
-          echo "下载完成，文件清单："
-          ls -lh "./apks-apkmirror-${{ env.BUILD_DATE }}/" || echo "目录为空或不存在"
- 
+          set -euo pipefail
+          n=$(find "$OUT_DIR" -type f | wc -l | tr -d ' ')
+          if [ "$n" -eq 0 ]; then
+            echo "::error::目录为空，中止发布"
+            exit 1
+          fi
+          echo "共 $n 个文件："
+          ls -lh "$OUT_DIR/"
+
       - name: Encrypt apks and create release
         uses: ./ci_source/.github/actions/aes256pac_release/
         with:
