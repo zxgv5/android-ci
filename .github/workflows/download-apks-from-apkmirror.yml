@@ -1,0 +1,129 @@
+name: download-apks-from-apkmirror
+
+on:
+  workflow_dispatch:
+    inputs:
+      # APKMirror 使用 org/repo 结构，而非 Android 包名
+      # 获取方法：访问 https://www.apkmirror.com/?s=应用名
+      # 例如 YouTube 的 APKMirror 页面是 /apk/google-inc/youtube/
+      # 则此输入为 "google-inc/youtube"
+      apps:
+        description: "应用列表，格式：org/repo，分号分隔"
+        required: true
+        default: "eltacrew/mdviewer;spockzio/project-engineering-menu;via-browser/via-browser;moon+reader/moon-reader-pro;mx-tech/mx-player"
+        type: string
+      architecture:
+        description: "架构（universal、arm64-v8a、armeabi-v7a 等）"
+        required: false
+        default: "arm64-v8a"
+        type: string
+      app_type:
+        description: "下载类型（apk 或 bundle）"
+        required: false
+        default: "apk"
+        type: string
+      # 回退架构，若指定架构不存在则尝试此架构下载
+      architecture_fallback:
+        description: "回退架构（设为 none 禁用）"
+        required: false
+        default: "universal"
+        type: string
+      # 单个应用最大重试次数（应对 Cloudflare 风控）
+      max_retries:
+        description: "单应用最大重试次数"
+        required: false
+        default: "5"
+        type: string
+      # 重试间隔基数（秒，指数退避：base, base*2, base*4...）
+      retry_base_delay:
+        description: "重试基础间隔（秒）"
+        required: false
+        default: "30"
+        type: string
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: '20'
+
+      - name: Install apkmirror-downloader
+        run: |
+          set -euo pipefail
+          npm install -g apkmirror-downloader
+          apkmd --version || echo "apkmd installed"
+
+      - name: Create apps.json for batch download
+        run: |
+          set -euo pipefail
+          mkdir -p "./apks-apkmirror-${{ env.BUILD_DATE }}"
+          mkdir -p /tmp/apkmd
+          cat > /tmp/apkmd/apps.json <<EOF
+          {
+            "options": {
+              "arch": "${{ inputs.architecture }}",
+              "type": "${{ inputs.app_type }}",
+              "outDir": "${{ github.workspace }}/apks-apkmirror-${{ env.BUILD_DATE }}"
+            },
+            "apps": [
+          EOF
+          # 分割应用列表
+          IFS=';' read -ra app_list <<< "${{ inputs.apps }}"
+          first=true
+          for app in "${app_list[@]}"; do
+            app_trimmed=$(echo "$app" | xargs)
+            if [ -n "$app_trimmed" ]; then
+              # 切分 org/repo
+              org=$(echo "$app_trimmed" | cut -d'/' -f1 | xargs)
+              repo=$(echo "$app_trimmed" | cut -d'/' -f2 | xargs)
+              if [ -n "$org" ] && [ -n "$repo" ]; then
+                if [ "$first" = true ]; then
+                  first=false
+                else
+                  echo "," >> /tmp/apkmd/apps.json
+                fi
+                echo "  添加应用：org=$org, repo=$repo" >&2
+                printf '    {"org": "%s", "repo": "%s"}' "$org" "$repo" >> /tmp/apkmd/apps.json
+              fi
+            fi
+          done
+          echo "" >> /tmp/apkmd/apps.json
+          echo "  ]" >> /tmp/apkmd/apps.json
+          echo "}" >> /tmp/apkmd/apps.json
+          echo "--- apps.json 内容 ---"
+          cat /tmp/apkmd/apps.json
+
+      - name: Download APKs from APKMirror
+        run: |
+          set -euo pipefail
+          cd /tmp/apkmd
+          apkmd apps.json
+
+      - name: List downloaded files
+        if: always()
+        run: |
+          echo "下载完成，文件清单："
+          ls -lh "./apks-apkmirror-${{ env.BUILD_DATE }}/" || echo "目录为空或不存在"
+
+      - name: Encrypt apks and create release
+        uses: ./ci_source/.github/actions/aes256pac_release/
+        with:
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          ARTIFACT_DIRECTORY_PATH: "./apks-apkmirror-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkmirror"
