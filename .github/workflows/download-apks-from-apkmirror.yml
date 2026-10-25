@@ -46,37 +46,23 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      # [关键修改] 不再用 npm 包（Node 运行时会被 CF 指纹识别），
-      # 改用官方预编译二进制（Bun 运行时），参见 apkmd issue #33
+      # 官方二进制（Bun 运行时，不会被 CF 按 Node 指纹拦截）。
+      # 注意：release 资产名为裸 "apkmd"（Linux）和 "apkmd.exe"（Windows），
+      # 直接用 latest/download 固定 URL，无需 API 匹配。
       - name: Install apkmd (official prebuilt binary)
         run: |
           set -euo pipefail
-          API="repos/tanishqmanuja/apkmirror-downloader/releases/latest"
-          echo "Release 资产列表（用于排查）："
-          gh api "$API" --jq '.assets[].name'
-          BIN_URL=$(gh api "$API" \
-            --jq '[.assets[] | select(.name | test("linux";"i")) | select(.name | test("x64|amd64";"i"))][0].browser_download_url // empty')
-          if [ -z "$BIN_URL" ]; then
-            echo "::error::未匹配到 linux-x64 资产，请根据上方列表手动调整匹配模式"
-            exit 1
-          fi
-          echo "下载二进制：$BIN_URL"
-          curl -fsSL "$BIN_URL" -o /tmp/apkmd-dl
-          FT=$(file -b /tmp/apkmd-dl)
+          curl -fsSL "https://github.com/tanishqmanuja/apkmirror-downloader/releases/latest/download/apkmd" -o /tmp/apkmd
+          FT=$(file -b /tmp/apkmd)
           echo "文件类型：$FT"
-          case "$FT" in
-            *ELF*)
-              # 裸可执行文件
-              sudo install -m 0755 /tmp/apkmd-dl /usr/local/bin/apkmd ;;
-            *)
-              # 压缩包形式，解压后找可执行文件
-              mkdir -p /tmp/apkmd-extract
-              tar -xf /tmp/apkmd-dl -C /tmp/apkmd-extract 2>/dev/null \
-                || unzip -qo /tmp/apkmd-dl -d /tmp/apkmd-extract
-              BIN=$(find /tmp/apkmd-extract -type f -name '*apkmd*' | head -n 1)
-              [ -z "$BIN" ] && { echo "::error::压缩包内未找到 apkmd 可执行文件"; exit 1; }
-              sudo install -m 0755 "$BIN" /usr/local/bin/apkmd ;;
-          esac
+          # 必须是 ELF 可执行文件；若返回 JSON/HTML 说明 URL 或 release 出了问题
+          echo "$FT" | grep -q 'ELF' || {
+            echo "::error::下载到的不是 ELF 可执行文件，latest release 的资产结构可能已变化"
+            echo "--- 前 200 字节 ---"
+            head -c 200 /tmp/apkmd; echo
+            exit 1
+          }
+          sudo install -m 0755 /tmp/apkmd /usr/local/bin/apkmd
           apkmd --help
 
       - name: Create apps.json
@@ -122,6 +108,39 @@ jobs:
           echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
           cat /tmp/apkmd/apps.json
 
+      # 上次承诺的预检：slug 是否存在 + 是否被 CF 拦截，先看清楚再下载
+      - name: Preflight - verify app slugs on APKMirror
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+        run: |
+          set -euo pipefail
+          UA="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
+          bad=""; blocked=0; ok=0
+          IFS=';' read -ra app_list <<< "$APPS_INPUT"
+          for app in "${app_list[@]}"; do
+            app=$(echo "$app" | xargs)
+            [ -z "$app" ] && continue
+            url="https://www.apkmirror.com/apk/${app}/"
+            http_code=$(curl -sS -L -A "$UA" --max-time 30 -o /tmp/preflight.html -w '%{http_code}' "$url" || echo "000")
+            case "$http_code" in
+              200)
+                if grep -qi "cannot be loaded without JavaScript" /tmp/preflight.html; then
+                  echo "⚠️  $app -> JS 质询页（CF 拦截）"
+                  blocked=$((blocked + 1))
+                else
+                  echo "✅ $app -> 页面正常"
+                  ok=$((ok + 1))
+                fi ;;
+              404) echo "❌ $app -> 404，slug 不存在：$url"; bad="$bad $app" ;;
+              *)   echo "⚠️  $app -> HTTP $http_code"; blocked=$((blocked + 1)) ;;
+            esac
+          done
+          echo "--- 汇总：正常 $ok / 404 $(echo $bad | wc -w | tr -d ' ') / 拦截 $blocked ---"
+          if [ -n "$bad" ]; then
+            echo "::error::slug 无效：$bad —— 请到 https://www.apkmirror.com/?s=应用名 核对地址栏路径"
+            exit 1
+          fi
+
       - name: Download APKs from APKMirror (file-verified retry)
         env:
           MAX_RETRIES: ${{ inputs.max_retries }}
@@ -138,7 +157,7 @@ jobs:
           attempt=1
           while true; do
             echo "=== 尝试第 $attempt/$MAX_RETRIES 次 ==="
-            apkmd apps.json || echo "::warning::apkmd 返回非零退出码（第 $attempt 次尝试）"
+            apkmd apps.json || echo "::warning::apkmd 返回非零退出码（第 $attempt 次）"
             n=$(count_files)
             echo "当前已下载文件数：$n / 期望（应用数）：$EXPECTED"
             if [ "$n" -ge "$EXPECTED" ]; then
