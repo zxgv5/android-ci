@@ -3,12 +3,10 @@ name: download-apks-from-apkmirror
 on:
   workflow_dispatch:
     inputs:
-      # 获取方法：访问 https://www.apkmirror.com/?s=应用名 搜索，
-      # 进入应用主页后复制地址栏 /apk/ 之后的部分，例如 YouTube 为 google-inc/youtube
       apps:
         description: "应用列表，格式：org/repo，分号分隔"
         required: true
-        default: "google-inc/youtube"
+        default: "mx-tech/mx-player"
         type: string
       architecture:
         description: "架构（universal、arm64-v8a、armeabi-v7a 等）"
@@ -26,7 +24,7 @@ on:
         default: "5"
         type: string
       retry_base_delay:
-        description: "重试基础间隔（秒，指数退避：30/60/120/240...）"
+        description: "重试基础间隔（秒，指数退避）"
         required: false
         default: "30"
         type: string
@@ -48,22 +46,37 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      - name: Setup Node.js
-        uses: actions/setup-node@main
-        with:
-          node-version: '22'
-
-      # 该 npm 包的 bin 缺少 shebang，需安装后补上，否则 bash 会去解析 JS
-      - name: Install apkmirror-downloader
+      # [关键修改] 不再用 npm 包（Node 运行时会被 CF 指纹识别），
+      # 改用官方预编译二进制（Bun 运行时），参见 apkmd issue #33
+      - name: Install apkmd (official prebuilt binary)
         run: |
           set -euo pipefail
-          npm install -g apkmirror-downloader
-          APKMD_BIN=$(realpath "$(command -v apkmd)")
-          echo "apkmd 实际路径: $APKMD_BIN"
-          if ! head -n 1 "$APKMD_BIN" | grep -q '^#!'; then
-            echo "检测到 bin 文件缺少 shebang，正在补上..."
-            sed -i '1i #!/usr/bin/env node' "$APKMD_BIN"
+          API="repos/tanishqmanuja/apkmirror-downloader/releases/latest"
+          echo "Release 资产列表（用于排查）："
+          gh api "$API" --jq '.assets[].name'
+          BIN_URL=$(gh api "$API" \
+            --jq '[.assets[] | select(.name | test("linux";"i")) | select(.name | test("x64|amd64";"i"))][0].browser_download_url // empty')
+          if [ -z "$BIN_URL" ]; then
+            echo "::error::未匹配到 linux-x64 资产，请根据上方列表手动调整匹配模式"
+            exit 1
           fi
+          echo "下载二进制：$BIN_URL"
+          curl -fsSL "$BIN_URL" -o /tmp/apkmd-dl
+          FT=$(file -b /tmp/apkmd-dl)
+          echo "文件类型：$FT"
+          case "$FT" in
+            *ELF*)
+              # 裸可执行文件
+              sudo install -m 0755 /tmp/apkmd-dl /usr/local/bin/apkmd ;;
+            *)
+              # 压缩包形式，解压后找可执行文件
+              mkdir -p /tmp/apkmd-extract
+              tar -xf /tmp/apkmd-dl -C /tmp/apkmd-extract 2>/dev/null \
+                || unzip -qo /tmp/apkmd-dl -d /tmp/apkmd-extract
+              BIN=$(find /tmp/apkmd-extract -type f -name '*apkmd*' | head -n 1)
+              [ -z "$BIN" ] && { echo "::error::压缩包内未找到 apkmd 可执行文件"; exit 1; }
+              sudo install -m 0755 "$BIN" /usr/local/bin/apkmd ;;
+          esac
           apkmd --help
 
       - name: Create apps.json
@@ -92,10 +105,7 @@ jobs:
             count=$((count + 1))
             echo "已添加：org=$org, repo=$repo" >&2
           done
-          if [ "$count" -eq 0 ]; then
-            echo "::error::应用列表为空"
-            exit 1
-          fi
+          [ "$count" -eq 0 ] && { echo "::error::应用列表为空"; exit 1; }
           {
             echo '{'
             echo '  "options": {'
@@ -110,56 +120,8 @@ jobs:
           } > /tmp/apkmd/apps.json
           echo "APP_COUNT=$count" >> "$GITHUB_ENV"
           echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
-          echo "--- apps.json 内容 ---"
           cat /tmp/apkmd/apps.json
 
-      # [新增] 预检：先确认每个 slug 在 APKMirror 上真实存在
-      # 404 直接硬失败，避免白白重试一个不可能成功的应用
-      - name: Preflight - verify app slugs on APKMirror
-        env:
-          APPS_INPUT: ${{ inputs.apps }}
-        run: |
-          set -euo pipefail
-          UA="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
-          bad_slugs=""
-          blocked=0
-          ok=0
-          IFS=';' read -ra app_list <<< "$APPS_INPUT"
-          for app in "${app_list[@]}"; do
-            app=$(echo "$app" | xargs)
-            [ -z "$app" ] && continue
-            url="https://www.apkmirror.com/apk/${app}/"
-            http_code=$(curl -sS -L -A "$UA" --max-time 30 -o /tmp/preflight.html -w '%{http_code}' "$url" || echo "000")
-            case "$http_code" in
-              200)
-                if grep -qi "cannot be loaded without JavaScript" /tmp/preflight.html; then
-                  echo "⚠️  $app -> 返回 JS 质询页（runner IP 可能被拦截）"
-                  blocked=$((blocked + 1))
-                else
-                  echo "✅ $app -> 页面正常：$url"
-                  ok=$((ok + 1))
-                fi
-                ;;
-              404)
-                echo "❌ $app -> 404：slug 不存在：$url"
-                bad_slugs="$bad_slugs $app"
-                ;;
-              *)
-                echo "⚠️  $app -> HTTP $http_code（可能被拦截或站点异常）"
-                blocked=$((blocked + 1))
-                ;;
-            esac
-          done
-          echo "--- 诊断汇总：正常 $ok / slug 不存在 $(echo $bad_slugs | wc -w | tr -d ' ') / 疑似拦截 $blocked ---"
-          if [ -n "$bad_slugs" ]; then
-            echo "::error::以下 slug 在 APKMirror 上不存在，请到 https://www.apkmirror.com/?s=应用名 搜索并核对地址栏路径：$bad_slugs"
-            exit 1
-          fi
-          if [ "$ok" -eq 0 ]; then
-            echo "::warning::所有页面均异常：GitHub 数据中心 IP 可能被 APKMirror 拦截，下载成功率存疑"
-          fi
-
-      # [关键修复] 不信任 apkmd 的退出码，以实际落盘文件数作为唯一成败标准
       - name: Download APKs from APKMirror (file-verified retry)
         env:
           MAX_RETRIES: ${{ inputs.max_retries }}
@@ -173,21 +135,10 @@ jobs:
             find "$OUT_DIR" -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' \) | wc -l | tr -d ' '
           }
 
-          # 兜底：万一 apkmd 忽略 outDir 把文件写到了工作目录，搬回来
-          rescue_strays() {
-            rescued=$(find /tmp/apkmd -maxdepth 2 -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' \) | wc -l | tr -d ' ')
-            if [ "$rescued" -gt 0 ]; then
-              echo "::warning::发现 $rescued 个文件未写入 outDir，正在搬移"
-              find /tmp/apkmd -maxdepth 2 -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' \) -exec mv {} "$OUT_DIR/" \;
-            fi
-          }
-
           attempt=1
           while true; do
             echo "=== 尝试第 $attempt/$MAX_RETRIES 次 ==="
-            # 注意：apkmd 下载失败时退出码仍可能为 0，这里不把退出码当成败依据
             apkmd apps.json || echo "::warning::apkmd 返回非零退出码（第 $attempt 次尝试）"
-            rescue_strays
             n=$(count_files)
             echo "当前已下载文件数：$n / 期望（应用数）：$EXPECTED"
             if [ "$n" -ge "$EXPECTED" ]; then
@@ -196,10 +147,10 @@ jobs:
             fi
             if [ "$attempt" -ge "$MAX_RETRIES" ]; then
               if [ "$n" -gt 0 ]; then
-                echo "::warning::重试耗尽，仅下载到 $n/$EXPECTED 个应用的文件，继续处理已下载内容"
+                echo "::warning::重试耗尽，仅下载到 $n/$EXPECTED 个，继续处理已下载内容"
                 break
               fi
-              echo "::error::重试 $MAX_RETRIES 次后一个文件都没下载到，终止（不发布空 release）"
+              echo "::error::重试 $MAX_RETRIES 次后一个文件都没下载到，终止"
               exit 1
             fi
             delay=$((BASE_DELAY * (2 ** (attempt - 1))))
@@ -212,10 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           n=$(find "$OUT_DIR" -type f | wc -l | tr -d ' ')
-          if [ "$n" -eq 0 ]; then
-            echo "::error::目录为空，中止发布"
-            exit 1
-          fi
+          [ "$n" -eq 0 ] && { echo "::error::目录为空，中止发布"; exit 1; }
           echo "共 $n 个文件："
           ls -lh "$OUT_DIR/"
 
