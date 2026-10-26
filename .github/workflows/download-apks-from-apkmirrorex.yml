@@ -1,0 +1,239 @@
+name: download-apks-from-apkmirrorex
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "应用列表，格式：org/repo，分号分隔"
+        required: true
+        default: "mx-tech/mx-player"
+        type: string
+      architecture:
+        description: "架构"
+        required: false
+        default: "arm64-v8a"
+        type: string
+      architecture_fallback:
+        description: "回退架构（留空禁用）"
+        required: false
+        default: "universal"
+        type: string
+      app_type:
+        description: "下载类型（apk 或 bundle）"
+        required: false
+        default: "apk"
+        type: string
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    # FlareSolverr：真实 Chromium 过 CF 挑战，返回 cf_clearance cookies
+    services:
+      flaresolverr:
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        ports:
+          - 8191:8191
+        env:
+          LOG_LEVEL: info
+        options: >-
+          --health-cmd="curl -f http://localhost:8191/ || exit 1"
+          --health-interval=15s
+          --health-timeout=10s
+          --health-retries=12
+
+    steps:
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: '22'
+
+      - name: Prepare workspace
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+        run: |
+          set -euo pipefail
+          OUT_DIR="${GITHUB_WORKSPACE}/apks-apkmirrorex-${BUILD_DATE}"
+          WORK="${GITHUB_WORKSPACE}/.apkmd-tool"
+          mkdir -p "$OUT_DIR" "$WORK"
+          cd "$WORK"
+          npm init -y > /dev/null
+          npm install apkmirror-downloader --no-audit --no-fund --silent
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
+          APP_COUNT=$(echo "$APPS_INPUT" | tr ';' '\n' | grep -c . || true)
+          echo "APP_COUNT=$APP_COUNT" >> "$GITHUB_ENV"
+
+      # 核心脚本：FlareSolverr 过挑战 + monkey-patch fetch + 调用 apkmirror-downloader 库 API
+      - name: Write download script
+        working-directory: .apkmd-tool
+        run: |
+          cat > download.mjs <<'SCRIPT_EOF'
+          import { mkdirSync, readdirSync } from "node:fs";
+
+          const FLARE_URL = process.env.FLARESOLVR_URL || "http://localhost:8191/v1";
+          const TARGET = "https://www.apkmirror.com";
+          const OUT_DIR = process.env.OUT_DIR;
+          const ARCH = process.env.ARCH || "arm64-v8a";
+          const ARCH_FALLBACK = process.env.ARCH_FALLBACK || "";
+          const APP_TYPE = process.env.APP_TYPE || "apk";
+          const APPS = (process.env.APPS_INPUT || "")
+            .split(";").map(s => s.trim()).filter(Boolean);
+
+          if (!APPS.length) {
+            console.error("::error::no apps to download");
+            process.exit(1);
+          }
+          mkdirSync(OUT_DIR, { recursive: true });
+
+          console.log(`[info] apps: ${APPS.join(", ")}`);
+          console.log(`[info] arch: ${ARCH} (fallback: ${ARCH_FALLBACK || "none"})`);
+          console.log(`[info] type: ${APP_TYPE}`);
+
+          // 让 FlareSolverr 用真实 Chromium 过一次 CF 挑战
+          async function flareSolve(url, retries = 3) {
+            for (let i = 1; i <= retries; i++) {
+              try {
+                const res = await fetch(FLARE_URL, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    cmd: "request.get",
+                    url: url,
+                    maxTimeout: 60000,
+                  }),
+                });
+                const data = await res.json();
+                if (data.status === "ok" && data.solution) {
+                  console.log(`[flare] solved ${url} (attempt ${i})`);
+                  return data.solution;
+                }
+                console.warn(`[flare] status=${data.status} msg=${data.message} (attempt ${i})`);
+              } catch (e) {
+                console.warn(`[flare] error: ${e.message} (attempt ${i})`);
+              }
+              await new Promise(r => setTimeout(r, 10000 * i));
+            }
+            throw new Error(`FlareSolverr could not solve ${url}`);
+          }
+
+          const firstApp = APPS[0].split("/");
+          const firstUrl = `${TARGET}/apk/${firstApp[0]}/${firstApp[1]}/`;
+          const solution = await flareSolve(firstUrl);
+          const cookieHeader = solution.cookies
+            .map(c => `${c.name}=${c.value}`)
+            .join("; ");
+          const UA = solution.userAgent;
+          if (!cookieHeader) {
+            console.error("::error::FlareSolverr returned no cookies (CF may not have challenged)");
+            process.exit(1);
+          }
+          console.log(`[flare] UA: ${UA}`);
+          console.log(`[flare] cookies: ${cookieHeader.slice(0, 120)}...`);
+          if (solution.response && /page not found/i.test(solution.response)) {
+            console.error(`::error::slug not found on APKMirror: ${firstApp.join("/")}`);
+            process.exit(1);
+          }
+
+          // Monkey-patch 全局 fetch：所有 apkmirror.com 的请求都注入凭证
+          const realFetch = globalThis.fetch;
+          globalThis.fetch = async (input, init = {}) => {
+            const url = typeof input === "string" ? input : (input && input.url) || "";
+            if (url.startsWith(TARGET)) {
+              const headers = new Headers(
+                init.headers || (input && input.headers) || {}
+              );
+              if (!headers.has("cookie")) headers.set("cookie", cookieHeader);
+              if (!headers.has("user-agent")) headers.set("user-agent", UA);
+              if (!headers.has("referer")) headers.set("referer", `${TARGET}/`);
+              init = { ...init, headers };
+            }
+            return realFetch(input, init);
+          };
+
+          // patch 完成后再加载 apkmirror-downloader（保证覆盖 polyfill 的任何 fetch 改动）
+          const mod = await import("apkmirror-downloader");
+          const APKMirrorDownloader =
+            mod.APKMirrorDownloader || (mod.default && mod.default.APKMirrorDownloader);
+          if (!APKMirrorDownloader) {
+            console.error("::error::APKMirrorDownloader class not found in package");
+            process.exit(1);
+          }
+
+          let okCount = 0;
+          for (const app of APPS) {
+            const parts = app.split("/");
+            if (parts.length < 2) {
+              console.error(`[dl] invalid slug (expected org/repo): ${app}`);
+              continue;
+            }
+            const org = parts[0];
+            const repo = parts[1];
+            console.log(`\n=== downloading ${org}/${repo} ===`);
+            const opts = { type: APP_TYPE, arch: ARCH };
+            if (ARCH_FALLBACK) opts.fallbackArch = ARCH_FALLBACK;
+            try {
+              const dl = new APKMirrorDownloader({ outDir: OUT_DIR });
+              await dl.download({ org: org, repo: repo }, opts);
+              okCount++;
+              console.log(`[dl] ${org}/${repo} done`);
+            } catch (e) {
+              console.error(`[dl] ${org}/${repo} failed: ${e.message}`);
+            }
+          }
+
+          // 以落盘文件数为准，不信任退出码
+          const exts = /\.(apk|apkm|xapk|apks)$/i;
+          const files = readdirSync(OUT_DIR).filter(f => exts.test(f));
+          console.log(`\n=== summary ===`);
+          console.log(`ok: ${okCount}/${APPS.length}`);
+          console.log(`files: ${files.length}`);
+          for (const f of files) console.log(`  - ${f}`);
+
+          if (files.length === 0) {
+            console.error("::error::no APK files downloaded");
+            process.exit(1);
+          }
+          if (files.length < APPS.length) {
+            console.warn(`::warning::partial success: ${files.length}/${APPS.length}`);
+          }
+          console.log("all done");
+          SCRIPT_EOF
+
+      - name: Run download
+        working-directory: .apkmd-tool
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+          ARCH: ${{ inputs.architecture }}
+          ARCH_FALLBACK: ${{ inputs.architecture_fallback }}
+          APP_TYPE: ${{ inputs.app_type }}
+          FLARESOLVR_URL: http://localhost:8191/v1
+        run: node download.mjs
+
+      - name: Final check
+        run: |
+          set -euo pipefail
+          n=$(find "$OUT_DIR" -type f | wc -l | tr -d ' ')
+          if [ "$n" -eq 0 ]; then
+            echo "::error::output directory is empty, aborting"
+            exit 1
+          fi
+          echo "total $n file(s):"
+          ls -lh "$OUT_DIR/"
+
+      - name: Encrypt apks and create release
+        uses: ./ci_source/.github/actions/aes256pac_release/
+        with:
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          ARTIFACT_DIRECTORY_PATH: "./apks-apkmirrorex-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-apkmirrorex"
