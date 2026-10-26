@@ -9,7 +9,7 @@ on:
         default: "com.google.android.youtube"
         type: string
       architecture:
-        description: "架构（arm64-v8a、armeabi-v7a、x86_64、x86）"
+        description: "架构（arm64-v8a、armeabi-v7a、x86_64、x86；或 all 表示全架构 bundle）"
         required: false
         default: "arm64-v8a"
         type: string
@@ -36,16 +36,19 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      # apkeep：Rust 写的下载器，支持 APKPure/APKCombo/APKMirror 等多源
-      - name: Install apkeep
+      # 用 Go 官方 action 安装 apkpure（kyungw00k/apkpure 的 CLI 入口）
+      - name: Setup Go
+        uses: actions/setup-go@main
+        with:
+          go-version: '1.23'
+          check-latest: true
+
+      - name: Install apkpure
         run: |
           set -euo pipefail
-          LATEST=$(curl -fsSL https://api.github.com/repos/EFForg/apkeep/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+')
-          echo "apkeep version: $LATEST"
-          curl -fsSL "https://github.com/EFForg/apkeep/releases/download/${LATEST}/apkeep-x86_64-unknown-linux-gnu" -o /tmp/apkeep
-          chmod +x /tmp/apkeep
-          sudo mv /tmp/apkeep /usr/local/bin/apkeep
-          apkeep --version
+          go install github.com/kyungw00k/apkpure/cmd/apkpure@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          apkpure -V
 
       - name: Setup Java (for apksigner)
         uses: actions/setup-java@main
@@ -63,6 +66,14 @@ jobs:
           mkdir -p "$OUT_DIR"
           echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
 
+          # arch=all 映射为全架构（XAPK bundle）
+          if [ "$ARCH" = "all" ]; then
+            ALL_ARCH="arm64-v8a;armeabi-v7a;x86;x86_64"
+          else
+            ALL_ARCH="$ARCH"
+          fi
+          echo "resolved arch: $ALL_ARCH"
+
           pkgs_ok=0
           pkgs_total=0
           IFS=';' read -ra pkg_list <<< "$APPS_INPUT"
@@ -71,11 +82,10 @@ jobs:
             [ -z "$pkg" ] && continue
             pkgs_total=$((pkgs_total + 1))
             echo ""
-            echo "=== downloading $pkg (arch=$ARCH) ==="
-            # 正确语法：-o 传源选项（逗号分隔），OUTPATH 是位置参数
-            # 多架构写法：arch=arm64-v8a;armeabi-v7a（分号在引号内，不会与外层 IFS 冲突）
-            if apkeep -a "$pkg" -d apk-pure \
-                -o "acknowledge_dangers=true,arch=$ARCH" \
+            echo "=== downloading $pkg (arch=$ALL_ARCH) ==="
+            # apkpure 的 -o 选项用逗号分隔；arch 多值用分号
+            if apkpure -a "$pkg" \
+                -o "arch=$ALL_ARCH" \
                 "$OUT_DIR" ; then
               echo "OK: $pkg downloaded"
               pkgs_ok=$((pkgs_ok + 1))
@@ -91,7 +101,69 @@ jobs:
             exit 1
           fi
 
-      # 签名校验：每个 APK 必须能读出签名证书；可选与期望指纹比对
+      - name: Verify target ABI present
+        env:
+          ARCH: ${{ inputs.architecture }}
+        run: |
+          set -euo pipefail
+          failed=0
+          shopt -s nullglob
+          for f in "$OUT_DIR"/*.apk "$OUT_DIR"/*.xapk "$OUT_DIR"/*.apkm; do
+            [ -f "$f" ] || continue
+            echo ""
+            echo "--- $(basename "$f") ---"
+            abis=""
+            case "$f" in
+              *.apk)
+                SDK_BT=$(ls -d "${ANDROID_HOME}/build-tools"/*/ 2>/dev/null | sort -V | tail -n1)
+                AAPT="${SDK_BT}/aapt"
+                abis=$("$AAPT" dump badging "$f" | grep -oP "native-code: '\K[^']+" || true)
+                ;;
+              *.xapk|*.apkm)
+                TMP=$(mktemp -d)
+                unzip -qo "$f" -d "$TMP"
+                abis=$(find "$TMP" -type d -path '*/lib/*' -mindepth 2 -maxdepth 2 -printf '%f\n' 2>/dev/null | sort -u | paste -sd, -)
+                if [ -z "$abis" ]; then
+                  abis=$(ls "$TMP" | grep -oP 'config\.\K(arm64_v8a|armeabi_v7a|x86_64|x86)' | sort -u | tr '_' '-' | paste -sd, -)
+                fi
+                rm -rf "$TMP"
+                ;;
+            esac
+            if [ -z "$abis" ]; then
+              echo "::warning::no native libs detected in $(basename "$f") (pure-Java app?)"
+              continue
+            fi
+            echo "detected ABIs: $abis"
+            # arch=all 时检查是否包含全部目标架构
+            if [ "$ARCH" = "all" ]; then
+              want="arm64-v8a armeabi-v7a x86 x86_64"
+              missing=""
+              for a in $want; do
+                if ! echo "$abis" | tr ',' '\n' | grep -qx "$a"; then
+                  missing="$missing $a"
+                fi
+              done
+              if [ -n "$missing" ]; then
+                echo "::error::$(basename "$f") missing arch(es):$missing"
+                failed=$((failed + 1))
+              else
+                echo "OK: all requested arches present"
+              fi
+            else
+              if ! echo "$abis" | tr ',' '\n' | grep -qx "$ARCH"; then
+                echo "::error::$(basename "$f") does NOT contain requested arch '$ARCH'"
+                failed=$((failed + 1))
+              else
+                echo "OK: requested arch '$ARCH' present"
+              fi
+            fi
+          done
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::$failed file(s) with wrong arch -- MANUAL INTERVENTION REQUIRED"
+            exit 1
+          fi
+          echo "all files contain target arch"
+
       - name: Verify APK signatures
         env:
           EXPECTED_CERTS: ${{ inputs.expected_cert_sha256 }}
@@ -112,7 +184,6 @@ jobs:
             [ -f "$apk" ] || continue
             echo ""
             echo "--- $(basename "$apk") ---"
-            # apkm/xapk 是 zip 压缩的 bundle，需先解开里面的 base.apk
             if [[ "$apk" == *.apkm || "$apk" == *.xapk ]]; then
               TMP=$(mktemp -d)
               unzip -qo "$apk" -d "$TMP"
@@ -150,7 +221,6 @@ jobs:
                 echo "signature matches expected fingerprint"
               fi
             fi
-            # 清理临时解包目录
             [ -n "${TMP:-}" ] && rm -rf "$TMP" && unset TMP
           done
 
