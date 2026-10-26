@@ -1,0 +1,225 @@
+name: download-apks-from-combo
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "应用列表：Android 包名，分号分隔（如 com.cxinventor.file.explorer）"
+        required: true
+        default: "com.google.android.youtube"
+        type: string
+      architecture:
+        description: "架构（arm64-v8a、armeabi-v7a、x86_64、x86）"
+        required: false
+        default: "arm64-v8a"
+        type: string
+      dpi:
+        description: "屏幕密度（nodpi、480dpi 等）"
+        required: false
+        default: "nodpi"
+        type: string
+      app_type:
+        description: "下载类型（apk 或 bundle）"
+        required: false
+        default: "apk"
+        type: string
+      max_retries:
+        description: "整批最大尝试次数"
+        required: false
+        default: "3"
+        type: string
+      retry_base_delay:
+        description: "重试基础间隔（秒）"
+        required: false
+        default: "15"
+        type: string
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@main
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+        run: |
+          set -euo pipefail
+          OUT_DIR="${GITHUB_WORKSPACE}/apks-from-combo-${BUILD_DATE}"
+          WORK="${GITHUB_WORKSPACE}/apkcd-tool"
+          mkdir -p "$OUT_DIR" "$WORK"
+          cd "$WORK"
+          cat > package.json <<'EOF'
+          {
+            "name": "apkcd-runner",
+            "version": "1.0.0",
+            "private": true,
+            "type": "module"
+          }
+          EOF
+          npm install @nirewen/apkcombo-downloader --no-audit --no-fund --silent
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
+          APP_COUNT=$(echo "$APPS_INPUT" | tr ';' '\n' | grep -c . || true)
+          echo "APP_COUNT=$APP_COUNT" >> "$GITHUB_ENV"
+
+      # 只传包名（repo 字段）；org 字段由脚本动态探测：
+      # APKCombo 应用页 URL 末段是包名，前段是 slug，SDK 反查时只需要包名有效即可。
+      # 这里用 HEAD 请求跟随重定向拿真实 slug，失败则退回"slug 即包名"尝试。
+      - name: Write download script
+        working-directory: apkcd-tool
+        run: |
+          cat > download.mjs <<'SCRIPT_EOF'
+          import { readdirSync, mkdirSync } from "node:fs";
+          import { APKComboDownloader } from "@nirewen/apkcombo-downloader";
+
+          const OUT_DIR = process.env.OUT_DIR;
+          const ARCH = process.env.ARCH || "arm64-v8a";
+          const DPI = process.env.DPI || "nodpi";
+          const APP_TYPE = process.env.APP_TYPE || "apk";
+          const PACKAGES = (process.env.APPS_INPUT || "")
+            .split(";").map(s => s.trim()).filter(Boolean);
+
+          if (!PACKAGES.length) {
+            console.error("::error::no packages to download");
+            process.exit(1);
+          }
+          mkdirSync(OUT_DIR, { recursive: true });
+          console.log(`[info] packages: ${PACKAGES.join(", ")}`);
+          console.log(`[info] arch=${ARCH} dpi=${DPI} type=${APP_TYPE}`);
+
+          const downloader = new APKComboDownloader({ outDir: OUT_DIR });
+
+          // 探测 APKCombo 上真实的 slug：跟随重定向拿最终 URL 的第一段
+          async function detectSlug(pkg) {
+            const candidates = [
+              `https://apkcombo.com/${pkg}/`,
+              `https://apkcombo.com/downloader/?package=${pkg}`,
+            ];
+            for (const url of candidates) {
+              try {
+                const res = await fetch(url, {
+                  method: "GET",
+                  redirect: "follow",
+                  headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" },
+                });
+                const finalUrl = res.url || "";
+                const m = finalUrl.match(/^https:\/\/apkcombo\.com\/([^\/]+)\//);
+                if (res.ok && m && m[1] && m[1] !== "downloader") {
+                  console.log(`[slug] ${pkg} -> ${m[1]} (from ${finalUrl})`);
+                  return m[1];
+                }
+              } catch (e) {
+                console.warn(`[slug] probe failed for ${url}: ${e.message}`);
+              }
+            }
+            // 兜底：假定 slug 等于包名（部分应用确实如此）
+            console.warn(`[slug] ${pkg} -> fallback: use package name as slug`);
+            return pkg;
+          }
+
+          let okCount = 0;
+          for (const pkg of PACKAGES) {
+            console.log(`\n=== processing ${pkg} ===`);
+            const org = await detectSlug(pkg);
+            console.log(`=== downloading ${org}/${pkg} ===`);
+            try {
+              await downloader.download(
+                { org: org, repo: pkg },
+                { arch: ARCH, dpi: DPI, type: APP_TYPE }
+              );
+              okCount++;
+              console.log(`[dl] ${pkg} done`);
+            } catch (e) {
+              console.error(`[dl] ${pkg} failed: ${e.message}`);
+            }
+          }
+
+          const exts = /\.(apk|apkm|xapk|apks|zip)$/i;
+          const files = readdirSync(OUT_DIR).filter(f => exts.test(f));
+          console.log(`\n=== summary ===`);
+          console.log(`ok: ${okCount}/${PACKAGES.length}`);
+          console.log(`files: ${files.length}`);
+          for (const f of files) console.log(`  - ${f}`);
+
+          if (files.length === 0) {
+            console.error("::error::no files downloaded");
+            process.exit(1);
+          }
+          if (okCount < PACKAGES.length) {
+            console.warn(`::warning::partial success: ${okCount}/${PACKAGES.length}`);
+          }
+          console.log("all done");
+          SCRIPT_EOF
+
+      - name: Download APKs (file-count verified retry)
+        working-directory: apkcd-tool
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+          ARCH: ${{ inputs.architecture }}
+          DPI: ${{ inputs.dpi }}
+          APP_TYPE: ${{ inputs.app_type }}
+          MAX_RETRIES: ${{ inputs.max_retries }}
+          BASE_DELAY: ${{ inputs.retry_base_delay }}
+        run: |
+          set -euo pipefail
+          EXPECTED="${APP_COUNT}"
+          count_files() {
+            find "$OUT_DIR" -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' -o -iname '*.zip' \) | wc -l | tr -d ' '
+          }
+          attempt=1
+          while true; do
+            echo "=== attempt $attempt/$MAX_RETRIES ==="
+            node download.mjs || echo "::warning::download exited non-zero (attempt $attempt)"
+            n=$(count_files)
+            echo "files: $n / expected: $EXPECTED"
+            if [ "$n" -ge "$EXPECTED" ]; then
+              echo "all apps downloaded"
+              break
+            fi
+            if [ "$attempt" -ge "$MAX_RETRIES" ]; then
+              if [ "$n" -gt 0 ]; then
+                echo "::warning::retries exhausted, got $n/$EXPECTED, continue with partial"
+                break
+              fi
+              echo "::error::no files downloaded after $MAX_RETRIES attempts"
+              exit 1
+            fi
+            delay=$((BASE_DELAY * (2 ** (attempt - 1))))
+            echo "incomplete, retrying in ${delay}s..."
+            sleep "$delay"
+            attempt=$((attempt + 1))
+          done
+
+      - name: Final check
+        run: |
+          set -euo pipefail
+          n=$(find "$OUT_DIR" -type f | wc -l | tr -d ' ')
+          if [ "$n" -eq 0 ]; then
+            echo "::error::output directory is empty, aborting"
+            exit 1
+          fi
+          echo "total $n file(s):"
+          ls -lh "$OUT_DIR/"
+
+      - name: Encrypt apks and create release
+        uses: ./ci_source/.github/actions/aes256pac_release/
+        with:
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          ARTIFACT_DIRECTORY_PATH: "./apks-from-combo-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-combo"
