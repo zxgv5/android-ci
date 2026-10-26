@@ -9,9 +9,14 @@ on:
         default: "mx-tech/mx-player"
         type: string
       architecture:
-        description: "架构（universal、arm64-v8a、armeabi-v7a 等）"
+        description: "架构"
         required: false
         default: "arm64-v8a"
+        type: string
+      architecture_fallback:
+        description: "回退架构（v2.0.9+ 支持，留空禁用）"
+        required: false
+        default: "universal"
         type: string
       app_type:
         description: "下载类型（apk 或 bundle）"
@@ -24,7 +29,7 @@ on:
         default: "5"
         type: string
       retry_base_delay:
-        description: "重试基础间隔（秒，指数退避：30/60/120/240...）"
+        description: "重试基础间隔（秒）"
         required: false
         default: "30"
         type: string
@@ -46,7 +51,6 @@ jobs:
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
 
-      # 官方预编译二进制（Bun 运行时），避免 npm/Node 版被 CF 指纹拦截
       - name: Install apkmd
         run: |
           set -euo pipefail
@@ -67,6 +71,7 @@ jobs:
         env:
           APPS_INPUT: ${{ inputs.apps }}
           ARCH: ${{ inputs.architecture }}
+          ARCH_FALLBACK: ${{ inputs.architecture_fallback }}
           APP_TYPE: ${{ inputs.app_type }}
         run: |
           set -euo pipefail
@@ -78,18 +83,14 @@ jobs:
           IFS=';' read -ra app_list <<< "$APPS_INPUT"
           for app in "${app_list[@]}"; do
             app=$(echo "$app" | xargs)
-            if [ -z "$app" ]; then
-              continue
-            fi
+            if [ -z "$app" ]; then continue; fi
             org="${app%%/*}"
             repo="${app##*/}"
             if [ "$app" = "$org" ] || [ -z "$repo" ]; then
               echo "::error::invalid format, expected org/repo, got: $app"
               exit 1
             fi
-            if [ -n "$apps_json" ]; then
-              apps_json="${apps_json},"
-            fi
+            if [ -n "$apps_json" ]; then apps_json="${apps_json},"; fi
             apps_json="${apps_json}    {\"org\": \"$org\", \"repo\": \"$repo\"}"
             count=$((count + 1))
             echo "added: org=$org, repo=$repo"
@@ -102,6 +103,9 @@ jobs:
             echo '{'
             echo '  "options": {'
             echo "    \"arch\": \"$ARCH\","
+            if [ -n "$ARCH_FALLBACK" ]; then
+              echo "    \"fallbackArch\": \"$ARCH_FALLBACK\","
+            fi
             echo "    \"type\": \"$APP_TYPE\","
             echo "    \"outDir\": \"$OUT_DIR\""
             echo '  },'
@@ -117,6 +121,9 @@ jobs:
       - name: Preflight - verify app slugs
         env:
           APPS_INPUT: ${{ inputs.apps }}
+          # 走与下载相同的出口，预检才有参考意义
+          HTTPS_PROXY: ${{ secrets.PROXY_URL }}
+          HTTP_PROXY: ${{ secrets.PROXY_URL }}
         run: |
           set -euo pipefail
           UA="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
@@ -126,9 +133,7 @@ jobs:
           IFS=';' read -ra app_list <<< "$APPS_INPUT"
           for app in "${app_list[@]}"; do
             app=$(echo "$app" | xargs)
-            if [ -z "$app" ]; then
-              continue
-            fi
+            if [ -z "$app" ]; then continue; fi
             url="https://www.apkmirror.com/apk/${app}/"
             http_code=$(curl -sS -L -A "$UA" --max-time 30 -o /tmp/preflight.html -w '%{http_code}' "$url" || echo "000")
             case "$http_code" in
@@ -158,15 +163,25 @@ jobs:
             exit 1
           fi
 
-      - name: Download APKs (file-count verified retry)
+      # [关键改动] 挂代理换出口 IP。
+      # Bun 的 fetch 遵循 HTTP(S)_PROXY 环境变量，apkmd 二进制继承此行为。
+      # 未配置 PROXY_URL secret 时变量为空 = 直连（回到现状）。
+      - name: Download APKs (proxy-aware, file-verified retry)
         env:
           MAX_RETRIES: ${{ inputs.max_retries }}
           BASE_DELAY: ${{ inputs.retry_base_delay }}
+          HTTPS_PROXY: ${{ secrets.PROXY_URL }}
+          HTTP_PROXY: ${{ secrets.PROXY_URL }}
         run: |
           set -euo pipefail
           WORK="${GITHUB_WORKSPACE}/.apkmd-tool"
           cd "$WORK"
           EXPECTED="${APP_COUNT}"
+          if [ -n "${HTTPS_PROXY:-}" ]; then
+            echo "proxy: enabled (via PROXY_URL secret)"
+          else
+            echo "::notice::proxy: disabled -- set PROXY_URL secret to route via proxy"
+          fi
           count_files() {
             find "$OUT_DIR" -type f \( -iname '*.apk' -o -iname '*.apkm' -o -iname '*.apks' -o -iname '*.xapk' \) | wc -l | tr -d ' '
           }
