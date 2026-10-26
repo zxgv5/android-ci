@@ -72,10 +72,11 @@ jobs:
             pkgs_total=$((pkgs_total + 1))
             echo ""
             echo "=== downloading $pkg (arch=$ARCH) ==="
-            # apkeep 的 -a 参数指定架构；acknowledge_dangers=true 允许下载未自检的包
-            if apkeep -a "$pkg" -d apkpure --arch "$ARCH" \
-                --exec "acknowledge_dangers=true" \
-                -o "$OUT_DIR" ; then
+            # 正确语法：-o 传源选项（逗号分隔），OUTPATH 是位置参数
+            # 多架构写法：arch=arm64-v8a;armeabi-v7a（分号在引号内，不会与外层 IFS 冲突）
+            if apkeep -a "$pkg" -d apk-pure \
+                -o "acknowledge_dangers=true,arch=$ARCH" \
+                "$OUT_DIR" ; then
               echo "OK: $pkg downloaded"
               pkgs_ok=$((pkgs_ok + 1))
             else
