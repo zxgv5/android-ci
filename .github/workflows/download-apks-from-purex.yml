@@ -6,7 +6,7 @@ on:
       apps:
         description: "Android 包名列表，分号分隔（如 com.cxinventor.file.explorer）"
         required: true
-        default: "com.google.android.youtube"
+        default: "com.cxinventor.file.explorer;com.flyersoft.moonreader;com.mxtech.videoplayer.ad;com.eltacrew.mdviewer"
         type: string
       architecture:
         description: "架构（arm64-v8a、armeabi-v7a、x86_64、x86；或 all 表示全架构 bundle）"
@@ -40,7 +40,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@main
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           check-latest: true
 
       - name: Install apkpure
