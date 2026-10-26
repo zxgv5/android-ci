@@ -1,0 +1,178 @@
+name: download-apks-from-purex
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "Android 包名列表，分号分隔（如 com.cxinventor.file.explorer）"
+        required: true
+        default: "com.google.android.youtube"
+        type: string
+      architecture:
+        description: "架构（arm64-v8a、armeabi-v7a、x86_64、x86）"
+        required: false
+        default: "arm64-v8a"
+        type: string
+      expected_cert_sha256:
+        description: "可选：期望的签名证书 SHA-256 指纹（多个用逗号分隔），用于校验"
+        required: false
+        default: ""
+        type: string
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - name: Checkout ci source repo
+        uses: actions/checkout@main
+        with:
+          path: ci_source
+
+      - name: Generate timestamp
+        run: |
+          echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+
+      # apkeep：Rust 写的下载器，支持 APKPure/APKCombo/APKMirror 等多源
+      - name: Install apkeep
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -fsSL https://api.github.com/repos/EFForg/apkeep/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+')
+          echo "apkeep version: $LATEST"
+          curl -fsSL "https://github.com/EFForg/apkeep/releases/download/${LATEST}/apkeep-x86_64-unknown-linux-gnu" -o /tmp/apkeep
+          chmod +x /tmp/apkeep
+          sudo mv /tmp/apkeep /usr/local/bin/apkeep
+          apkeep --version
+
+      - name: Setup Java (for apksigner)
+        uses: actions/setup-java@main
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download APKs from APKPure
+        env:
+          APPS_INPUT: ${{ inputs.apps }}
+          ARCH: ${{ inputs.architecture }}
+        run: |
+          set -euo pipefail
+          OUT_DIR="${GITHUB_WORKSPACE}/apks-from-purex-${BUILD_DATE}"
+          mkdir -p "$OUT_DIR"
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
+
+          pkgs_ok=0
+          pkgs_total=0
+          IFS=';' read -ra pkg_list <<< "$APPS_INPUT"
+          for pkg in "${pkg_list[@]}"; do
+            pkg=$(echo "$pkg" | xargs)
+            [ -z "$pkg" ] && continue
+            pkgs_total=$((pkgs_total + 1))
+            echo ""
+            echo "=== downloading $pkg (arch=$ARCH) ==="
+            # apkeep 的 -a 参数指定架构；acknowledge_dangers=true 允许下载未自检的包
+            if apkeep -a "$pkg" -d apkpure --arch "$ARCH" \
+                --exec "acknowledge_dangers=true" \
+                -o "$OUT_DIR" ; then
+              echo "OK: $pkg downloaded"
+              pkgs_ok=$((pkgs_ok + 1))
+            else
+              echo "::warning::failed to download $pkg"
+            fi
+          done
+
+          echo ""
+          echo "=== download summary: $pkgs_ok / $pkgs_total ==="
+          if [ "$pkgs_ok" -eq 0 ]; then
+            echo "::error::no packages downloaded"
+            exit 1
+          fi
+
+      # 签名校验：每个 APK 必须能读出签名证书；可选与期望指纹比对
+      - name: Verify APK signatures
+        env:
+          EXPECTED_CERTS: ${{ inputs.expected_cert_sha256 }}
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME}/build-tools"
+          AAPT=$(ls -d "$SDK"/*/ 2>/dev/null | sort -V | tail -n1)
+          APKSIGNER=$(find "$AAPT" -name 'apksigner' -type f | head -n1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found in build-tools"
+            exit 1
+          fi
+          echo "using apksigner: $APKSIGNER"
+
+          failed=0
+          shopt -s nullglob
+          for apk in "$OUT_DIR"/*.apk "$OUT_DIR"/*.apkm "$OUT_DIR"/*.xapk; do
+            [ -f "$apk" ] || continue
+            echo ""
+            echo "--- $(basename "$apk") ---"
+            # apkm/xapk 是 zip 压缩的 bundle，需先解开里面的 base.apk
+            if [[ "$apk" == *.apkm || "$apk" == *.xapk ]]; then
+              TMP=$(mktemp -d)
+              unzip -qo "$apk" -d "$TMP"
+              APK_FILE=$(find "$TMP" -name 'base.apk' | head -n1)
+              [ -z "$APK_FILE" ] && APK_FILE=$(find "$TMP" -name '*.apk' | head -n1)
+            else
+              APK_FILE="$apk"
+            fi
+            if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+              echo "::warning::no inner APK found in $apk"
+              failed=$((failed + 1))
+              continue
+            fi
+            CERTS=$("$APKSIGNER" verify --print-certs "$APK_FILE" | grep -i "SHA-256" || true)
+            echo "$CERTS"
+            if [ -z "$CERTS" ]; then
+              echo "::warning::no signature found (unsigned APK?)"
+              failed=$((failed + 1))
+              continue
+            fi
+            if [ -n "$EXPECTED_CERTS" ]; then
+              match=0
+              IFS=',' read -ra expected_list <<< "$EXPECTED_CERTS"
+              for exp in "${expected_list[@]}"; do
+                exp=$(echo "$exp" | xargs | tr '[:upper:]' '[:lower:]' | tr -d ':')
+                if echo "$CERTS" | tr '[:upper:]' '[:lower:]' | tr -d ':' | grep -q "$exp"; then
+                  match=1
+                  break
+                fi
+              done
+              if [ "$match" -eq 0 ]; then
+                echo "::error::signature mismatch for $(basename "$apk")"
+                failed=$((failed + 1))
+              else
+                echo "signature matches expected fingerprint"
+              fi
+            fi
+            # 清理临时解包目录
+            [ -n "${TMP:-}" ] && rm -rf "$TMP" && unset TMP
+          done
+
+          if [ "$failed" -gt 0 ]; then
+            echo "::error::$failed APK(s) failed signature verification"
+            exit 1
+          fi
+          echo "all APK signatures verified"
+
+      - name: Final check
+        run: |
+          set -euo pipefail
+          n=$(find "$OUT_DIR" -type f | wc -l | tr -d ' ')
+          if [ "$n" -eq 0 ]; then
+            echo "::error::output directory is empty, aborting"
+            exit 1
+          fi
+          echo "total $n file(s):"
+          ls -lh "$OUT_DIR/"
+
+      - name: Encrypt apks and create release
+        uses: ./ci_source/.github/actions/aes256pac_release/
+        with:
+          ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
+          ARTIFACT_DIRECTORY_PATH: "./apks-from-purex-${{ env.BUILD_DATE }}"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-from-purex"
