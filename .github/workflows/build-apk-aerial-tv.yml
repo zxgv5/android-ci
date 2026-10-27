@@ -82,10 +82,14 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon -I init.gradle
-        # assembleRelease 会同时构建 home 维度下的两个 flavor：
-        #   standard -> app/build/outputs/apk/standard/release/app-standard-release.apk
-        #   guard    -> app/build/outputs/apk/guard/release/app-guard-release.apk
+          ./gradlew :app:assembleRelease --no-daemon -I init.gradle
+        # 必须限定 :app 模块：仓库含 :app 与 :lite 两个 application 模块，
+        # 不带前缀的 assembleRelease 会两个都构建，:lite 的 minSdk = 14
+        # （Android 4.0-4.4 TV 专用精简版）在 ECDSA 密钥 + v1 签名下
+        # 会报 "ECDSA signatures only supported for minSdkVersion 18 and higher"。
+        # :app:minSdk = 21（Android 5.0），不受影响，standard/guard 两个 flavor 正常产出：
+        #   app/build/outputs/apk/standard/release/app-standard-release.apk
+        #   app/build/outputs/apk/guard/release/app-guard-release.apk
 
       - name: List generated apk files
         working-directory: ./aerial_source
