@@ -109,15 +109,15 @@ jobs:
         working-directory: ./xed_editor_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv ${{ env.APK_OUTPUT_DIR }}/*.apk "${{ github.workspace }}/dist/xed-editor-${{env.BUILD_DATE}}-${{env.SAFE_REF}}-${{env.SOURCE_SHA}}.apk"
+          mv ${{ env.APK_OUTPUT_DIR }}/*.apk "${{ github.workspace }}/dist/xed-editor-${{env.BUILD_DATE}}-${{env.SOURCE_SHA}}.apk"
 
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
           P12_KEYSTORE_PATH: "/tmp/xed.keystore"
           ZIP_AES256_PWD: ${{ secrets.ZIP_AES256_PWD }}
-          BUILD_ARTIFACT_PATH: "./dist/xed-editor-${{env.BUILD_DATE}}-${{env.SAFE_REF}}-${{env.SOURCE_SHA}}.apk"
-          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-xed-editor-${{ env.SAFE_REF }}-${{ env.SOURCE_SHA }}"
+          BUILD_ARTIFACT_PATH: "./dist/xed-editor-${{env.BUILD_DATE}}-${{env.SOURCE_SHA}}.apk"
+          RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-xed-editor-${{ env.SOURCE_SHA }}"
 
       - name: Cleanup signing files
         if: always()
