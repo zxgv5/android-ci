@@ -8,12 +8,15 @@ on:
         required: false
         default: 'main'
         type: string
+      abi_filter:
+        description: 'ABI 过滤（如 arm64-v8a；留空构建全部 ABI，兼容性最佳）'
+        required: false
+        default: ''
+        type: string
 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
-  ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -22,7 +25,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      # 修改二：ref 不再写死 main，由 inputs.source_ref 决定
       - name: Checkout source repo
         uses: actions/checkout@main
         with:
@@ -37,18 +39,30 @@ jobs:
         with:
           path: ci_source
 
-      # 修改二：额外记录 ref 与 commit，用于产物命名与追溯
       - name: Generate build metadata
         env:
           INPUT_REF: ${{ inputs.source_ref || 'main' }}
         run: |
           echo "BUILD_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
-          # git tag 名不允许包含 /，把分支名里的 / 替换为 -
           SAFE_REF="${INPUT_REF//\//-}"
           echo "SAFE_REF=${SAFE_REF}" >> $GITHUB_ENV
           echo "SOURCE_SHA=$(git -C xed_editor_source rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      # 修改三：删除原 Clean runner environment 步骤，改为 Gradle 缓存
+      # 关键修复：根据源码版本探测 flavor，动态决定任务名与输出目录
+      # v3.4.5 无 productFlavors → assembleRelease + release/
+      # 234ffc2 之后有 community/playstore → assembleCommunityRelease + community/release/
+      - name: Detect flavor and build task
+        working-directory: ./xed_editor_source
+        run: |
+          if grep -q "productFlavors" app/build.gradle.kts; then
+            echo "GRADLE_TASK=assembleCommunityRelease" >> $GITHUB_ENV
+            echo "APK_OUTPUT_DIR=app/build/outputs/apk/community/release" >> $GITHUB_ENV
+          else
+            echo "GRADLE_TASK=assembleRelease" >> $GITHUB_ENV
+            echo "APK_OUTPUT_DIR=app/build/outputs/apk/release" >> $GITHUB_ENV
+          fi
+          echo "Detected GRADLE_TASK=${GRADLE_TASK:-pending} (will read from GITHUB_ENV next step)"
+
       - name: Setup java
         uses: actions/setup-java@main
         with:
@@ -68,31 +82,35 @@ jobs:
           echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> /tmp/signing.properties
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> /tmp/signing.properties
 
-      # 修改五：android.ndk.abiFilters 上游不读取（no-op），改为 AGP 注入属性
       - name: Build release apk files
         working-directory: ./xed_editor_source
+        env:
+          ABI_FILTER: ${{ inputs.abi_filter }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleCommunityRelease --no-daemon -Pandroid.injected.build.abi=arm64-v8a
+          if [ -n "$ABI_FILTER" ]; then
+            ./gradlew ${{ env.GRADLE_TASK }} --no-daemon -Pandroid.injected.build.abi=$ABI_FILTER
+          else
+            ./gradlew ${{ env.GRADLE_TASK }} --no-daemon
+          fi
 
       - name: List generated apk files
         working-directory: ./xed_editor_source
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
-          # 验证 ABI 过滤是否生效（期望只出现 lib/arm64-v8a/）
           for apk in $(find app/build/outputs -type f -name "*.apk"); do
             echo "== $apk =="
             unzip -l "$apk" | grep -E 'lib/' || echo "(no native libs)"
           done
 
+      # 输出目录随 flavor 自适应（v3.4.5 为 release/，main 为 community/release/）
       - name: Rename and move
         working-directory: ./xed_editor_source
         run: |
           mkdir -p "${{ github.workspace }}/dist"
-          mv ./app/build/outputs/apk/community/release/*.apk "${{ github.workspace }}/dist/xed-editor-${{env.BUILD_DATE}}-${{env.SAFE_REF}}-${{env.SOURCE_SHA}}.apk"
+          mv ${{ env.APK_OUTPUT_DIR }}/*.apk "${{ github.workspace }}/dist/xed-editor-${{env.BUILD_DATE}}-${{env.SAFE_REF}}-${{env.SOURCE_SHA}}.apk"
 
-      # 修改一：keystore 路径改为与 build.gradle.kts 硬编码一致的 /tmp 绝对路径
       - name: Erase keystore, encrypt package and create release
         uses: ./ci_source/.github/actions/erase_aes256pac_release/
         with:
@@ -101,7 +119,6 @@ jobs:
           BUILD_ARTIFACT_PATH: "./dist/xed-editor-${{env.BUILD_DATE}}-${{env.SAFE_REF}}-${{env.SOURCE_SHA}}.apk"
           RELEASE_TAG_NAME: "${{ env.BUILD_DATE }}-xed-editor-${{ env.SAFE_REF }}-${{ env.SOURCE_SHA }}"
 
-      # 修改一：兜底清理签名材料（上游 android.yml 的 Delete secrets 步骤同款）
       - name: Cleanup signing files
         if: always()
         run: rm -f /tmp/xed.keystore /tmp/signing.properties
