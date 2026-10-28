@@ -8,7 +8,12 @@ on:
         required: false
         default: 'main'
         type: string
- 
+      abi_filter:
+        description: 'ABI（留空构建全部 ABI）'
+        required: false
+        default: 'arm64-v8a'
+        type: string
+
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
@@ -43,9 +48,6 @@ jobs:
           echo "SAFE_REF=${SAFE_REF}" >> $GITHUB_ENV
           echo "SOURCE_SHA=$(git -C xed_editor_source rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      # 关键修复：根据源码版本探测 flavor，动态决定任务名与输出目录
-      # v3.4.5 无 productFlavors → assembleRelease + release/
-      # 234ffc2 之后有 community/playstore → assembleCommunityRelease + community/release/
       - name: Detect flavor and build task
         working-directory: ./xed_editor_source
         run: |
@@ -56,7 +58,6 @@ jobs:
             echo "GRADLE_TASK=assembleRelease" >> $GITHUB_ENV
             echo "APK_OUTPUT_DIR=app/build/outputs/apk/release" >> $GITHUB_ENV
           fi
-          echo "Detected GRADLE_TASK=${GRADLE_TASK:-pending} (will read from GITHUB_ENV next step)"
 
       - name: Setup java
         uses: actions/setup-java@main
@@ -77,10 +78,28 @@ jobs:
           echo "keyPassword=${{ secrets.KEY_ALIAS_PASSWORD }}" >> /tmp/signing.properties
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> /tmp/signing.properties
 
+      # 修复：弃用 -Pandroid.injected.build.abi（AGP 9 下进入 IDE 注入分支，
+      # APK 不再落到标准 outputs 路径），改为向 defaultConfig 注入 ndk.abiFilters
       - name: Build release apk files
         working-directory: ./xed_editor_source
+        env:
+          ABI_FILTER: ${{ inputs.abi_filter }}
         run: |
           chmod +x ./gradlew
+          if [ -n "$ABI_FILTER" ]; then
+            python3 - <<'PYEOF'
+          import os, pathlib
+          p = pathlib.Path("app/build.gradle.kts")
+          s = p.read_text()
+          abis = [a.strip() for a in os.environ["ABI_FILTER"].split(",") if a.strip()]
+          inject = 'ndk { abiFilters.addAll(listOf(' + ', '.join(f'"{a}"' for a in abis) + ')) }'
+          if inject not in s:
+              assert "defaultConfig {" in s, "defaultConfig block not found in app/build.gradle.kts"
+              s = s.replace("defaultConfig {", "defaultConfig {\n        " + inject, 1)
+              p.write_text(s)
+          print("Injected into defaultConfig:", inject)
+          PYEOF
+          fi
           ./gradlew ${{ env.GRADLE_TASK }} --no-daemon
 
       - name: List generated apk files
@@ -88,12 +107,18 @@ jobs:
         run: |
           echo "Listing all apk files generated:"
           find app/build/outputs -type f -name "*.apk" | sort
+          APK_COUNT=$(find app/build/outputs -type f -name "*.apk" | wc -l)
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "::error::No APK found under app/build/outputs"
+            echo "=== diagnostic: any .apk anywhere under app/build ==="
+            find app/build -type f -name "*.apk" | head -n 20 || true
+            exit 1
+          fi
           for apk in $(find app/build/outputs -type f -name "*.apk"); do
             echo "== $apk =="
             unzip -l "$apk" | grep -E 'lib/' || echo "(no native libs)"
           done
 
-      # 输出目录随 flavor 自适应（v3.4.5 为 release/，main 为 community/release/）
       - name: Rename and move
         working-directory: ./xed_editor_source
         run: |
