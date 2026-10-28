@@ -8,12 +8,7 @@ on:
         required: false
         default: 'main'
         type: string
-      abi_filter:
-        description: 'ABI 过滤（如 arm64-v8a；留空构建全部 ABI，兼容性最佳）'
-        required: false
-        default: ''
-        type: string
-
+ 
 env:
   JDK_VERSION: '21'
   JDK_DISTRIBUTION: 'temurin'
@@ -84,15 +79,9 @@ jobs:
 
       - name: Build release apk files
         working-directory: ./xed_editor_source
-        env:
-          ABI_FILTER: ${{ inputs.abi_filter }}
         run: |
           chmod +x ./gradlew
-          if [ -n "$ABI_FILTER" ]; then
-            ./gradlew ${{ env.GRADLE_TASK }} --no-daemon -Pandroid.injected.build.abi=$ABI_FILTER
-          else
-            ./gradlew ${{ env.GRADLE_TASK }} --no-daemon
-          fi
+          ./gradlew ${{ env.GRADLE_TASK }} --no-daemon
 
       - name: List generated apk files
         working-directory: ./xed_editor_source
